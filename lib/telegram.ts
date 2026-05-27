@@ -1,0 +1,94 @@
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+const CHAT_ID = process.env.TELEGRAM_CHAT_ID
+
+export async function sendTelegram(message: string) {
+  if (!BOT_TOKEN || !CHAT_ID) return
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: CHAT_ID, text: message, parse_mode: 'HTML' }),
+    })
+  } catch (err) {
+    console.error('Telegram failed:', err)
+  }
+}
+
+function thaiNow() {
+  return new Date().toLocaleString('th-TH', {
+    timeZone: 'Asia/Bangkok',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+}
+
+function fmtBaht(satang: number) {
+  return `฿${(satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
+}
+
+// Daily P&L summary — sent every night
+export function buildDailySummary(data: {
+  date: string
+  totalRevenue: number
+  foodCostBps: number
+  laborCostBps: number
+  netProfitSatang: number
+  netProfitBps: number
+  overdueSuppliers: number
+}) {
+  const profitEmoji = data.netProfitBps >= 1000 ? '✅' : data.netProfitBps >= 0 ? '⚠️' : '🔴'
+  const foodEmoji = data.foodCostBps <= 3500 ? '✅' : '⚠️'
+  return `📊 <b>สรุปวันนี้ — Kintsu Yakiniku</b>
+${data.date}
+
+💰 รายได้: <b>${fmtBaht(data.totalRevenue)}</b>
+${foodEmoji} Food Cost: <b>${(data.foodCostBps / 100).toFixed(1)}%</b>
+👥 Labor Cost: <b>${(data.laborCostBps / 100).toFixed(1)}%</b>
+${profitEmoji} กำไรสุทธิ: <b>${fmtBaht(data.netProfitSatang)} (${(data.netProfitBps / 100).toFixed(1)}%)</b>
+${data.overdueSuppliers > 0 ? `\n⚠️ ซัพพลายเออร์ครบกำหนด: <b>${data.overdueSuppliers} ราย</b>` : ''}
+🕐 ${thaiNow()}`
+}
+
+// Shift closed alert
+export function buildShiftClosedMessage(data: {
+  shiftName: string
+  date: string
+  revenueSatang: number
+  expensesSatang: number
+  varianceSatang: number
+  closedBy: string
+}) {
+  const sign = data.varianceSatang >= 0 ? '+' : ''
+  return `🔒 <b>ปิดกะแล้ว — ${data.shiftName}</b>
+📅 ${data.date} | ปิดโดย: ${data.closedBy}
+
+💰 รายได้กะนี้: ${fmtBaht(data.revenueSatang)}
+💸 รายจ่ายกะนี้: ${fmtBaht(data.expensesSatang)}
+📦 ผลต่างเงินสด: ${sign}${fmtBaht(data.varianceSatang)}
+🕐 ${thaiNow()}`
+}
+
+// Overdue supplier alert
+export function buildOverdueAlert(suppliers: Array<{ name: string; amountSatang: number; daysOverdue: number }>) {
+  const lines = suppliers.map(s => `• ${s.name}  ${fmtBaht(s.amountSatang)} (เกิน ${s.daysOverdue} วัน)`).join('\n')
+  return `🔴 <b>ซัพพลายเออร์ค้างชำระ</b>
+
+${lines}
+
+🕐 ${thaiNow()}`
+}
+
+// Expense recorded with slip
+export function buildExpenseMessage(data: {
+  category: string
+  note: string
+  totalSatang: number
+  paymentMethod: string
+  createdByName: string
+}) {
+  return `🧾 <b>บันทึกรายจ่ายใหม่</b>
+📁 ${data.category}${data.note ? ` — ${data.note}` : ''}
+💰 ${fmtBaht(data.totalSatang)} (${data.paymentMethod})
+👤 ${data.createdByName}
+🕐 ${thaiNow()}`
+}
