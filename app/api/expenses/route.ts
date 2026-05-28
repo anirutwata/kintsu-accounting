@@ -33,32 +33,35 @@ export async function POST(req: Request) {
   const userName = cookieStore.get('kintsu_acc_name')?.value || 'ไม่ระบุ'
 
   const body = await req.json()
-  const { category, sub_category, supplier_id, amount_satang, vat_satang, payment_method,
-          credit_due_date, slip_image_url, slip_hash, ocr_data, note, shift_id, date } = body
+  const { category, amount_satang, payment_method, bank_account_id,
+          transfer_time, sender_name, sender_bank, sender_account,
+          recipient_name, slip_image_url, slip_hash, ocr_data,
+          receipt_image_urls, note, date } = body
 
   if (!category || !amount_satang) {
     return NextResponse.json({ error: 'กรุณากรอกหมวดหมู่และจำนวนเงิน' }, { status: 400 })
   }
 
-  const total_satang = amount_satang + (vat_satang || 0)
-
   const { data, error } = await supabase
     .from('expenses')
     .insert({
       date: date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }),
-      shift_id: shift_id || null,
       category,
-      sub_category: sub_category || null,
-      supplier_id: supplier_id || null,
       amount_satang,
-      vat_satang: vat_satang || 0,
-      total_satang,
+      vat_satang: 0,
+      total_satang: amount_satang,
       payment_method: payment_method || 'เงินสด',
-      credit_due_date: credit_due_date || null,
+      bank_account_id: bank_account_id || null,
+      transfer_time: transfer_time || null,
+      sender_name: sender_name || null,
+      sender_bank: sender_bank || null,
+      sender_account: sender_account || null,
+      recipient_name: recipient_name || null,
       is_paid: payment_method !== 'เครดิต',
       slip_image_url: slip_image_url || null,
       slip_hash: slip_hash || null,
       ocr_data: ocr_data || null,
+      receipt_image_urls: receipt_image_urls || [],
       note: note || null,
       created_by: userId || null,
       created_by_name: userName,

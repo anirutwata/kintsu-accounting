@@ -56,11 +56,15 @@ export async function POST(req: Request) {
             type: 'text',
             text: `อ่านสลิปโอนเงินนี้และดึงข้อมูลต่อไปนี้เป็น JSON:
 {
-  "amount_satang": <จำนวนเงิน x100 เป็น integer เช่น ฿1,500 = 150000>,
-  "date": "<YYYY-MM-DD>",
-  "ref_number": "<เลขอ้างอิง หรือ Transaction ID>",
-  "recipient": "<ชื่อผู้รับเงิน>",
-  "bank": "<ชื่อธนาคาร เช่น KBANK SCB KTB BBL TTB>",
+  "amount_satang": <จำนวนเงิน x100 เป็น integer เช่น ฿1,500.00 = 150000>,
+  "date": "<YYYY-MM-DD วันที่โอน>",
+  "time": "<HH:MM เวลาโอน เช่น 14:30>",
+  "ref_number": "<เลขอ้างอิง / Transaction ID>",
+  "sender_name": "<ชื่อผู้โอน / ชื่อบัญชีต้นทาง>",
+  "sender_bank": "<ธนาคารผู้โอน เช่น KBANK SCB KTB BBL TTB GSB>",
+  "sender_account": "<เลขบัญชีผู้โอน แบบ masked เช่น xxx-x-xxxxx-x>",
+  "recipient": "<ชื่อผู้รับเงิน / ชื่อบัญชีปลายทาง>",
+  "recipient_bank": "<ธนาคารผู้รับ>",
   "confidence": <0.0-1.0 ความมั่นใจในการอ่าน>
 }
 ถ้าหาข้อมูลไม่ได้ให้ใส่ "" หรือ 0 ตอบเป็น JSON เท่านั้น ไม่ต้องมีคำอธิบายเพิ่ม`,
