@@ -166,11 +166,16 @@ export default function ExpensesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bankForm),
       })
+      const json = await res.json()
       if (res.ok) {
         await loadBankAccounts()
         setShowAddBank(false)
         setBankForm({ bank_name: '', account_number: '', account_name: '' })
+      } else {
+        alert('บันทึกไม่สำเร็จ: ' + (json.error || res.status))
       }
+    } catch (err) {
+      alert('เกิดข้อผิดพลาด: ' + String(err))
     } finally {
       setSavingBank(false)
     }
