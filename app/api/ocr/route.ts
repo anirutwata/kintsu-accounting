@@ -41,9 +41,9 @@ export async function POST(req: Request) {
       ? supabase.storage.from('slips').getPublicUrl(fileName).data.publicUrl
       : null
 
-    // Call Claude Haiku Vision — cost ~$0.0008/image
+    // Call Claude Sonnet Vision — better Thai OCR accuracy
     const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-sonnet-4-6',
       max_tokens: 512,
       messages: [{
         role: 'user',
@@ -54,19 +54,22 @@ export async function POST(req: Request) {
           },
           {
             type: 'text',
-            text: `อ่านสลิปโอนเงินนี้และดึงข้อมูลต่อไปนี้เป็น JSON:
+            text: `คุณคือผู้เชี่ยวชาญอ่านสลิปโอนเงินไทย อ่านภาษาไทยได้แม่นยำสูง โดยเฉพาะวรรณยุกต์และสระ
+
+อ่านสลิปนี้อย่างละเอียด แล้วดึงข้อมูลเป็น JSON:
 {
   "amount_satang": <จำนวนเงิน x100 เป็น integer เช่น ฿1,500.00 = 150000>,
   "date": "<YYYY-MM-DD วันที่โอน>",
   "time": "<HH:MM เวลาโอน เช่น 14:30>",
   "ref_number": "<เลขอ้างอิง / Transaction ID>",
-  "sender_name": "<ชื่อผู้โอน / ชื่อบัญชีต้นทาง>",
+  "sender_name": "<ชื่อผู้โอน — อ่านวรรณยุกต์ให้ถูกต้อง>",
   "sender_bank": "<ธนาคารผู้โอน เช่น KBANK SCB KTB BBL TTB GSB>",
   "sender_account": "<เลขบัญชีผู้โอน แบบ masked เช่น xxx-x-xxxxx-x>",
-  "recipient": "<ชื่อผู้รับเงิน / ชื่อบัญชีปลายทาง>",
+  "recipient": "<ชื่อผู้รับเงิน — อ่านวรรณยุกต์และตัวสะกดให้ถูกต้องทุกตัวอักษร>",
   "recipient_bank": "<ธนาคารผู้รับ>",
-  "confidence": <0.0-1.0 ความมั่นใจในการอ่าน>
+  "confidence": <0.0-1.0 ความมั่นใจในการอ่านภาพรวม>
 }
+หมายเหตุ: ชื่อภาษาไทยต้องระวังวรรณยุกต์ (ไม้เอก ไม้โท ไม้ตรี ไม้จัตวา) และสระให้ถูกต้องทุกตัว
 ถ้าหาข้อมูลไม่ได้ให้ใส่ "" หรือ 0 ตอบเป็น JSON เท่านั้น ไม่ต้องมีคำอธิบายเพิ่ม`,
           },
         ],
