@@ -93,6 +93,7 @@ export default function ExpensesPage() {
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [bankMatchWarning, setBankMatchWarning] = useState('')
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   const [bankForm, setBankForm] = useState({ bank_name: '', account_number: '', account_name: '' })
   const [savingBank, setSavingBank] = useState(false)
@@ -258,8 +259,8 @@ export default function ExpensesPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('ลบรายการนี้?')) return
     await fetch(`/api/expenses/${id}`, { method: 'DELETE' })
+    setConfirmDeleteId(null)
     setSelectedExpense(null)
     loadExpenses()
   }
@@ -497,10 +498,24 @@ export default function ExpensesPage() {
                   style={{ borderColor: 'var(--flame-red)', color: 'var(--flame-red)' }}>
                   แก้ไข
                 </button>
-                <button onClick={() => handleDelete(selectedExpense.id)}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 border-red-200 text-red-400">
-                  ลบ
-                </button>
+                {confirmDeleteId === selectedExpense.id ? (
+                  <div className="flex-1 flex gap-2">
+                    <button onClick={() => setConfirmDeleteId(null)}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-semibold border-2"
+                      style={{ borderColor: 'var(--border)' }}>
+                      ยกเลิก
+                    </button>
+                    <button onClick={() => handleDelete(selectedExpense.id)}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-red-500 text-white">
+                      ยืนยันลบ
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => setConfirmDeleteId(selectedExpense.id)}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 border-red-200 text-red-400">
+                    ลบ
+                  </button>
+                )}
               </div>
             </div>
           </div>
