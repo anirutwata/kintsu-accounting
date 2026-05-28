@@ -46,7 +46,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     .update({
       is_deleted: true,
       deleted_at: new Date().toISOString(),
-      deleted_by: userId || null,
     })
     .eq('id', id)
     .select()
