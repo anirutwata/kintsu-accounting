@@ -25,7 +25,7 @@ export async function GET(req: Request) {
   const [{ data: expenses }, { data: sales }, { data: catRows }] = await Promise.all([
     supabase
       .from('expenses')
-      .select('date, transfer_time, category, amount_satang, payment_method, sender_bank, sender_account, recipient_name, note, created_by_name')
+      .select('date, transfer_time, category, amount_satang, payment_method, sender_bank, sender_account, recipient_name, note, created_by_name, created_at')
       .eq('is_deleted', false)
       .gte('date', startDate)
       .lte('date', endDate)
@@ -44,18 +44,23 @@ export async function GET(req: Request) {
       .order('sort_order'),
   ])
 
-  const expenseRows = (expenses || []).map(e => ({
-    date: e.date,
-    time: e.transfer_time || '',
-    category: e.category,
-    amount: e.amount_satang / 100,
-    payment_method: e.payment_method,
-    bank: e.sender_bank || '',
-    account: e.sender_account || '',
-    recipient: e.recipient_name || '',
-    note: e.note || '',
-    recorded_by: e.created_by_name || '',
-  }))
+  const expenseRows = (expenses || []).map(e => {
+    const bkk = new Date(new Date(e.created_at).getTime() + 7 * 60 * 60 * 1000)
+    return {
+      date: e.date,
+      time: e.transfer_time || '',
+      category: e.category,
+      amount: e.amount_satang / 100,
+      payment_method: e.payment_method,
+      bank: e.sender_bank || '',
+      account: e.sender_account || '',
+      recipient: e.recipient_name || '',
+      note: e.note || '',
+      recorded_by: e.created_by_name || '',
+      recorded_date: bkk.toISOString().slice(0, 10),
+      recorded_time: bkk.toISOString().slice(11, 16),
+    }
+  })
 
   const salesRows = (sales || []).map(s => ({
     date: s.date,

@@ -271,18 +271,18 @@ function syncMonth(month) {
 function writeExpenses(ss, month, rows, categories) {
   const name = month + ' รายจ่าย'
   let sh = ss.getSheetByName(name) || ss.insertSheet(name)
-  sh.clearContents()
-  const H = ['วันที่','เวลา','หมวดหมู่','ยอดเงิน','วิธีชำระ','ธนาคาร','เลขบัญชี','ผู้รับเงิน','หมายเหตุ','บันทึกโดย']
+  sh.clear()  // clear content + formatting ป้องกันสีค้าง
+  const H = ['วันที่','เวลา','หมวดหมู่','ยอดเงิน','วิธีชำระ','ธนาคาร','เลขบัญชี','ผู้รับเงิน','หมายเหตุ','บันทึกโดย','วันที่บันทึก','เวลาบันทึก']
   sh.getRange(1,1,1,H.length).setValues([H]).setFontWeight('bold').setBackground('#D33F22').setFontColor('#FFFFFF')
   if (!rows.length) return
-  const data = rows.map(e=>[e.date,e.time,e.category,e.amount,e.payment_method,e.bank,e.account,e.recipient,e.note,e.recorded_by])
-  sh.getRange(2,1,data.length,H.length).setValues(data)
+  const data = rows.map(e=>[e.date,e.time,e.category,e.amount,e.payment_method,e.bank,e.account,e.recipient,e.note,e.recorded_by,e.recorded_date||'',e.recorded_time||''])
+  sh.getRange(2,1,data.length,H.length).setValues(data).setFontWeight('normal')
   sh.getRange(2,4,data.length,1).setNumberFormat('#,##0.00')
   const totalRow = data.length+2
   sh.getRange(totalRow,3).setValue('รวมทั้งหมด').setFontWeight('bold')
   sh.getRange(totalRow,4).setFormula('=SUM(D2:D'+(data.length+1)+')').setFontWeight('bold').setNumberFormat('#,##0.00')
 
-  // Summary by category (use categories from API or derive from data)
+  // Summary by category
   const cats = (categories && categories.length) ? categories : [...new Set(rows.map(r=>r.category))]
   let r = totalRow + 2
   sh.getRange(r,1).setValue('สรุปตามหมวดหมู่').setFontWeight('bold').setBackground('#FEF2F2')
@@ -291,8 +291,8 @@ function writeExpenses(ss, month, rows, categories) {
     const catRows = rows.filter(e=>e.category===cat)
     if (!catRows.length) return
     const total = catRows.reduce((s,e)=>s+e.amount,0)
-    sh.getRange(r,1).setValue(cat)
-    sh.getRange(r,2).setValue(total).setNumberFormat('#,##0.00')
+    sh.getRange(r,1).setValue(cat).setFontWeight('normal').setBackground(null)
+    sh.getRange(r,2).setValue(total).setNumberFormat('#,##0.00').setFontWeight('normal').setBackground(null)
     r++
   })
   sh.autoResizeColumns(1,H.length)
