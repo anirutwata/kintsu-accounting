@@ -179,7 +179,7 @@ export default function ExpensesPage() {
       }
       setForm(f => ({
         ...f,
-        amount: data.amount_satang ? String(data.amount_satang / 100) : f.amount,
+        amount: data.amount_satang ? (data.amount_satang / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : f.amount,
         date: data.date || f.date,
         transfer_time: data.time || f.transfer_time,
         recipient_name: data.recipient || f.recipient_name,
@@ -220,7 +220,7 @@ export default function ExpensesPage() {
     if (!form.category) return
     setLoading(true)
     try {
-      const amountSatang = toSatang(parseFloat(form.amount) || 0)
+      const amountSatang = toSatang(parseFloat(form.amount.replace(/,/g, '')) || 0)
       const selectedBank = bankAccounts.find(b => b.id === form.bank_account_id)
       const isBank = form.bank_account_id && !form.bank_account_id.startsWith('__')
       const paymentMethod = isBank ? 'โอนเงิน' : form.bank_account_id === '__card__' ? 'บัตรเครดิต' : 'เงินสด'
@@ -511,13 +511,13 @@ export default function ExpensesPage() {
 
               {/* Date + Time */}
               <div className="flex gap-3">
-                <div className="flex-1 min-w-0">
+                <div className="flex-1">
                   <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>วันที่ *</label>
                   <input type="date" required value={form.date}
                     onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
                     className="w-full border rounded-xl px-3 py-2.5 text-sm" style={{ borderColor: 'var(--border)' }} />
                 </div>
-                <div style={{ width: '110px', flexShrink: 0 }}>
+                <div className="flex-1">
                   <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>เวลาโอน</label>
                   <input type="time" value={form.transfer_time}
                     onChange={e => setForm(f => ({ ...f, transfer_time: e.target.value }))}
@@ -528,9 +528,19 @@ export default function ExpensesPage() {
               {/* Amount */}
               <div>
                 <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>ยอดเงิน (บาท) *</label>
-                <input type="number" step="0.01" min="0" required
-                  value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-right text-base money-input"
+                <input type="text" inputMode="decimal" required
+                  value={form.amount}
+                  onChange={e => {
+                    const raw = e.target.value.replace(/,/g, '').replace(/[^\d.]/g, '')
+                    if (/^\d*\.?\d{0,2}$/.test(raw)) setForm(f => ({ ...f, amount: raw }))
+                  }}
+                  onBlur={() => {
+                    const num = parseFloat(form.amount.replace(/,/g, ''))
+                    if (!isNaN(num) && num > 0)
+                      setForm(f => ({ ...f, amount: num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }))
+                  }}
+                  onFocus={() => setForm(f => ({ ...f, amount: f.amount.replace(/,/g, '') }))}
+                  className="w-full border rounded-xl px-3 py-2.5 text-right text-base"
                   style={{ borderColor: 'var(--border)' }} placeholder="0.00" />
               </div>
 
