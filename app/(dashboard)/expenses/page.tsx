@@ -168,6 +168,11 @@ export default function ExpensesPage() {
           const byAccount = sameBank.find(b => accountMatches(b.account_number, data.sender_account))
           matchedBankId = byAccount ? byAccount.id : sameBank[0].id
         }
+        // Fallback: OCR bank name might be wrong — try matching by account number only
+        if (!matchedBankId && data.sender_account) {
+          const byAccountOnly = bankAccounts.find(b => accountMatches(b.account_number, data.sender_account))
+          if (byAccountOnly) matchedBankId = byAccountOnly.id
+        }
         if (!matchedBankId) {
           setBankMatchWarning(`ไม่พบบัญชี "${data.sender_bank}${data.sender_account ? ` ${data.sender_account}` : ''}" ในระบบ — กรุณาเลือกเองหรือเพิ่มบัญชีใหม่`)
         }
