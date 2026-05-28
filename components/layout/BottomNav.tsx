@@ -8,8 +8,7 @@ const navItems = [
   { href: '/dashboard',    label: 'หน้าหลัก',    icon: '📊', roles: ['owner','manager','cashier'] },
   { href: '/expenses',     label: 'รายจ่าย',     icon: '🧾', roles: ['owner','manager','cashier'] },
   { href: '/sales',        label: 'รายรับ',      icon: '💰', roles: ['owner','manager','cashier'] },
-  { href: '/shifts',       label: 'กะ',          icon: '🔄', roles: ['owner','manager'] },
-  { href: '/reports',      label: 'รายงาน',      icon: '📈', roles: ['owner','manager'] },
+{ href: '/reports',      label: 'รายงาน',      icon: '📈', roles: ['owner','manager'] },
 ]
 
 export default function BottomNav({ role }: Props) {
