@@ -351,6 +351,7 @@ function writeSummary(ss) {
     return [monthToBE(m), rev, exp, rev-exp]
   })
   if (rows.length) {
+    sh.getRange(2,1,rows.length,1).setNumberFormat('@')
     sh.getRange(2,1,rows.length,4).setValues(rows)
     sh.getRange(2,2,rows.length,3).setNumberFormat('#,##0.00')
     rows.forEach((r,i)=>sh.getRange(i+2,4).setFontColor(r[3]>=0?'#16a34a':'#dc2626'))
