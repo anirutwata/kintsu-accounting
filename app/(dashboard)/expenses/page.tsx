@@ -487,20 +487,20 @@ export default function ExpensesPage() {
 
             <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
 
-              {/* Date */}
-              <div>
-                <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>วันที่ *</label>
-                <input type="date" required value={form.date}
-                  onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm" style={{ borderColor: 'var(--border)' }} />
-              </div>
-
-              {/* Time */}
-              <div>
-                <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>เวลาโอน</label>
-                <input type="time" value={form.transfer_time}
-                  onChange={e => setForm(f => ({ ...f, transfer_time: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm" style={{ borderColor: 'var(--border)' }} />
+              {/* Date + Time */}
+              <div className="flex gap-3">
+                <div className="flex-1 min-w-0">
+                  <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>วันที่ *</label>
+                  <input type="date" required value={form.date}
+                    onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm" style={{ borderColor: 'var(--border)' }} />
+                </div>
+                <div style={{ width: '110px', flexShrink: 0 }}>
+                  <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>เวลาโอน</label>
+                  <input type="time" value={form.transfer_time}
+                    onChange={e => setForm(f => ({ ...f, transfer_time: e.target.value }))}
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm" style={{ borderColor: 'var(--border)' }} />
+                </div>
               </div>
 
               {/* Amount */}
