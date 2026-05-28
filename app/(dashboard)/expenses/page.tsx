@@ -84,6 +84,7 @@ export default function ExpensesPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [bankMatchWarning, setBankMatchWarning] = useState('')
 
   const [bankForm, setBankForm] = useState({ bank_name: '', account_number: '', account_name: '' })
   const [savingBank, setSavingBank] = useState(false)
@@ -149,6 +150,7 @@ export default function ExpensesPage() {
       const res = await fetch('/api/ocr', { method: 'POST', body: fd })
       const data = await res.json()
       let matchedBankId = ''
+      setBankMatchWarning('')
       if (data.sender_bank) {
         const normalizedOCR = normalizeBankName(data.sender_bank)
         const sameBank = bankAccounts.filter(b => normalizeBankName(b.bank_name) === normalizedOCR)
@@ -157,6 +159,9 @@ export default function ExpensesPage() {
         } else if (sameBank.length > 1 && data.sender_account) {
           const byAccount = sameBank.find(b => accountMatches(b.account_number, data.sender_account))
           matchedBankId = byAccount ? byAccount.id : sameBank[0].id
+        }
+        if (!matchedBankId) {
+          setBankMatchWarning(`ไม่พบบัญชี "${data.sender_bank}${data.sender_account ? ` ${data.sender_account}` : ''}" ในระบบ — กรุณาเลือกเองหรือเพิ่มบัญชีใหม่`)
         }
       }
       setForm(f => ({
@@ -561,6 +566,9 @@ export default function ExpensesPage() {
                     </p>
                   ) : null
                 })()}
+                {bankMatchWarning && !form.bank_account_id && (
+                  <p className="text-xs mt-1 px-2 py-1.5 rounded-lg bg-amber-50 text-amber-700">{bankMatchWarning}</p>
+                )}
               </div>
 
               {/* ผู้รับเงิน */}
