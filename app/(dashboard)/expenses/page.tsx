@@ -35,6 +35,14 @@ function visibleDigits(masked: string): string {
   return masked.replace(/x/gi, '').replace(/[^0-9]/g, '')
 }
 
+function formatAccountNumber(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 10)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 4) return `${digits.slice(0,3)}-${digits.slice(3)}`
+  if (digits.length <= 9) return `${digits.slice(0,3)}-${digits.slice(3,4)}-${digits.slice(4)}`
+  return `${digits.slice(0,3)}-${digits.slice(3,4)}-${digits.slice(4,9)}-${digits.slice(9)}`
+}
+
 function accountMatches(registered: string, ocrMasked: string): boolean {
   const digits = visibleDigits(ocrMasked)
   if (digits.length < 3) return false
@@ -739,9 +747,10 @@ export default function ExpensesPage() {
               <div>
                 <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>เลขบัญชี *</label>
                 <input type="text" required value={bankForm.account_number}
-                  onChange={e => setBankForm(f => ({ ...f, account_number: e.target.value }))}
+                  onChange={e => setBankForm(f => ({ ...f, account_number: formatAccountNumber(e.target.value) }))}
+                  inputMode="numeric"
                   className="w-full border rounded-xl px-3 py-2.5" style={{ borderColor: 'var(--border)' }}
-                  placeholder="เช่น 123-4-56789-0" />
+                  placeholder="เช่น 1234567890 → 123-4-56789-0" />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>ชื่อบัญชี *</label>
