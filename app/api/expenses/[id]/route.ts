@@ -31,9 +31,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Trigger GAS re-sync for the month of the deleted expense (non-blocking)
+  const gasUrl = process.env.GAS_WEBHOOK_URL
+  if (gasUrl && data?.date) {
+    fetch(gasUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete', month: data.date.slice(0, 7) }),
+    }).catch(() => {})
+  }
+
   return NextResponse.json(data)
 }
-
 // Soft delete only — never hard delete
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params

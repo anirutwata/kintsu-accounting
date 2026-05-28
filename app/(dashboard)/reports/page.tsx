@@ -232,15 +232,32 @@ export default function ReportsPage() {
 }
 
 const GAS_SCRIPT = `// KINTSU Accounting → Google Sheets Auto-sync
+// อัปเดตล่าสุด: 29/05/2569 — วันที่เป็น พ.ศ., delete webhook, sumCol fix, recorded_date/time
 const API_BASE = 'https://kintsu-accounting.vercel.app'
 const API_KEY  = 'kintsu2026'
 const SHEET_ID = '19Wx98_aE0R9mDF15SxQw66u-YbzG4WGqAO7pv1O3LvA'
+
+// แปลงวันที่ YYYY-MM-DD → DD/MM/พ.ศ.
+function toBE(dateStr) {
+  if (!dateStr) return ''
+  const parts = String(dateStr).split('-')
+  if (parts.length !== 3) return dateStr
+  return parts[2] + '/' + parts[1] + '/' + (parseInt(parts[0]) + 543)
+}
+
+// แปลงเดือน YYYY-MM → MM/พ.ศ.
+function monthToBE(month) {
+  if (!month) return month
+  const parts = String(month).split('-')
+  if (parts.length !== 2) return month
+  return parts[1] + '/' + (parseInt(parts[0]) + 543)
+}
 
 // รับข้อมูล real-time จาก Next.js webhook แล้ว sync ทั้งเดือนใหม่เลย
 function doPost(e) {
   try {
     const row = JSON.parse(e.postData.contents)
-    const month = (row.date || Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd')).substring(0, 7)
+    const month = row.month || (row.date || Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd')).substring(0, 7)
     syncMonth(month)
     return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON)
   } catch (err) {
@@ -274,7 +291,7 @@ function writeExpenses(ss, month, rows, categories) {
   const H = ['วันที่','เวลา','หมวดหมู่','ยอดเงิน','วิธีชำระ','ธนาคาร','เลขบัญชี','ผู้รับเงิน','หมายเหตุ','บันทึกโดย','วันที่บันทึก','เวลาบันทึก']
   sh.getRange(1,1,1,H.length).setValues([H]).setFontWeight('bold').setBackground('#D33F22').setFontColor('#FFFFFF')
   if (!rows.length) return
-  const data = rows.map(e=>[e.date,e.time,e.category,e.amount,e.payment_method,e.bank,e.account,e.recipient,e.note,e.recorded_by,e.recorded_date||'',e.recorded_time||''])
+  const data = rows.map(e=>[toBE(e.date),e.time,e.category,e.amount,e.payment_method,e.bank,e.account,e.recipient,e.note,e.recorded_by,toBE(e.recorded_date),e.recorded_time||''])
   sh.getRange(2,1,data.length,H.length).setValues(data).setFontWeight('normal')
   sh.getRange(2,4,data.length,1).setNumberFormat('#,##0.00')
   const totalRow = data.length+2
@@ -304,7 +321,7 @@ function writeSales(ss, month, rows) {
   const H = ['วันที่','Dine-in','จำนวนโต๊ะ','GrabFood Gross','GP 30%','GrabFood Net','Takeaway','รวมสุทธิ']
   sh.getRange(1,1,1,H.length).setValues([H]).setFontWeight('bold').setBackground('#D33F22').setFontColor('#FFFFFF')
   if (!rows.length) return
-  const data = rows.map(s=>[s.date,s.dine_in,s.dine_in_covers,s.grabfood_gross,s.grabfood_gp,s.grabfood_net,s.takeaway,s.total_net])
+  const data = rows.map(s=>[toBE(s.date),s.dine_in,s.dine_in_covers,s.grabfood_gross,s.grabfood_gp,s.grabfood_net,s.takeaway,s.total_net])
   sh.getRange(2,1,data.length,H.length).setValues(data)
   ;[2,4,5,6,7,8].forEach(c=>sh.getRange(2,c,data.length,1).setNumberFormat('#,##0.00'))
   const tot = data.length+2
@@ -327,7 +344,7 @@ function writeSummary(ss) {
   const rows = months.map(m=>{
     const rev = sumCol(ss, m+' รายรับ', 8)
     const exp = sumCol(ss, m+' รายจ่าย', 4)
-    return [m, rev, exp, rev-exp]
+    return [monthToBE(m), rev, exp, rev-exp]
   })
   if (rows.length) {
     sh.getRange(2,1,rows.length,4).setValues(rows)
