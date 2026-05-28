@@ -250,13 +250,13 @@ function syncMonth(month) {
   }
   const data = JSON.parse(res.getContentText())
   const ss = SpreadsheetApp.openById(SHEET_ID)
-  writeExpenses(ss, month, data.expenses)
+  writeExpenses(ss, month, data.expenses, data.categories || [])
   writeSales(ss, month, data.sales)
   writeSummary(ss)
   console.log('Synced ' + month + ': ' + data.expenses.length + ' expenses, ' + data.sales.length + ' sales days')
 }
 
-function writeExpenses(ss, month, rows) {
+function writeExpenses(ss, month, rows, categories) {
   const name = month + ' รายจ่าย'
   let sh = ss.getSheetByName(name) || ss.insertSheet(name)
   sh.clearContents()
@@ -266,8 +266,23 @@ function writeExpenses(ss, month, rows) {
   const data = rows.map(e=>[e.date,e.time,e.category,e.amount,e.payment_method,e.bank,e.account,e.recipient,e.note,e.recorded_by])
   sh.getRange(2,1,data.length,H.length).setValues(data)
   sh.getRange(2,4,data.length,1).setNumberFormat('#,##0.00')
-  sh.getRange(data.length+2,3).setValue('รวม').setFontWeight('bold')
-  sh.getRange(data.length+2,4).setFormula('=SUM(D2:D'+(data.length+1)+')').setFontWeight('bold').setNumberFormat('#,##0.00')
+  const totalRow = data.length+2
+  sh.getRange(totalRow,3).setValue('รวมทั้งหมด').setFontWeight('bold')
+  sh.getRange(totalRow,4).setFormula('=SUM(D2:D'+(data.length+1)+')').setFontWeight('bold').setNumberFormat('#,##0.00')
+
+  // Summary by category (use categories from API or derive from data)
+  const cats = (categories && categories.length) ? categories : [...new Set(rows.map(r=>r.category))]
+  let r = totalRow + 2
+  sh.getRange(r,1).setValue('สรุปตามหมวดหมู่').setFontWeight('bold').setBackground('#FEF2F2')
+  r++
+  cats.forEach(cat => {
+    const catRows = rows.filter(e=>e.category===cat)
+    if (!catRows.length) return
+    const total = catRows.reduce((s,e)=>s+e.amount,0)
+    sh.getRange(r,1).setValue(cat)
+    sh.getRange(r,2).setValue(total).setNumberFormat('#,##0.00')
+    r++
+  })
   sh.autoResizeColumns(1,H.length)
 }
 
@@ -317,7 +332,7 @@ function sumCol(ss, sheetName, col) {
   return sh.getRange(2,col,sh.getLastRow()-1,1).getValues().reduce((s,r)=>s+(r[0]||0),0)
 }
 
-// ตั้ง Trigger: Triggers → Add Trigger → syncCurrentMonth → Time-driven → Day timer → 7am-8am`
+// ตั้ง Trigger: Triggers → Add Trigger → syncCurrentMonth → Time-driven → Day timer → 11pm-midnight (Asia/Bangkok)`
 
 function PLRow({ label, value, pct, type, badge }: {
   label: string; value: number; pct?: number; type: 'income'|'expense'|'subtotal'|'profit'|'loss'; badge?: string

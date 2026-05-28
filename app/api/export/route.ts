@@ -22,7 +22,7 @@ export async function GET(req: Request) {
   const startDate = `${month}-01`
   const endDate = `${month}-31`
 
-  const [{ data: expenses }, { data: sales }] = await Promise.all([
+  const [{ data: expenses }, { data: sales }, { data: catRows }] = await Promise.all([
     supabase
       .from('expenses')
       .select('date, transfer_time, category, amount_satang, payment_method, sender_bank, sender_account, recipient_name, note, created_by_name')
@@ -37,6 +37,11 @@ export async function GET(req: Request) {
       .gte('date', startDate)
       .lte('date', endDate)
       .order('date'),
+    supabase
+      .from('expense_categories')
+      .select('name')
+      .eq('is_active', true)
+      .order('sort_order'),
   ])
 
   const expenseRows = (expenses || []).map(e => ({
@@ -85,5 +90,6 @@ export async function GET(req: Request) {
     })
   }
 
-  return NextResponse.json({ month, expenses: expenseRows, sales: salesRows })
+  const categoryNames = (catRows || []).map(c => c.name)
+  return NextResponse.json({ month, expenses: expenseRows, sales: salesRows, categories: categoryNames })
 }

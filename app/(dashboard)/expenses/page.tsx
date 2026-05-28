@@ -57,11 +57,17 @@ const emptyForm = () => ({
   receipt_previews: [] as string[],
 })
 
+interface Category { id: string; name: string; sort_order: number }
+
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [showForm, setShowForm] = useState(false)
   const [showAddBank, setShowAddBank] = useState(false)
+  const [showManageCat, setShowManageCat] = useState(false)
+  const [newCatName, setNewCatName] = useState('')
+  const [savingCat, setSavingCat] = useState(false)
   const [loading, setLoading] = useState(false)
   const [ocring, setOcring] = useState(false)
   const [uploadingReceipt, setUploadingReceipt] = useState(false)
@@ -91,11 +97,39 @@ export default function ExpensesPage() {
   }, [date, page])
 
   useEffect(() => { loadExpenses() }, [loadExpenses])
-  useEffect(() => { loadBankAccounts() }, [])
+  useEffect(() => { loadBankAccounts(); loadCategories() }, [])
 
   async function loadBankAccounts() {
     const res = await fetch('/api/bank-accounts')
     setBankAccounts(await res.json())
+  }
+
+  async function loadCategories() {
+    const res = await fetch('/api/categories')
+    setCategories(await res.json())
+  }
+
+  async function handleAddCategory(e: React.FormEvent) {
+    e.preventDefault()
+    if (!newCatName.trim()) return
+    setSavingCat(true)
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newCatName.trim() }),
+      })
+      const json = await res.json()
+      if (res.ok) { setNewCatName(''); await loadCategories() }
+      else alert('เพิ่มไม่สำเร็จ: ' + (json.error || ''))
+    } finally { setSavingCat(false) }
+  }
+
+  async function handleDeleteCategory(id: string, name: string) {
+    if (!confirm(`ลบหมวดหมู่ "${name}" ?`)) return
+    await fetch(`/api/categories/${id}`, { method: 'DELETE' })
+    await loadCategories()
+    if (form.category === name) setForm(f => ({ ...f, category: '' }))
   }
 
   async function handleSlipUpload(file: File) {
@@ -353,11 +387,17 @@ export default function ExpensesPage() {
 
               {/* Category */}
               <div>
-                <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>หมวดหมู่ *</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-sm font-medium" style={{ color: 'var(--muted-foreground)' }}>หมวดหมู่ *</label>
+                  <button type="button" onClick={() => setShowManageCat(true)}
+                    className="text-xs font-medium" style={{ color: 'var(--flame-red)' }}>
+                    ⚙️ จัดการหมวดหมู่
+                  </button>
+                </div>
                 <select required value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
                   className="w-full border rounded-xl px-3 py-2.5" style={{ borderColor: 'var(--border)' }}>
                   <option value="">-- เลือกหมวดหมู่ --</option>
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                 </select>
               </div>
 
@@ -504,6 +544,45 @@ export default function ExpensesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Manage Categories Modal ───────────────────────────────────── */}
+      {showManageCat && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4"
+          onClick={e => { if (e.target === e.currentTarget) setShowManageCat(false) }}>
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 max-h-[80vh] flex flex-col">
+            <h3 className="font-bold text-base mb-4" style={{ color: 'var(--charcoal)' }}>จัดการหมวดหมู่</h3>
+
+            {/* Add new */}
+            <form onSubmit={handleAddCategory} className="flex gap-2 mb-4">
+              <input type="text" value={newCatName} onChange={e => setNewCatName(e.target.value)}
+                placeholder="ชื่อหมวดหมู่ใหม่"
+                className="flex-1 border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }} />
+              <button type="submit" disabled={savingCat || !newCatName.trim()}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
+                style={{ background: 'var(--flame-red)' }}>
+                {savingCat ? '...' : '+ เพิ่ม'}
+              </button>
+            </form>
+
+            {/* List */}
+            <div className="overflow-y-auto flex-1 space-y-2">
+              {categories.map(c => (
+                <div key={c.id} className="flex items-center justify-between px-3 py-2.5 rounded-xl border"
+                  style={{ borderColor: 'var(--border)' }}>
+                  <span className="text-sm" style={{ color: 'var(--charcoal)' }}>{c.name}</span>
+                  <button onClick={() => handleDeleteCategory(c.id, c.name)}
+                    className="text-xs text-red-400 hover:text-red-600 ml-2">ลบ</button>
+                </div>
+              ))}
+            </div>
+
+            <button onClick={() => setShowManageCat(false)}
+              className="mt-4 w-full py-2.5 border rounded-xl text-sm font-medium" style={{ borderColor: 'var(--border)' }}>
+              ปิด
+            </button>
           </div>
         </div>
       )}
