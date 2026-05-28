@@ -259,7 +259,12 @@ export default function ExpensesPage() {
   }
 
   async function handleDelete(id: string) {
-    await fetch(`/api/expenses/${id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/expenses/${id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}))
+      alert('ลบไม่สำเร็จ: ' + (json.error || res.status))
+      return
+    }
     setConfirmDeleteId(null)
     setSelectedExpense(null)
     loadExpenses()
