@@ -18,13 +18,35 @@ export default function AppleIcon() {
           height: 180,
           background: '#EDEBDD',
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: 16,
+          gap: 10,
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={logoBase64} alt="KINTSU" style={{ width: 148, height: 'auto', objectFit: 'contain' }} />
+        <img
+          src={logoBase64}
+          alt="KINTSU"
+          style={{ width: 140, height: 'auto', objectFit: 'contain' }}
+        />
+        <div
+          style={{
+            background: '#D33F22',
+            borderRadius: 20,
+            paddingLeft: 14,
+            paddingRight: 14,
+            paddingTop: 4,
+            paddingBottom: 4,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <span style={{ color: 'white', fontSize: 13, fontWeight: 700, letterSpacing: 1 }}>
+            ACCOUNTING
+          </span>
+        </div>
       </div>
     ),
     { ...size }
