@@ -63,7 +63,7 @@ export async function POST(req: Request) {
       ocr_data: ocr_data || null,
       receipt_image_urls: receipt_image_urls || [],
       note: note || null,
-      created_by: userId || null,
+      created_by: null,
       created_by_name: userName,
     })
     .select()
