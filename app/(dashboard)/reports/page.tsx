@@ -9,6 +9,8 @@ export default function ReportsPage() {
   const [kpi, setKpi] = useState<KPIResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [showGAS, setShowGAS] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -19,6 +21,23 @@ export default function ReportsPage() {
     }
     load()
   }, [month])
+
+  async function handleExportCSV() {
+    setExporting(true)
+    const key = process.env.NEXT_PUBLIC_EXPORT_API_KEY || ''
+    const url = `/api/export?month=${month}&type=csv&key=${key}`
+    const res = await fetch(url)
+    if (res.ok) {
+      const blob = await res.blob()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `kintsu-${month}.csv`
+      a.click()
+    } else {
+      alert('Export ไม่สำเร็จ กรุณาตั้งค่า EXPORT_API_KEY ใน Vercel')
+    }
+    setExporting(false)
+  }
 
   async function sendTelegramSummary() {
     if (!kpi) return
@@ -125,6 +144,20 @@ export default function ReportsPage() {
             </div>
           )}
 
+          {/* Export buttons */}
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={handleExportCSV} disabled={exporting}
+              className="py-3 rounded-2xl font-semibold border-2 transition-colors disabled:opacity-60 text-sm"
+              style={{ borderColor: 'var(--flame-red)', color: 'var(--flame-red)' }}>
+              {exporting ? 'กำลัง Export...' : '⬇️ Export CSV'}
+            </button>
+            <button onClick={() => setShowGAS(true)}
+              className="py-3 rounded-2xl font-semibold text-white text-sm"
+              style={{ background: '#0F9D58' }}>
+              📊 Sync Google Sheets
+            </button>
+          </div>
+
           {/* Send Telegram */}
           <button onClick={sendTelegramSummary} disabled={sending}
             className="w-full py-3 rounded-2xl font-semibold border-2 transition-colors disabled:opacity-60"
@@ -135,9 +168,156 @@ export default function ReportsPage() {
       ) : (
         <div className="text-center py-12 text-gray-400">ไม่มีข้อมูล</div>
       )}
+
+      {/* GAS Setup Modal */}
+      {showGAS && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-4 pb-4"
+          onClick={e => { if (e.target === e.currentTarget) setShowGAS(false) }}>
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b sticky top-0 bg-white"
+              style={{ borderColor: 'var(--border)' }}>
+              <h2 className="font-bold text-base" style={{ color: 'var(--charcoal)' }}>ตั้งค่า Google Sheets Auto-sync</h2>
+              <button onClick={() => setShowGAS(false)} className="text-gray-400 text-xl">×</button>
+            </div>
+            <div className="px-6 py-4 space-y-4 text-sm">
+
+              <div className="p-3 rounded-xl text-xs" style={{ background: '#F0FDF4', color: '#166534' }}>
+                GAS จะดึงข้อมูลจาก API ของ app แล้วเขียนเข้า Google Sheets อัตโนมัติทุกวัน แยก sheet ตามเดือน
+              </div>
+
+              <div>
+                <p className="font-semibold mb-2" style={{ color: 'var(--charcoal)' }}>ขั้นตอนตั้งค่า</p>
+                <ol className="space-y-2" style={{ color: 'var(--muted-foreground)' }}>
+                  <li className="flex gap-2"><span className="shrink-0 font-bold text-red-600">1.</span>
+                    ไปที่ <strong>Vercel → Project Settings → Environment Variables</strong><br/>
+                    เพิ่ม <code className="bg-gray-100 px-1 rounded">EXPORT_API_KEY</code> = รหัสลับอะไรก็ได้ เช่น <code className="bg-gray-100 px-1 rounded">kintsu2026</code>
+                  </li>
+                  <li className="flex gap-2"><span className="shrink-0 font-bold text-red-600">2.</span>
+                    เพิ่ม <code className="bg-gray-100 px-1 rounded">NEXT_PUBLIC_EXPORT_API_KEY</code> = รหัสเดียวกัน (เพื่อให้ปุ่ม Export CSV ใช้ได้)
+                  </li>
+                  <li className="flex gap-2"><span className="shrink-0 font-bold text-red-600">3.</span>
+                    สร้าง Google Sheet ใหม่ → copy URL เอา Sheet ID
+                    <br/><span className="text-xs text-gray-400">(ใน URL: .../spreadsheets/d/<strong>THIS_IS_SHEET_ID</strong>/edit)</span>
+                  </li>
+                  <li className="flex gap-2"><span className="shrink-0 font-bold text-red-600">4.</span>
+                    เปิด Google Sheet → <strong>Extensions → Apps Script</strong> → วาง script ด้านล่าง
+                  </li>
+                  <li className="flex gap-2"><span className="shrink-0 font-bold text-red-600">5.</span>
+                    แก้ไข <code className="bg-gray-100 px-1 rounded">API_KEY</code> และ <code className="bg-gray-100 px-1 rounded">SHEET_ID</code> ใน script
+                  </li>
+                  <li className="flex gap-2"><span className="shrink-0 font-bold text-red-600">6.</span>
+                    กด <strong>Run → syncCurrentMonth</strong> ครั้งแรก แล้วตั้ง Trigger ให้รันทุกวัน
+                  </li>
+                </ol>
+              </div>
+
+              <div>
+                <p className="font-semibold mb-2" style={{ color: 'var(--charcoal)' }}>Google Apps Script</p>
+                <pre className="text-xs bg-gray-50 border rounded-xl p-3 overflow-x-auto whitespace-pre-wrap"
+                  style={{ borderColor: 'var(--border)', color: '#374151' }}>{GAS_SCRIPT}</pre>
+                <button
+                  onClick={() => navigator.clipboard.writeText(GAS_SCRIPT).then(() => alert('Copy แล้ว!'))}
+                  className="mt-2 w-full py-2 text-sm font-medium rounded-xl border"
+                  style={{ borderColor: 'var(--border)', color: 'var(--flame-red)' }}>
+                  📋 Copy Script
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
+
+const GAS_SCRIPT = `// KINTSU Accounting → Google Sheets Auto-sync
+// แก้ไข 2 ค่านี้ก่อน:
+const API_BASE = 'https://kintsu-accounting.vercel.app'
+const API_KEY  = 'YOUR_EXPORT_API_KEY'   // ← ใส่รหัสที่ตั้งใน Vercel
+const SHEET_ID = 'YOUR_GOOGLE_SHEET_ID'  // ← ใส่ ID จาก URL ของ Google Sheet
+
+function syncCurrentMonth() {
+  const month = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM')
+  syncMonth(month)
+}
+
+function syncMonth(month) {
+  const url = API_BASE + '/api/export?month=' + month + '&type=json&key=' + API_KEY
+  const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true })
+  if (res.getResponseCode() !== 200) {
+    console.error('Error:', res.getContentText()); return
+  }
+  const data = JSON.parse(res.getContentText())
+  const ss = SpreadsheetApp.openById(SHEET_ID)
+  writeExpenses(ss, month, data.expenses)
+  writeSales(ss, month, data.sales)
+  writeSummary(ss)
+  console.log('Synced ' + month + ': ' + data.expenses.length + ' expenses, ' + data.sales.length + ' sales days')
+}
+
+function writeExpenses(ss, month, rows) {
+  const name = month + ' รายจ่าย'
+  let sh = ss.getSheetByName(name) || ss.insertSheet(name)
+  sh.clearContents()
+  const H = ['วันที่','เวลา','หมวดหมู่','ยอดเงิน','วิธีชำระ','ธนาคาร','เลขบัญชี','ผู้รับเงิน','หมายเหตุ','บันทึกโดย']
+  sh.getRange(1,1,1,H.length).setValues([H]).setFontWeight('bold').setBackground('#D33F22').setFontColor('#FFFFFF')
+  if (!rows.length) return
+  const data = rows.map(e=>[e.date,e.time,e.category,e.amount,e.payment_method,e.bank,e.account,e.recipient,e.note,e.recorded_by])
+  sh.getRange(2,1,data.length,H.length).setValues(data)
+  sh.getRange(2,4,data.length,1).setNumberFormat('#,##0.00')
+  sh.getRange(data.length+2,3).setValue('รวม').setFontWeight('bold')
+  sh.getRange(data.length+2,4).setFormula('=SUM(D2:D'+(data.length+1)+')').setFontWeight('bold').setNumberFormat('#,##0.00')
+  sh.autoResizeColumns(1,H.length)
+}
+
+function writeSales(ss, month, rows) {
+  const name = month + ' รายรับ'
+  let sh = ss.getSheetByName(name) || ss.insertSheet(name)
+  sh.clearContents()
+  const H = ['วันที่','Dine-in','จำนวนโต๊ะ','GrabFood Gross','GP 30%','GrabFood Net','Takeaway','รวมสุทธิ']
+  sh.getRange(1,1,1,H.length).setValues([H]).setFontWeight('bold').setBackground('#D33F22').setFontColor('#FFFFFF')
+  if (!rows.length) return
+  const data = rows.map(s=>[s.date,s.dine_in,s.dine_in_covers,s.grabfood_gross,s.grabfood_gp,s.grabfood_net,s.takeaway,s.total_net])
+  sh.getRange(2,1,data.length,H.length).setValues(data)
+  ;[2,4,5,6,7,8].forEach(c=>sh.getRange(2,c,data.length,1).setNumberFormat('#,##0.00'))
+  const tot = data.length+2
+  sh.getRange(tot,1).setValue('รวม').setFontWeight('bold')
+  ;[2,4,5,6,7,8].forEach(c=>{
+    const col = String.fromCharCode(64+c)
+    sh.getRange(tot,c).setFormula('=SUM('+col+'2:'+col+(data.length+1)+')').setFontWeight('bold').setNumberFormat('#,##0.00')
+  })
+  sh.autoResizeColumns(1,H.length)
+}
+
+function writeSummary(ss) {
+  let sh = ss.getSheetByName('สรุป') || ss.insertSheet('สรุป', 0)
+  sh.clearContents()
+  const H = ['เดือน','รายรับ (฿)','รายจ่าย (฿)','กำไร (฿)']
+  sh.getRange(1,1,1,4).setValues([H]).setFontWeight('bold').setBackground('#D33F22').setFontColor('#FFFFFF')
+  const months = ss.getSheets()
+    .map(s=>s.getName().match(/^(\\d{4}-\\d{2}) รายรับ$/))
+    .filter(Boolean).map(m=>m[1]).sort()
+  const rows = months.map(m=>{
+    const rev = sumCol(ss, m+' รายรับ', 8)
+    const exp = sumCol(ss, m+' รายจ่าย', 4)
+    return [m, rev, exp, rev-exp]
+  })
+  if (rows.length) {
+    sh.getRange(2,1,rows.length,4).setValues(rows)
+    sh.getRange(2,2,rows.length,3).setNumberFormat('#,##0.00')
+    rows.forEach((r,i)=>sh.getRange(i+2,4).setFontColor(r[3]>=0?'#16a34a':'#dc2626'))
+  }
+  sh.autoResizeColumns(1,4)
+}
+
+function sumCol(ss, sheetName, col) {
+  const sh = ss.getSheetByName(sheetName)
+  if (!sh || sh.getLastRow() < 2) return 0
+  return sh.getRange(2,col,sh.getLastRow()-1,1).getValues().reduce((s,r)=>s+(r[0]||0),0)
+}
+
+// ตั้ง Trigger: Triggers → Add Trigger → syncCurrentMonth → Time-driven → Day timer → 7am-8am`
 
 function PLRow({ label, value, pct, type, badge }: {
   label: string; value: number; pct?: number; type: 'income'|'expense'|'subtotal'|'profit'|'loss'; badge?: string
