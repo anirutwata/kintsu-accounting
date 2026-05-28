@@ -254,7 +254,7 @@ export default function ExpensesPage() {
       note: exp.note || '',
       slip_image_url: exp.slip_image_url || '',
       slip_url_preview: exp.slip_image_url || '',
-      slip_hash: exp.slip_hash || '',
+      slip_hash: '',
       ocr_data: exp.ocr_data as OcrData | null,
       receipt_image_urls: exp.receipt_image_urls || [],
       receipt_previews: exp.receipt_image_urls || [],
