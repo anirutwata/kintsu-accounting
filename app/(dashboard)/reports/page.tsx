@@ -232,7 +232,7 @@ export default function ReportsPage() {
 }
 
 const GAS_SCRIPT = `// KINTSU Accounting → Google Sheets Auto-sync
-// อัปเดตล่าสุด: 29/05/2569 v2 — วันที่เป็น พ.ศ. (DD/MM/YYYY), delete webhook, sumCol fix, text format กันวันที่ auto-parse
+// อัปเดตล่าสุด: 29/05/2569 00:30 — วันที่เป็น พ.ศ. (DD/MM/YYYY), delete webhook, sumCol fix, text format กันวันที่ auto-parse
 const API_BASE = 'https://kintsu-accounting.vercel.app'
 const API_KEY  = 'kintsu2026'
 const SHEET_ID = '19Wx98_aE0R9mDF15SxQw66u-YbzG4WGqAO7pv1O3LvA'
