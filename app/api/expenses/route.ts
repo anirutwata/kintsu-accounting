@@ -81,5 +81,27 @@ export async function POST(req: Request) {
     createdByName: userName,
   }))
 
+  // Push to Google Sheets instantly (non-blocking)
+  const gasUrl = process.env.GAS_WEBHOOK_URL
+  if (gasUrl) {
+    fetch(gasUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: data.id,
+        date: data.date,
+        time: data.transfer_time || '',
+        category: data.category,
+        amount: data.amount_satang / 100,
+        payment_method: data.payment_method,
+        bank: data.sender_bank || '',
+        account: data.sender_account || '',
+        recipient: data.recipient_name || '',
+        note: data.note || '',
+        recorded_by: data.created_by_name || '',
+      }),
+    }).catch(() => {})
+  }
+
   return NextResponse.json(data)
 }
