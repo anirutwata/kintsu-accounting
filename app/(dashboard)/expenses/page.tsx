@@ -7,6 +7,28 @@ import type { Expense, BankAccount, OcrData } from '@/types'
 const CATEGORIES = ['วัตถุดิบ','ค่าแรง','ค่าเช่า','ค่าไฟ/แก๊ส','ค่าการตลาด','ค่าซ่อมบำรุง','วัสดุสิ้นเปลือง','อื่นๆ']
 const BANK_OPTIONS = ['KBANK','SCB','KTB','BBL','TTB','GSB','BAY','CIMB','UOB','LH BANK']
 
+// Map OCR bank names (Thai/English variants) → our standard bank codes
+const BANK_ALIASES: Record<string, string> = {
+  'KBANK': 'KBANK', 'กสิกรไทย': 'KBANK', 'KASIKORN': 'KBANK', 'K BANK': 'KBANK',
+  'SCB': 'SCB', 'ไทยพาณิชย์': 'SCB', 'SIAM COMMERCIAL': 'SCB',
+  'KTB': 'KTB', 'กรุงไทย': 'KTB', 'KRUNGTHAI': 'KTB',
+  'BBL': 'BBL', 'กรุงเทพ': 'BBL', 'BANGKOK BANK': 'BBL',
+  'TTB': 'TTB', 'ทหารไทย': 'TTB', 'TMB': 'TTB', 'TISCO': 'TTB', 'ทหารไทยธนชาต': 'TTB',
+  'GSB': 'GSB', 'ออมสิน': 'GSB',
+  'BAY': 'BAY', 'กรุงศรี': 'BAY', 'KRUNGSRI': 'BAY', 'AYUDHYA': 'BAY',
+  'CIMB': 'CIMB',
+  'UOB': 'UOB',
+  'LH BANK': 'LH BANK', 'แลนด์แอนด์เฮ้าส์': 'LH BANK',
+}
+
+function normalizeBankName(raw: string): string {
+  const upper = raw.toUpperCase().trim()
+  for (const [key, val] of Object.entries(BANK_ALIASES)) {
+    if (upper.includes(key.toUpperCase())) return val
+  }
+  return upper
+}
+
 const emptyForm = () => ({
   date: getTodayBKK(),
   transfer_time: '',
@@ -74,6 +96,14 @@ export default function ExpensesPage() {
       fd.append('file', file)
       const res = await fetch('/api/ocr', { method: 'POST', body: fd })
       const data = await res.json()
+      // Auto-match sender bank from OCR → registered bank accounts
+      let matchedBankId = ''
+      if (data.sender_bank) {
+        const normalizedOCR = normalizeBankName(data.sender_bank)
+        const matched = bankAccounts.find(b => normalizeBankName(b.bank_name) === normalizedOCR)
+        if (matched) matchedBankId = matched.id
+      }
+
       setForm(f => ({
         ...f,
         amount: data.amount_satang ? String(data.amount_satang / 100) : f.amount,
@@ -83,8 +113,7 @@ export default function ExpensesPage() {
         slip_image_url: data.slip_image_url || f.slip_image_url,
         slip_hash: data.hash || f.slip_hash,
         ocr_data: data,
-        // Auto-fill bank account if OCR detected sender bank matches one of our accounts
-        bank_account_id: f.bank_account_id,
+        bank_account_id: matchedBankId || f.bank_account_id,
       }))
     } catch { /* ignore */ }
     setOcring(false)
