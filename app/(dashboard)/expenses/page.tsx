@@ -204,7 +204,7 @@ export default function ExpensesPage() {
       const selectedBank = bankAccounts.find(b => b.id === form.bank_account_id)
       const paymentMethod = form.bank_account_id ? 'โอนเงิน' : 'เงินสด'
 
-      await fetch('/api/expenses', {
+      const res = await fetch('/api/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -225,6 +225,8 @@ export default function ExpensesPage() {
           note: form.note || null,
         }),
       })
+      const json = await res.json()
+      if (!res.ok) { alert('บันทึกไม่สำเร็จ: ' + (json.error || res.status)); return }
       setShowForm(false)
       setForm(emptyForm())
       loadExpenses()

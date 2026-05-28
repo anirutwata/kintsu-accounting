@@ -13,7 +13,7 @@ export async function GET(req: Request) {
 
   let query = supabase
     .from('expenses')
-    .select('*, suppliers(name)', { count: 'exact' })
+    .select('*', { count: 'exact' })
     .eq('is_deleted', false)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
