@@ -675,10 +675,16 @@ export default function ExpensesPage() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={form.slip_url_preview} alt="slip" className="w-full rounded-xl object-contain max-h-64 border"
                       style={{ borderColor: 'var(--border)' }} />
-                    <button type="button" onClick={() => slipRef.current?.click()}
-                      className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded-lg">
-                      เปลี่ยน
-                    </button>
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      <button type="button" onClick={() => slipRef.current?.click()}
+                        className="bg-black/50 text-white text-xs px-2 py-1 rounded-lg">
+                        เปลี่ยน
+                      </button>
+                      <button type="button" onClick={() => setForm(f => ({ ...f, slip_image_url: '', slip_url_preview: '', slip_hash: '', ocr_data: null }))}
+                        className="bg-red-500 text-white text-xs px-2 py-1 rounded-lg">
+                        ลบ
+                      </button>
+                    </div>
                     {form.ocr_data && (
                       <div className="mt-2 p-3 rounded-xl text-xs space-y-1"
                         style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
@@ -716,10 +722,21 @@ export default function ExpensesPage() {
                 {form.receipt_previews.length > 0 && (
                   <div className="grid grid-cols-3 gap-2 mb-2">
                     {form.receipt_previews.map((p, i) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img key={i} src={p} alt={`receipt-${i}`}
-                        className="w-full aspect-square object-cover rounded-lg border"
-                        style={{ borderColor: 'var(--border)' }} />
+                      <div key={i} className="relative">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={p} alt={`receipt-${i}`}
+                          className="w-full aspect-square object-cover rounded-lg border"
+                          style={{ borderColor: 'var(--border)' }} />
+                        <button type="button"
+                          onClick={() => setForm(f => ({
+                            ...f,
+                            receipt_image_urls: f.receipt_image_urls.filter((_, idx) => idx !== i),
+                            receipt_previews: f.receipt_previews.filter((_, idx) => idx !== i),
+                          }))}
+                          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center leading-none font-bold">
+                          ×
+                        </button>
+                      </div>
                     ))}
                   </div>
                 )}
