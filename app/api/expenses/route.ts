@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
+import { sendTelegram, buildExpenseMessage } from '@/lib/telegram'
 
 export async function GET(req: Request) {
   const supabase = await createClient()
@@ -70,5 +71,15 @@ export async function POST(req: Request) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Send Telegram notification (non-blocking)
+  sendTelegram(buildExpenseMessage({
+    category,
+    note: body.note || '',
+    totalSatang: amount_satang,
+    paymentMethod: body.payment_method || 'เงินสด',
+    createdByName: userName,
+  }))
+
   return NextResponse.json(data)
 }
