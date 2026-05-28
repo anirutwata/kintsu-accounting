@@ -341,7 +341,14 @@ function writeSummary(ss) {
 function sumCol(ss, sheetName, col) {
   const sh = ss.getSheetByName(sheetName)
   if (!sh || sh.getLastRow() < 2) return 0
-  return sh.getRange(2,col,sh.getLastRow()-1,1).getValues().reduce((s,r)=>s+(r[0]||0),0)
+  const range = sh.getRange(2, col, sh.getLastRow()-1, 1)
+  const vals = range.getValues()
+  const formulas = range.getFormulas()
+  // ข้ามแถวที่เป็น formula (เช่น แถว รวมทั้งหมด) เพื่อกันนับซ้ำ
+  return vals.reduce((s, r, i) => {
+    if (formulas[i][0]) return s
+    return s + (typeof r[0] === 'number' ? r[0] : 0)
+  }, 0)
 }
 
 // ตั้ง Trigger: Triggers → Add Trigger → syncCurrentMonth → Time-driven → Day timer → 11pm-midnight (Asia/Bangkok)`
