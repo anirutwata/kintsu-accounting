@@ -29,6 +29,18 @@ function normalizeBankName(raw: string): string {
   return upper
 }
 
+// Extract visible digits from masked account e.g. "xxx-x-x5582-x" → "5582"
+function visibleDigits(masked: string): string {
+  return masked.replace(/x/gi, '').replace(/[^0-9]/g, '')
+}
+
+// Check if registered account contains the visible digits from OCR
+function accountMatches(registered: string, ocrMasked: string): boolean {
+  const digits = visibleDigits(ocrMasked)
+  if (digits.length < 3) return false
+  return registered.replace(/[^0-9]/g, '').includes(digits)
+}
+
 const emptyForm = () => ({
   date: getTodayBKK(),
   transfer_time: '',
@@ -96,12 +108,19 @@ export default function ExpensesPage() {
       fd.append('file', file)
       const res = await fetch('/api/ocr', { method: 'POST', body: fd })
       const data = await res.json()
-      // Auto-match sender bank from OCR → registered bank accounts
+      // Auto-match sender bank + account number from OCR → registered bank accounts
       let matchedBankId = ''
       if (data.sender_bank) {
         const normalizedOCR = normalizeBankName(data.sender_bank)
-        const matched = bankAccounts.find(b => normalizeBankName(b.bank_name) === normalizedOCR)
-        if (matched) matchedBankId = matched.id
+        const sameBank = bankAccounts.filter(b => normalizeBankName(b.bank_name) === normalizedOCR)
+        if (sameBank.length === 1) {
+          // Only one account at this bank → use it
+          matchedBankId = sameBank[0].id
+        } else if (sameBank.length > 1 && data.sender_account) {
+          // Multiple accounts → match by account number digits
+          const byAccount = sameBank.find(b => accountMatches(b.account_number, data.sender_account))
+          matchedBankId = byAccount ? byAccount.id : sameBank[0].id
+        }
       }
 
       setForm(f => ({
