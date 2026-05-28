@@ -1,42 +1,27 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-interface UserOption {
-  id: string
-  name: string
-  role: string
-}
-
-const roleLabel: Record<string, string> = {
-  owner: 'เจ้าของร้าน',
-  manager: 'ผู้จัดการ',
-  cashier: 'แคชเชียร์',
-}
-
 export default function LoginPage() {
-  const [users, setUsers] = useState<UserOption[]>([])
-  const [selected, setSelected] = useState('')
+  const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
-  useEffect(() => {
-    fetch('/api/users').then(r => r.json()).then(setUsers)
-  }, [])
-
-  async function handleLogin(name: string) {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!name.trim()) return
     setLoading(true)
     setError('')
     try {
       const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name: name.trim() }),
       })
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error || 'เกิดข้อผิดพลาด')
+        setError(data.error || 'ไม่พบชื่อนี้ในระบบ')
         return
       }
       router.push('/dashboard')
@@ -62,46 +47,39 @@ export default function LoginPage() {
           <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>ระบบบัญชีรายรับ-รายจ่าย</p>
         </div>
 
-        {/* Name Selection */}
+        {/* Name Input */}
         <div className="bg-white rounded-2xl shadow-sm p-6 border" style={{ borderColor: 'var(--border)' }}>
-          <p className="text-center text-sm font-medium mb-4" style={{ color: 'var(--muted-foreground)' }}>
-            เลือกชื่อของคุณ
-          </p>
-
-          <div className="space-y-2">
-            {users.length === 0 ? (
-              <div className="text-center py-4 text-sm text-gray-400">กำลังโหลด...</div>
-            ) : (
-              users.map(user => (
-                <button
-                  key={user.id}
-                  onClick={() => { setSelected(user.name); handleLogin(user.name) }}
-                  disabled={loading}
-                  className="w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all disabled:opacity-50"
-                  style={{
-                    borderColor: selected === user.name ? 'var(--flame-red)' : 'var(--border)',
-                    background: selected === user.name ? '#FEF2F2' : 'white',
-                  }}>
-                  <span className="font-medium text-sm" style={{ color: 'var(--charcoal)' }}>{user.name}</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
-                    {roleLabel[user.role] || user.role}
-                  </span>
-                </button>
-              ))
-            )}
-          </div>
-
-          {error && (
-            <div className="mt-3 text-center text-sm p-2 rounded-lg bg-red-50 text-red-600">
-              {error}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2 text-center" style={{ color: 'var(--muted-foreground)' }}>
+                ใส่ชื่อของคุณ
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={e => { setName(e.target.value); setError('') }}
+                placeholder="ชื่อ-นามสกุล"
+                autoFocus
+                className="w-full border rounded-xl px-4 py-3 text-center text-base focus:outline-none"
+                style={{ borderColor: error ? '#FCA5A5' : 'var(--border)' }}
+                disabled={loading}
+              />
             </div>
-          )}
 
-          {loading && (
-            <p className="mt-3 text-center text-sm" style={{ color: 'var(--muted-foreground)' }}>
-              กำลังเข้าสู่ระบบ...
-            </p>
-          )}
+            {error && (
+              <div className="text-center text-sm p-2 rounded-lg bg-red-50 text-red-600">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={!name.trim() || loading}
+              className="w-full py-3 rounded-xl font-semibold text-white transition-opacity disabled:opacity-40"
+              style={{ background: 'var(--flame-red)' }}>
+              {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
+            </button>
+          </form>
         </div>
 
         <p className="text-center text-xs mt-6" style={{ color: 'var(--muted-foreground)' }}>
