@@ -1,40 +1,32 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
-import bcrypt from 'bcryptjs'
 
 export async function POST(req: Request) {
-  const { pin } = await req.json()
-  if (!pin || pin.length < 4) {
-    return NextResponse.json({ error: 'กรุณาใส่ PIN ให้ครบ 4 หลัก' }, { status: 400 })
+  const { name } = await req.json()
+  if (!name?.trim()) {
+    return NextResponse.json({ error: 'กรุณาเลือกชื่อ' }, { status: 400 })
   }
 
   const supabase = await createClient()
-  const { data: users } = await supabase
+  const { data: user } = await supabase
     .from('users')
-    .select('id, name, role, pin_hash')
+    .select('id, name, role')
+    .ilike('name', name.trim())
     .eq('is_active', true)
+    .maybeSingle()
 
-  if (!users) return NextResponse.json({ error: 'ระบบขัดข้อง' }, { status: 500 })
-
-  // Check PIN against all active users
-  let matched = null
-  for (const user of users) {
-    const ok = await bcrypt.compare(pin, user.pin_hash)
-    if (ok) { matched = user; break }
-  }
-
-  if (!matched) {
-    return NextResponse.json({ error: 'PIN ไม่ถูกต้อง' }, { status: 401 })
+  if (!user) {
+    return NextResponse.json({ error: 'ไม่พบชื่อนี้ในระบบ' }, { status: 401 })
   }
 
   const cookieStore = await cookies()
-  const maxAge = 60 * 60 * 24 // 24 hours
-  cookieStore.set('kintsu_acc_user_id', matched.id, { httpOnly: true, secure: true, maxAge, path: '/' })
-  cookieStore.set('kintsu_acc_role', matched.role, { httpOnly: false, secure: true, maxAge, path: '/' })
-  cookieStore.set('kintsu_acc_name', matched.name, { httpOnly: false, secure: true, maxAge, path: '/' })
+  const maxAge = 60 * 60 * 24
+  cookieStore.set('kintsu_acc_user_id', user.id, { httpOnly: true, secure: true, maxAge, path: '/' })
+  cookieStore.set('kintsu_acc_role', user.role, { httpOnly: false, secure: true, maxAge, path: '/' })
+  cookieStore.set('kintsu_acc_name', user.name, { httpOnly: false, secure: true, maxAge, path: '/' })
 
-  return NextResponse.json({ ok: true, name: matched.name, role: matched.role })
+  return NextResponse.json({ ok: true, name: user.name, role: user.role })
 }
 
 export async function DELETE() {
