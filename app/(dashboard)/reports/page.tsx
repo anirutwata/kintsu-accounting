@@ -292,6 +292,9 @@ function writeExpenses(ss, month, rows, categories) {
   sh.getRange(1,1,1,H.length).setValues([H]).setFontWeight('bold').setBackground('#D33F22').setFontColor('#FFFFFF')
   if (!rows.length) return
   const data = rows.map(e=>[toBE(e.date),e.time,e.category,e.amount,e.payment_method,e.bank,e.account,e.recipient,e.note,e.recorded_by,toBE(e.recorded_date),e.recorded_time||''])
+  // บังคับ column วันที่เป็น text ก่อน เพื่อกัน Google Sheets auto-parse เป็น date
+  sh.getRange(2,1,data.length,1).setNumberFormat('@')
+  sh.getRange(2,11,data.length,1).setNumberFormat('@')
   sh.getRange(2,1,data.length,H.length).setValues(data).setFontWeight('normal')
   sh.getRange(2,4,data.length,1).setNumberFormat('#,##0.00')
   const totalRow = data.length+2
@@ -322,6 +325,7 @@ function writeSales(ss, month, rows) {
   sh.getRange(1,1,1,H.length).setValues([H]).setFontWeight('bold').setBackground('#D33F22').setFontColor('#FFFFFF')
   if (!rows.length) return
   const data = rows.map(s=>[toBE(s.date),s.dine_in,s.dine_in_covers,s.grabfood_gross,s.grabfood_gp,s.grabfood_net,s.takeaway,s.total_net])
+  sh.getRange(2,1,data.length,1).setNumberFormat('@')
   sh.getRange(2,1,data.length,H.length).setValues(data)
   ;[2,4,5,6,7,8].forEach(c=>sh.getRange(2,c,data.length,1).setNumberFormat('#,##0.00'))
   const tot = data.length+2
