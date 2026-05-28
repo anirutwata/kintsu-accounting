@@ -149,6 +149,41 @@ export default function SalesPage() {
           </div>
         </SalesSection>
 
+        {/* Payment Breakdown — แสดงเมื่อมีข้อมูลจาก Foodstory */}
+        {existing && (existing.cash_satang > 0 || existing.card_satang > 0 || existing.sales_before_vat_satang > 0) && (
+          <SalesSection title="ช่องทางชำระเงิน & VAT" icon="💳" color="#9F8966">
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span style={{ color: 'var(--muted-foreground)' }}>ยอดก่อน VAT</span>
+                <span className="font-medium">{formatBaht(existing.sales_before_vat_satang)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span style={{ color: 'var(--muted-foreground)' }}>VAT 7%</span>
+                <span className="font-medium">{formatBaht(existing.vat_amount_satang)}</span>
+              </div>
+              {existing.rounding_satang !== 0 && (
+                <div className="flex justify-between">
+                  <span style={{ color: 'var(--muted-foreground)' }}>เศษสตางค์ (Rounding)</span>
+                  <span className="font-medium">{formatBaht(existing.rounding_satang)}</span>
+                </div>
+              )}
+              <div className="border-t pt-2 mt-1" style={{ borderColor: 'var(--border)' }}>
+                <div className="flex justify-between">
+                  <span style={{ color: 'var(--muted-foreground)' }}>💵 เงินสด</span>
+                  <span className="font-semibold">{formatBaht(existing.cash_satang)}</span>
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span style={{ color: 'var(--muted-foreground)' }}>💳 บัตร / โอน</span>
+                  <span className="font-semibold">{formatBaht(existing.card_satang)}</span>
+                </div>
+              </div>
+              {existing.source === 'foodstory' && (
+                <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>นำเข้าจาก Foodstory อัตโนมัติ</p>
+              )}
+            </div>
+          </SalesSection>
+        )}
+
         {/* Total */}
         {totalNet > 0 && (
           <div className="bg-white rounded-2xl p-4 border" style={{ borderColor: 'var(--border)' }}>

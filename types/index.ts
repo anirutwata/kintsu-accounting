@@ -145,6 +145,12 @@ export interface DailySales {
   total_net_satang: number
   total_vat_satang: number
   source: string
+  // Payment breakdown (from Foodstory import)
+  cash_satang: number
+  card_satang: number
+  sales_before_vat_satang: number
+  vat_amount_satang: number
+  rounding_satang: number
 }
 
 export interface VoidRefund {
