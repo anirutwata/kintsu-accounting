@@ -4,6 +4,12 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'KINTSU Accounting',
   description: 'ระบบบัญชีรายรับ-รายจ่าย Kintsu Yakiniku',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'KINTSUAcct',
+  },
 }
 
 export const viewport: Viewport = {
