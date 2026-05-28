@@ -13,6 +13,14 @@ export async function GET() {
   return NextResponse.json(data || [])
 }
 
+function formatAccountNumber(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 10)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 4) return `${digits.slice(0,3)}-${digits.slice(3)}`
+  if (digits.length <= 9) return `${digits.slice(0,3)}-${digits.slice(3,4)}-${digits.slice(4)}`
+  return `${digits.slice(0,3)}-${digits.slice(3,4)}-${digits.slice(4,9)}-${digits.slice(9)}`
+}
+
 export async function POST(req: Request) {
   const supabase = await createClient()
   const { bank_name, account_number, account_name } = await req.json()
@@ -21,7 +29,7 @@ export async function POST(req: Request) {
   }
   const { data, error } = await supabase
     .from('bank_accounts')
-    .insert({ bank_name, account_number, account_name })
+    .insert({ bank_name, account_number: formatAccountNumber(account_number), account_name })
     .select()
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
