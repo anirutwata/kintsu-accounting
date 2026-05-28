@@ -559,6 +559,11 @@ export default function ExpensesPage() {
                   <input type="date" required value={form.date}
                     onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
                     className="w-full border rounded-xl px-3 py-2.5 text-sm" style={{ borderColor: 'var(--border)' }} />
+                  {form.date && (
+                    <p className="text-xs mt-1 text-center" style={{ color: 'var(--muted-foreground)' }}>
+                      {new Date(form.date + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                  )}
                 </div>
                 <div className="flex-1">
                   <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>เวลาโอน</label>
