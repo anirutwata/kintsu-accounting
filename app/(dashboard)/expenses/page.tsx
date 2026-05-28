@@ -4,7 +4,7 @@ import { formatBaht, toSatang } from '@/lib/money'
 import { getTodayBKK, getMonthKey, formatThaiMonth } from '@/lib/utils'
 import type { Expense, BankAccount, OcrData } from '@/types'
 
-const BANK_OPTIONS = ['KBANK','SCB','KTB','BBL','TTB','GSB','BAY','CIMB','UOB','LH BANK']
+const BANK_OPTIONS = ['KBANK','SCB','KTB','BBL','TTB','GSB','BAY','BAAC','GHB','CIMB','UOB','KKP','LH BANK']
 
 const BANK_ALIASES: Record<string, string> = {
   'KBANK': 'KBANK', 'กสิกรไทย': 'KBANK', 'KASIKORN': 'KBANK', 'K BANK': 'KBANK',
@@ -17,6 +17,10 @@ const BANK_ALIASES: Record<string, string> = {
   'CIMB': 'CIMB',
   'UOB': 'UOB',
   'LH BANK': 'LH BANK', 'แลนด์แอนด์เฮ้าส์': 'LH BANK',
+  'BAAC': 'BAAC', 'ธกส': 'BAAC', 'ธ.ก.ส': 'BAAC', 'เพื่อการเกษตร': 'BAAC',
+  'GHB': 'GHB', 'อาคารสงเคราะห์': 'GHB',
+  'KIATNAKIN': 'KKP', 'KKP': 'KKP', 'เกียรตินาคิน': 'KKP',
+  'TBANK': 'TBANK', 'ธนชาต': 'TBANK',
 }
 
 function normalizeBankName(raw: string): string {
