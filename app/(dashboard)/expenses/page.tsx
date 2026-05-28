@@ -308,18 +308,18 @@ export default function ExpensesPage() {
             <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
 
               {/* Date + Time row */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3" style={{ gridTemplateColumns: '3fr 2fr' }}>
                 <div>
                   <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>วันที่ *</label>
                   <input type="date" required value={form.date}
                     onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                    className="w-full border rounded-xl px-3 py-2.5 text-sm" style={{ borderColor: 'var(--border)' }} />
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm min-w-0" style={{ borderColor: 'var(--border)' }} />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>เวลาโอน</label>
                   <input type="time" value={form.transfer_time}
                     onChange={e => setForm(f => ({ ...f, transfer_time: e.target.value }))}
-                    className="w-full border rounded-xl px-3 py-2.5 text-sm" style={{ borderColor: 'var(--border)' }} />
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm min-w-0" style={{ borderColor: 'var(--border)' }} />
                 </div>
               </div>
 
