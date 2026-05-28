@@ -232,10 +232,9 @@ export default function ReportsPage() {
 }
 
 const GAS_SCRIPT = `// KINTSU Accounting → Google Sheets Auto-sync
-// แก้ไข 2 ค่านี้ก่อน:
 const API_BASE = 'https://kintsu-accounting.vercel.app'
-const API_KEY  = 'YOUR_EXPORT_API_KEY'   // ← ใส่รหัสที่ตั้งใน Vercel
-const SHEET_ID = 'YOUR_GOOGLE_SHEET_ID'  // ← ใส่ ID จาก URL ของ Google Sheet
+const API_KEY  = 'kintsu2026'
+const SHEET_ID = '19Wx98_aE0R9mDF15SxQw66u-YbzG4WGqAO7pv1O3LvA'
 
 // รับข้อมูล real-time จาก Next.js webhook แล้ว sync ทั้งเดือนใหม่เลย
 function doPost(e) {
