@@ -14,7 +14,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const updates: Record<string, unknown> = {
     ...rest,
     updated_at: new Date().toISOString(),
-    updated_by: userId || null,
   }
 
   if (amount_satang !== undefined) {

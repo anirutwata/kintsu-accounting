@@ -1,13 +1,11 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { formatBaht, toSatang } from '@/lib/money'
-import { getTodayBKK } from '@/lib/utils'
+import { getTodayBKK, getMonthKey, formatThaiMonth } from '@/lib/utils'
 import type { Expense, BankAccount, OcrData } from '@/types'
 
-const CATEGORIES = ['วัตถุดิบ','ค่าแรง','ค่าเช่า','ค่าไฟ/แก๊ส','ค่าการตลาด','ค่าซ่อมบำรุง','วัสดุสิ้นเปลือง','อื่นๆ']
 const BANK_OPTIONS = ['KBANK','SCB','KTB','BBL','TTB','GSB','BAY','CIMB','UOB','LH BANK']
 
-// Map OCR bank names (Thai/English variants) → our standard bank codes
 const BANK_ALIASES: Record<string, string> = {
   'KBANK': 'KBANK', 'กสิกรไทย': 'KBANK', 'KASIKORN': 'KBANK', 'K BANK': 'KBANK',
   'SCB': 'SCB', 'ไทยพาณิชย์': 'SCB', 'SIAM COMMERCIAL': 'SCB',
@@ -29,16 +27,19 @@ function normalizeBankName(raw: string): string {
   return upper
 }
 
-// Extract visible digits from masked account e.g. "xxx-x-x5582-x" → "5582"
 function visibleDigits(masked: string): string {
   return masked.replace(/x/gi, '').replace(/[^0-9]/g, '')
 }
 
-// Check if registered account contains the visible digits from OCR
 function accountMatches(registered: string, ocrMasked: string): boolean {
   const digits = visibleDigits(ocrMasked)
   if (digits.length < 3) return false
   return registered.replace(/[^0-9]/g, '').includes(digits)
+}
+
+function formatDate(dateStr: string) {
+  const d = new Date(dateStr + 'T00:00:00')
+  return d.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit' })
 }
 
 const emptyForm = () => ({
@@ -63,6 +64,7 @@ export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [month, setMonth] = useState(getMonthKey())
   const [showForm, setShowForm] = useState(false)
   const [showAddBank, setShowAddBank] = useState(false)
   const [showManageCat, setShowManageCat] = useState(false)
@@ -73,11 +75,12 @@ export default function ExpensesPage() {
   const [uploadingReceipt, setUploadingReceipt] = useState(false)
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
-  const [date, setDate] = useState(getTodayBKK())
   const [form, setForm] = useState(emptyForm())
   const [userName, setUserName] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
-  // Add bank form
   const [bankForm, setBankForm] = useState({ bank_name: '', account_number: '', account_name: '' })
   const [savingBank, setSavingBank] = useState(false)
 
@@ -90,11 +93,11 @@ export default function ExpensesPage() {
   }, [])
 
   const loadExpenses = useCallback(async () => {
-    const res = await fetch(`/api/expenses?date=${date}&page=${page}`)
+    const res = await fetch(`/api/expenses?month=${month}&page=${page}`)
     const json = await res.json()
     setExpenses(json.data || [])
     setTotal(json.total || 0)
-  }, [date, page])
+  }, [month, page])
 
   useEffect(() => { loadExpenses() }, [loadExpenses])
   useEffect(() => { loadBankAccounts(); loadCategories() }, [])
@@ -134,7 +137,6 @@ export default function ExpensesPage() {
 
   async function handleSlipUpload(file: File) {
     setOcring(true)
-    // Show local preview immediately
     const preview = URL.createObjectURL(file)
     setForm(f => ({ ...f, slip_url_preview: preview }))
     try {
@@ -142,21 +144,17 @@ export default function ExpensesPage() {
       fd.append('file', file)
       const res = await fetch('/api/ocr', { method: 'POST', body: fd })
       const data = await res.json()
-      // Auto-match sender bank + account number from OCR → registered bank accounts
       let matchedBankId = ''
       if (data.sender_bank) {
         const normalizedOCR = normalizeBankName(data.sender_bank)
         const sameBank = bankAccounts.filter(b => normalizeBankName(b.bank_name) === normalizedOCR)
         if (sameBank.length === 1) {
-          // Only one account at this bank → use it
           matchedBankId = sameBank[0].id
         } else if (sameBank.length > 1 && data.sender_account) {
-          // Multiple accounts → match by account number digits
           const byAccount = sameBank.find(b => accountMatches(b.account_number, data.sender_account))
           matchedBankId = byAccount ? byAccount.id : sameBank[0].id
         }
       }
-
       setForm(f => ({
         ...f,
         amount: data.amount_satang ? String(data.amount_satang / 100) : f.amount,
@@ -202,33 +200,35 @@ export default function ExpensesPage() {
     try {
       const amountSatang = toSatang(parseFloat(form.amount) || 0)
       const selectedBank = bankAccounts.find(b => b.id === form.bank_account_id)
-      const paymentMethod = form.bank_account_id ? 'โอนเงิน' : 'เงินสด'
+      const isBank = form.bank_account_id && !form.bank_account_id.startsWith('__')
+      const paymentMethod = isBank ? 'โอนเงิน' : form.bank_account_id === '__card__' ? 'บัตรเครดิต' : 'เงินสด'
 
-      const res = await fetch('/api/expenses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date: form.date,
-          category: form.category,
-          amount_satang: amountSatang,
-          payment_method: paymentMethod,
-          bank_account_id: form.bank_account_id || null,
-          transfer_time: form.transfer_time || null,
-          sender_name: selectedBank ? selectedBank.account_name : null,
-          sender_bank: selectedBank ? selectedBank.bank_name : null,
-          sender_account: selectedBank ? selectedBank.account_number : null,
-          recipient_name: form.recipient_name || null,
-          slip_image_url: form.slip_image_url || null,
-          slip_hash: form.slip_hash || null,
-          ocr_data: form.ocr_data,
-          receipt_image_urls: form.receipt_image_urls,
-          note: form.note || null,
-        }),
-      })
+      const body = {
+        date: form.date,
+        category: form.category,
+        amount_satang: amountSatang,
+        payment_method: paymentMethod,
+        bank_account_id: isBank ? form.bank_account_id : null,
+        transfer_time: form.transfer_time || null,
+        sender_name: selectedBank ? selectedBank.account_name : null,
+        sender_bank: selectedBank ? selectedBank.bank_name : null,
+        sender_account: selectedBank ? selectedBank.account_number : null,
+        recipient_name: form.recipient_name || null,
+        slip_image_url: form.slip_image_url || null,
+        slip_hash: form.slip_hash || null,
+        ocr_data: form.ocr_data,
+        receipt_image_urls: form.receipt_image_urls,
+        note: form.note || null,
+      }
+
+      const url = editingId ? `/api/expenses/${editingId}` : '/api/expenses'
+      const method = editingId ? 'PATCH' : 'POST'
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const json = await res.json()
       if (!res.ok) { alert('บันทึกไม่สำเร็จ: ' + (json.error || res.status)); return }
       setShowForm(false)
       setForm(emptyForm())
+      setEditingId(null)
       loadExpenses()
     } finally {
       setLoading(false)
@@ -238,7 +238,29 @@ export default function ExpensesPage() {
   async function handleDelete(id: string) {
     if (!confirm('ลบรายการนี้?')) return
     await fetch(`/api/expenses/${id}`, { method: 'DELETE' })
+    setSelectedExpense(null)
     loadExpenses()
+  }
+
+  function openEdit(exp: Expense) {
+    setEditingId(exp.id)
+    setForm({
+      date: exp.date,
+      transfer_time: exp.transfer_time || '',
+      amount: String(exp.amount_satang / 100),
+      category: exp.category,
+      bank_account_id: exp.bank_account_id || '',
+      recipient_name: exp.recipient_name || '',
+      note: exp.note || '',
+      slip_image_url: exp.slip_image_url || '',
+      slip_url_preview: exp.slip_image_url || '',
+      slip_hash: exp.slip_hash || '',
+      ocr_data: exp.ocr_data as OcrData | null,
+      receipt_image_urls: exp.receipt_image_urls || [],
+      receipt_previews: exp.receipt_image_urls || [],
+    })
+    setSelectedExpense(null)
+    setShowForm(true)
   }
 
   async function handleAddBank(e: React.FormEvent) {
@@ -265,75 +287,98 @@ export default function ExpensesPage() {
     }
   }
 
-  const totalToday = expenses.reduce((s, e) => s + e.total_satang, 0)
+  const totalMonth = expenses.reduce((s, e) => s + e.total_satang, 0)
+
+  // Group expenses by date descending
+  const grouped: Record<string, Expense[]> = {}
+  for (const exp of expenses) {
+    if (!grouped[exp.date]) grouped[exp.date] = []
+    grouped[exp.date].push(exp)
+  }
+  const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a))
 
   return (
     <div className="space-y-4 py-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold" style={{ color: 'var(--charcoal)' }}>รายจ่าย</h1>
-          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>รวม {formatBaht(totalToday)}</p>
+          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>รวม {formatBaht(totalMonth)}</p>
         </div>
-        <input type="date" value={date} onChange={e => { setDate(e.target.value); setPage(1) }}
-          className="text-sm border rounded-lg px-2 py-1.5" style={{ borderColor: 'var(--border)' }} />
+        <select value={month} onChange={e => { setMonth(e.target.value); setPage(1) }}
+          className="text-sm border rounded-lg px-2 py-1.5" style={{ borderColor: 'var(--border)', background: 'white' }}>
+          {Array.from({ length: 12 }, (_, i) => {
+            const d = new Date()
+            d.setMonth(d.getMonth() - i)
+            const key = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }).slice(0, 7)
+            return <option key={key} value={key}>{formatThaiMonth(key)}</option>
+          })}
+        </select>
       </div>
 
-      <button onClick={() => setShowForm(true)}
+      <button onClick={() => { setEditingId(null); setForm(emptyForm()); setShowForm(true) }}
         className="w-full py-3 rounded-2xl font-semibold text-white"
         style={{ background: 'var(--flame-red)' }}>
         + บันทึกค่าใช้จ่าย
       </button>
 
-      {/* Expense List */}
-      <div className="space-y-2">
-        {expenses.map(exp => (
-          <div key={exp.id} className="bg-white rounded-2xl p-4 border" style={{ borderColor: 'var(--border)' }}>
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="text-xs px-2 py-0.5 rounded-full font-medium"
-                    style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
-                    {exp.category}
-                  </span>
-                  {exp.ocr_data && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">📸 สลิป</span>
-                  )}
-                  {(exp.receipt_image_urls?.length ?? 0) > 0 && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-600">🧾 {exp.receipt_image_urls.length} ใบ</span>
-                  )}
-                </div>
-                {exp.recipient_name && (
-                  <p className="text-sm font-medium" style={{ color: 'var(--charcoal)' }}>{exp.recipient_name}</p>
-                )}
-                {exp.note && <p className="text-sm truncate" style={{ color: 'var(--muted-foreground)' }}>{exp.note}</p>}
-                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                  {exp.transfer_time && (
-                    <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{exp.transfer_time}</span>
-                  )}
-                  {exp.sender_bank && (
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100" style={{ color: 'var(--muted-foreground)' }}>
-                      {exp.sender_bank}
-                    </span>
-                  )}
-                  {exp.created_by_name && (
-                    <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>· {exp.created_by_name}</span>
-                  )}
-                </div>
-              </div>
-              <div className="text-right shrink-0">
-                <p className="font-semibold" style={{ color: 'var(--charcoal)' }}>{formatBaht(exp.total_satang)}</p>
-                {exp.slip_image_url && (
-                  <a href={exp.slip_image_url} target="_blank" rel="noreferrer"
-                    className="text-xs text-blue-500 underline block mt-0.5">ดูสลิป</a>
-                )}
-                <button onClick={() => handleDelete(exp.id)}
-                  className="text-xs mt-1 text-red-400 hover:text-red-600">ลบ</button>
-              </div>
+      {/* Expense List grouped by date */}
+      <div className="space-y-4">
+        {sortedDates.map(date => (
+          <div key={date}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>{formatDate(date)}</span>
+              <span className="text-xs font-medium" style={{ color: 'var(--charcoal)' }}>
+                {formatBaht(grouped[date].reduce((s, e) => s + e.total_satang, 0))}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {grouped[date].map(exp => (
+                <button key={exp.id} onClick={() => setSelectedExpense(exp)}
+                  className="w-full text-left bg-white rounded-2xl p-4 border transition-colors active:bg-gray-50"
+                  style={{ borderColor: 'var(--border)' }}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium"
+                          style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
+                          {exp.category}
+                        </span>
+                        {exp.slip_image_url && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">📸 สลิป</span>
+                        )}
+                        {(exp.receipt_image_urls?.length ?? 0) > 0 && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-600">🧾 {exp.receipt_image_urls.length} ใบ</span>
+                        )}
+                      </div>
+                      {exp.recipient_name && (
+                        <p className="text-sm font-medium" style={{ color: 'var(--charcoal)' }}>{exp.recipient_name}</p>
+                      )}
+                      {exp.note && <p className="text-sm truncate" style={{ color: 'var(--muted-foreground)' }}>{exp.note}</p>}
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        {exp.transfer_time && (
+                          <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{exp.transfer_time}</span>
+                        )}
+                        {exp.sender_bank && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100" style={{ color: 'var(--muted-foreground)' }}>
+                            {exp.sender_bank}
+                          </span>
+                        )}
+                        {exp.created_by_name && (
+                          <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>· {exp.created_by_name}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-semibold" style={{ color: 'var(--charcoal)' }}>{formatBaht(exp.total_satang)}</p>
+                    </div>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
         ))}
         {expenses.length === 0 && (
-          <div className="text-center py-12 text-gray-400">ยังไม่มีรายจ่ายวันนี้</div>
+          <div className="text-center py-12 text-gray-400">ยังไม่มีรายจ่ายเดือนนี้</div>
         )}
       </div>
 
@@ -348,16 +393,96 @@ export default function ExpensesPage() {
         </div>
       )}
 
-      {/* ── Add Expense Modal ─────────────────────────────────────────── */}
+      {/* ── Detail Modal ──────────────────────────────────────────────── */}
+      {selectedExpense && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-4 pb-4"
+          onClick={e => { if (e.target === e.currentTarget) setSelectedExpense(null) }}>
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b sticky top-0 bg-white z-10"
+              style={{ borderColor: 'var(--border)' }}>
+              <h2 className="font-bold text-base" style={{ color: 'var(--charcoal)' }}>รายละเอียด</h2>
+              <button onClick={() => setSelectedExpense(null)} className="text-gray-400 text-xl">×</button>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              {/* Info rows */}
+              <DetailRow label="วันที่" value={formatDate(selectedExpense.date)} />
+              {selectedExpense.transfer_time && <DetailRow label="เวลาโอน" value={selectedExpense.transfer_time} />}
+              <DetailRow label="หมวดหมู่" value={selectedExpense.category} />
+              <DetailRow label="ยอดเงิน" value={formatBaht(selectedExpense.total_satang)} bold />
+              <DetailRow label="วิธีชำระ" value={selectedExpense.payment_method} />
+              {selectedExpense.sender_bank && (
+                <DetailRow label="บัญชีโอน" value={`${selectedExpense.sender_bank} ${selectedExpense.sender_account || ''} ${selectedExpense.sender_name || ''}`} />
+              )}
+              {selectedExpense.recipient_name && <DetailRow label="ผู้รับเงิน" value={selectedExpense.recipient_name} />}
+              {selectedExpense.note && <DetailRow label="หมายเหตุ" value={selectedExpense.note} />}
+              {selectedExpense.created_by_name && <DetailRow label="บันทึกโดย" value={selectedExpense.created_by_name} />}
+
+              {/* Slip image */}
+              {selectedExpense.slip_image_url && (
+                <div>
+                  <p className="text-xs font-medium mb-2" style={{ color: 'var(--muted-foreground)' }}>สลิปโอนเงิน</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={selectedExpense.slip_image_url} alt="slip"
+                    onClick={() => setLightboxUrl(selectedExpense.slip_image_url!)}
+                    className="w-full rounded-xl object-contain max-h-72 border cursor-pointer"
+                    style={{ borderColor: 'var(--border)' }} />
+                </div>
+              )}
+
+              {/* Receipt images */}
+              {(selectedExpense.receipt_image_urls?.length ?? 0) > 0 && (
+                <div>
+                  <p className="text-xs font-medium mb-2" style={{ color: 'var(--muted-foreground)' }}>ใบเสร็จ/บิล ({selectedExpense.receipt_image_urls.length} รูป)</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {selectedExpense.receipt_image_urls.map((url, i) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={i} src={url} alt={`receipt-${i}`}
+                        onClick={() => setLightboxUrl(url)}
+                        className="w-full aspect-square object-cover rounded-lg border cursor-pointer"
+                        style={{ borderColor: 'var(--border)' }} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="flex gap-2 pt-2">
+                <button onClick={() => openEdit(selectedExpense)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold border-2"
+                  style={{ borderColor: 'var(--flame-red)', color: 'var(--flame-red)' }}>
+                  แก้ไข
+                </button>
+                <button onClick={() => handleDelete(selectedExpense.id)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 border-red-200 text-red-400">
+                  ลบ
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Image Lightbox ─────────────────────────────────────────────── */}
+      {lightboxUrl && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90"
+          onClick={() => setLightboxUrl(null)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightboxUrl} alt="full" className="max-w-full max-h-full object-contain p-4" />
+          <button className="absolute top-4 right-4 text-white text-3xl leading-none" onClick={() => setLightboxUrl(null)}>×</button>
+        </div>
+      )}
+
+      {/* ── Add / Edit Expense Modal ───────────────────────────────────── */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-4 pb-4"
-          onClick={e => { if (e.target === e.currentTarget) setShowForm(false) }}>
+          onClick={e => { if (e.target === e.currentTarget) { setShowForm(false); setEditingId(null) } }}>
           <div className="bg-white rounded-2xl w-full max-w-md max-h-[92vh] overflow-y-auto">
-            {/* Header */}
             <div className="flex items-center justify-between px-6 pt-5 pb-2 sticky top-0 bg-white z-10 border-b"
               style={{ borderColor: 'var(--border)' }}>
-              <h2 className="text-lg font-bold" style={{ color: 'var(--charcoal)' }}>บันทึกค่าใช้จ่าย</h2>
-              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+              <h2 className="text-lg font-bold" style={{ color: 'var(--charcoal)' }}>
+                {editingId ? 'แก้ไขค่าใช้จ่าย' : 'บันทึกค่าใช้จ่าย'}
+              </h2>
+              <button onClick={() => { setShowForm(false); setEditingId(null) }} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
             </div>
 
             <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
@@ -424,7 +549,6 @@ export default function ExpensesPage() {
                   <option value="__cash__">เงินสด</option>
                   <option value="__card__">บัตรเครดิต</option>
                 </select>
-                {/* Show selected bank info */}
                 {form.bank_account_id && !form.bank_account_id.startsWith('__') && (() => {
                   const b = bankAccounts.find(x => x.id === form.bank_account_id)
                   return b ? (
@@ -535,14 +659,14 @@ export default function ExpensesPage() {
 
               {/* Buttons */}
               <div className="flex gap-2 pt-2 pb-2">
-                <button type="button" onClick={() => setShowForm(false)}
+                <button type="button" onClick={() => { setShowForm(false); setEditingId(null) }}
                   className="flex-1 py-3 border rounded-xl font-medium" style={{ borderColor: 'var(--border)' }}>
                   ยกเลิก
                 </button>
                 <button type="submit" disabled={loading || ocring || uploadingReceipt}
                   className="flex-1 py-3 rounded-xl font-semibold text-white disabled:opacity-60"
                   style={{ background: 'var(--flame-red)' }}>
-                  {loading ? 'กำลังบันทึก...' : 'บันทึก'}
+                  {loading ? 'กำลังบันทึก...' : editingId ? 'บันทึกการแก้ไข' : 'บันทึก'}
                 </button>
               </div>
             </form>
@@ -556,8 +680,6 @@ export default function ExpensesPage() {
           onClick={e => { if (e.target === e.currentTarget) setShowManageCat(false) }}>
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 max-h-[80vh] flex flex-col">
             <h3 className="font-bold text-base mb-4" style={{ color: 'var(--charcoal)' }}>จัดการหมวดหมู่</h3>
-
-            {/* Add new */}
             <form onSubmit={handleAddCategory} className="flex gap-2 mb-4">
               <input type="text" value={newCatName} onChange={e => setNewCatName(e.target.value)}
                 placeholder="ชื่อหมวดหมู่ใหม่"
@@ -568,8 +690,6 @@ export default function ExpensesPage() {
                 {savingCat ? '...' : '+ เพิ่ม'}
               </button>
             </form>
-
-            {/* List */}
             <div className="overflow-y-auto flex-1 space-y-2">
               {categories.map(c => (
                 <div key={c.id} className="flex items-center justify-between px-3 py-2.5 rounded-xl border"
@@ -580,7 +700,6 @@ export default function ExpensesPage() {
                 </div>
               ))}
             </div>
-
             <button onClick={() => setShowManageCat(false)}
               className="mt-4 w-full py-2.5 border rounded-xl text-sm font-medium" style={{ borderColor: 'var(--border)' }}>
               ปิด
@@ -634,6 +753,15 @@ export default function ExpensesPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function DetailRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+  return (
+    <div className="flex justify-between gap-4 text-sm">
+      <span style={{ color: 'var(--muted-foreground)' }} className="shrink-0">{label}</span>
+      <span className={bold ? 'font-semibold text-right' : 'text-right'} style={{ color: 'var(--charcoal)' }}>{value}</span>
     </div>
   )
 }
