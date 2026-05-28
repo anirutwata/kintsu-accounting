@@ -237,6 +237,18 @@ const API_BASE = 'https://kintsu-accounting.vercel.app'
 const API_KEY  = 'YOUR_EXPORT_API_KEY'   // ← ใส่รหัสที่ตั้งใน Vercel
 const SHEET_ID = 'YOUR_GOOGLE_SHEET_ID'  // ← ใส่ ID จาก URL ของ Google Sheet
 
+// รับข้อมูล real-time จาก Next.js webhook แล้ว sync ทั้งเดือนใหม่เลย
+function doPost(e) {
+  try {
+    const row = JSON.parse(e.postData.contents)
+    const month = (row.date || Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd')).substring(0, 7)
+    syncMonth(month)
+    return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON)
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ error: err.message })).setMimeType(ContentService.MimeType.JSON)
+  }
+}
+
 function syncCurrentMonth() {
   const month = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM')
   syncMonth(month)

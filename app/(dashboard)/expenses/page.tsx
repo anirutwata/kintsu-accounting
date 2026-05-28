@@ -355,8 +355,8 @@ export default function ExpensesPage() {
             </div>
             <div className="space-y-2">
               {grouped[date].map(exp => (
-                <button key={exp.id} onClick={() => setSelectedExpense(exp)}
-                  className="w-full text-left bg-white rounded-2xl p-4 border transition-colors active:bg-gray-50"
+                <div key={exp.id} onClick={() => setSelectedExpense(exp)}
+                  className="w-full text-left bg-white rounded-2xl p-4 border transition-colors active:bg-gray-50 cursor-pointer"
                   style={{ borderColor: 'var(--border)' }}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
@@ -365,12 +365,6 @@ export default function ExpensesPage() {
                           style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
                           {exp.category}
                         </span>
-                        {exp.slip_image_url && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">📸 สลิป</span>
-                        )}
-                        {(exp.receipt_image_urls?.length ?? 0) > 0 && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-600">🧾 {exp.receipt_image_urls.length} ใบ</span>
-                        )}
                       </div>
                       {exp.recipient_name && (
                         <p className="text-sm font-medium" style={{ color: 'var(--charcoal)' }}>{exp.recipient_name}</p>
@@ -394,7 +388,36 @@ export default function ExpensesPage() {
                       <p className="font-semibold" style={{ color: 'var(--charcoal)' }}>{formatBaht(exp.total_satang)}</p>
                     </div>
                   </div>
-                </button>
+                  {/* Image thumbnails */}
+                  {(exp.slip_image_url || (exp.receipt_image_urls?.length ?? 0) > 0) && (
+                    <div className="flex gap-2 mt-2 pt-2 border-t flex-wrap"
+                      style={{ borderColor: 'var(--border)' }}
+                      onClick={e => e.stopPropagation()}>
+                      {exp.slip_image_url && (
+                        <button type="button" onClick={() => setLightboxUrl(exp.slip_image_url!)}
+                          className="relative flex-shrink-0 rounded-lg overflow-hidden border"
+                          style={{ borderColor: 'var(--border)', width: 56, height: 56 }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={exp.slip_image_url} alt="slip"
+                            className="w-full h-full object-cover" />
+                          <span className="absolute bottom-0 left-0 right-0 text-[9px] text-center py-0.5 text-white font-medium"
+                            style={{ background: 'rgba(59,130,246,0.85)' }}>สลิป</span>
+                        </button>
+                      )}
+                      {exp.receipt_image_urls?.map((url, i) => (
+                        <button type="button" key={i} onClick={() => setLightboxUrl(url)}
+                          className="relative flex-shrink-0 rounded-lg overflow-hidden border"
+                          style={{ borderColor: 'var(--border)', width: 56, height: 56 }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={url} alt={`receipt-${i}`}
+                            className="w-full h-full object-cover" />
+                          <span className="absolute bottom-0 left-0 right-0 text-[9px] text-center py-0.5 text-white font-medium"
+                            style={{ background: 'rgba(22,163,74,0.85)' }}>บิล</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </div>
