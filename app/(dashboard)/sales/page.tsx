@@ -308,7 +308,7 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
           <p className="text-xs font-semibold mb-2" style={{ color: 'var(--charcoal)' }}>รายละเอียด VAT</p>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ก่อน VAT</label>
+              <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ยอดขายก่อน VAT</label>
               <input type="number" step="0.01" min="0" value={form.sales_before_vat} onChange={set('sales_before_vat')}
                 className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm"
                 style={{ borderColor: 'var(--border)' }} placeholder="0" />
