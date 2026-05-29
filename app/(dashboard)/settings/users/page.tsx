@@ -129,7 +129,7 @@ export default function AdminUsersPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="font-semibold text-sm" style={{ color: 'var(--charcoal)' }}>{u.display_name}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>@{u.username}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>{u.username}</p>
                   <span className={`text-xs px-2 py-0.5 rounded-full mt-1 inline-block ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                     {u.is_active ? 'ใช้งานได้' : 'ปิดใช้งาน'}
                   </span>
