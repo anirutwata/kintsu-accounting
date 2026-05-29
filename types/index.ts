@@ -1,4 +1,4 @@
-export type UserRole = 'owner' | 'manager' | 'cashier'
+export type UserRole = 'owner' | 'manager' | 'cashier' | 'purchasing'
 
 export interface User {
   id: string
@@ -72,6 +72,7 @@ export interface Expense {
   created_by_name: string | null
   created_at: string
   updated_at: string | null
+  updated_by_name: string | null
   is_deleted: boolean
 }
 

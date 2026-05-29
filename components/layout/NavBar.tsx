@@ -5,8 +5,9 @@ interface Props { name: string; role: string }
 
 const roleLabel: Record<string, string> = {
   owner: 'เจ้าของร้าน',
-  manager: 'ผู้จัดการ',
+  manager: 'ผู้จัดการร้าน',
   cashier: 'แคชเชียร์',
+  purchasing: 'จัดซื้อ',
 }
 
 export default function NavBar({ name, role }: Props) {

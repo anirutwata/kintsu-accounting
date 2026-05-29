@@ -5,10 +5,11 @@ import { usePathname } from 'next/navigation'
 interface Props { role: string }
 
 const navItems = [
-  { href: '/dashboard',    label: 'หน้าหลัก',    icon: '📊', roles: ['owner','manager','cashier'] },
-  { href: '/expenses',     label: 'รายจ่าย',     icon: '🧾', roles: ['owner','manager','cashier'] },
-  { href: '/sales',        label: 'รายรับ',      icon: '💰', roles: ['owner','manager','cashier'] },
-{ href: '/reports',      label: 'รายงาน',      icon: '📈', roles: ['owner','manager'] },
+  { href: '/dashboard', label: 'หน้าหลัก', icon: '📊', roles: ['owner', 'manager'] },
+  { href: '/expenses',  label: 'รายจ่าย',  icon: '🧾', roles: ['owner', 'manager', 'purchasing'] },
+  { href: '/sales',     label: 'รายรับ',   icon: '💰', roles: ['owner', 'manager', 'cashier'] },
+  { href: '/reports',   label: 'รายงาน',   icon: '📈', roles: ['owner'] },
+  { href: '/settings/users', label: 'ผู้ใช้', icon: '👥', roles: ['owner'] },
 ]
 
 export default function BottomNav({ role }: Props) {

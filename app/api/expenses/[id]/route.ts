@@ -6,7 +6,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   const supabase = await createClient()
   const cookieStore = await cookies()
-  const userId = cookieStore.get('kintsu_acc_user_id')?.value
+  const updaterName = cookieStore.get('kintsu_acc_name')?.value || null
 
   const body = await req.json()
   const { amount_satang, vat_satang, ...rest } = body
@@ -14,6 +14,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const updates: Record<string, unknown> = {
     ...rest,
     updated_at: new Date().toISOString(),
+    updated_by_name: updaterName,
   }
 
   if (amount_satang !== undefined) {

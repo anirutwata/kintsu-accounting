@@ -23,11 +23,20 @@ const emptyPOS = (): POSForm => ({
   cash: '', promptpay: '', company_transfer: '', credit_card: '',
 })
 
+function getClientRole() {
+  if (typeof document === 'undefined') return ''
+  return document.cookie.match(/kintsu_acc_role=([^;]+)/)?.[1] ?? ''
+}
+
 export default function SalesPage() {
-  const [date, setDate] = useState(getTodayBKK())
+  const today = getTodayBKK()
+  const [date, setDate] = useState(today)
   const [existing, setExisting] = useState<DailySales | null>(null)
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [role, setRole] = useState('')
+
+  useEffect(() => { setRole(getClientRole()) }, [])
 
   const [foodstory, setFoodstory] = useState<POSForm>(emptyPOS())
   const [papaya, setPapaya] = useState<POSForm>(emptyPOS())
@@ -135,8 +144,14 @@ export default function SalesPage() {
     <div className="space-y-4 py-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-bold" style={{ color: 'var(--charcoal)' }}>บันทึกรายรับ</h1>
-        <input type="date" value={date} onChange={e => setDate(e.target.value)}
-          className="text-sm border rounded-lg px-2 py-1.5" style={{ borderColor: 'var(--border)' }} />
+        {role === 'cashier' ? (
+          <span className="text-sm px-2 py-1.5 rounded-lg" style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
+            {new Date(today).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </span>
+        ) : (
+          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            className="text-sm border rounded-lg px-2 py-1.5" style={{ borderColor: 'var(--border)' }} />
+        )}
       </div>
 
       {saved && (
