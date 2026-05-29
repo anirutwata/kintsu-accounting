@@ -7,6 +7,7 @@ import type { DailySales } from '@/types'
 interface POSForm {
   revenue: string
   covers: string
+  bills: string
   sales_before_vat: string
   vat_amount: string
   rounding: string
@@ -18,7 +19,7 @@ interface POSForm {
 }
 
 const emptyPOS = (): POSForm => ({
-  revenue: '', covers: '',
+  revenue: '', covers: '', bills: '',
   sales_before_vat: '', vat_amount: '', rounding: '', discount: '',
   cash: '', promptpay: '', company_transfer: '', credit_card: '',
 })
@@ -55,6 +56,7 @@ export default function SalesPage() {
       setFoodstory({
         revenue: s.dine_in_revenue_satang ? String(s.dine_in_revenue_satang / 100) : '',
         covers: s.dine_in_covers ? String(s.dine_in_covers) : '',
+        bills: s.dine_in_bills ? String(s.dine_in_bills) : '',
         sales_before_vat: s.sales_before_vat_satang ? String(s.sales_before_vat_satang / 100) : '',
         vat_amount: s.vat_amount_satang ? String(s.vat_amount_satang / 100) : '',
         rounding: s.rounding_satang ? String(s.rounding_satang / 100) : '',
@@ -67,6 +69,7 @@ export default function SalesPage() {
       setPapaya({
         revenue: s.papaya_revenue_satang ? String(s.papaya_revenue_satang / 100) : '',
         covers: s.papaya_covers ? String(s.papaya_covers) : '',
+        bills: s.papaya_bills ? String(s.papaya_bills) : '',
         sales_before_vat: s.papaya_sales_before_vat_satang ? String(s.papaya_sales_before_vat_satang / 100) : '',
         vat_amount: s.papaya_vat_satang ? String(s.papaya_vat_satang / 100) : '',
         rounding: s.papaya_rounding_satang ? String(s.papaya_rounding_satang / 100) : '',
@@ -109,6 +112,7 @@ export default function SalesPage() {
           foodstory: {
             revenue_satang: foodstoryRev,
             covers: parseInt(foodstory.covers) || 0,
+            bills: parseInt(foodstory.bills) || 0,
             sales_before_vat_satang: toSatang(parseFloat(foodstory.sales_before_vat) || 0),
             vat_satang: toSatang(parseFloat(foodstory.vat_amount) || 0),
             rounding_satang: toSatang(parseFloat(foodstory.rounding) || 0),
@@ -121,6 +125,7 @@ export default function SalesPage() {
           papaya: {
             revenue_satang: papayaRev,
             covers: parseInt(papaya.covers) || 0,
+            bills: parseInt(papaya.bills) || 0,
             sales_before_vat_satang: toSatang(parseFloat(papaya.sales_before_vat) || 0),
             vat_satang: toSatang(parseFloat(papaya.vat_amount) || 0),
             rounding_satang: toSatang(parseFloat(papaya.rounding) || 0),
@@ -283,17 +288,24 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
       </div>
 
       <div className="p-4 space-y-3">
-        {/* Revenue + Covers */}
+        {/* Revenue */}
+        <div>
+          <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>ยอดขาย (บาท)</label>
+          <input type="number" step="1" min="0" value={form.revenue} onChange={set('revenue')}
+            className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
+            style={{ borderColor: 'var(--border)' }} placeholder="0" />
+        </div>
+        {/* Covers + Bills */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>ยอดขาย (บาท)</label>
-            <input type="number" step="1" min="0" value={form.revenue} onChange={set('revenue')}
+            <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>จำนวนลูกค้า</label>
+            <input type="number" min="0" value={form.covers} onChange={set('covers')}
               className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
               style={{ borderColor: 'var(--border)' }} placeholder="0" />
           </div>
           <div>
-            <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>จำนวนลูกค้า</label>
-            <input type="number" min="0" value={form.covers} onChange={set('covers')}
+            <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>จำนวนบิล</label>
+            <input type="number" min="0" value={form.bills} onChange={set('bills')}
               className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
               style={{ borderColor: 'var(--border)' }} placeholder="0" />
           </div>

@@ -48,6 +48,7 @@ export async function POST(req: Request) {
     // Foodstory POS
     dine_in_revenue_satang: foodstoryRev,
     dine_in_covers: foodstory?.covers || 0,
+    dine_in_bills: foodstory?.bills || 0,
     dine_in_service_charge_satang: 0,
     dine_in_vat_satang: foodstory?.vat_satang || 0,
     sales_before_vat_satang: foodstory?.sales_before_vat_satang || 0,
@@ -61,6 +62,7 @@ export async function POST(req: Request) {
     // Papaya POS
     papaya_revenue_satang: papayaRev,
     papaya_covers: papaya?.covers || 0,
+    papaya_bills: papaya?.bills || 0,
     papaya_sales_before_vat_satang: papaya?.sales_before_vat_satang || 0,
     papaya_vat_satang: papaya?.vat_satang || 0,
     papaya_rounding_satang: papaya?.rounding_satang || 0,

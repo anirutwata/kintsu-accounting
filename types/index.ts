@@ -128,6 +128,7 @@ export interface DailySales {
   date: string
   dine_in_revenue_satang: number
   dine_in_covers: number
+  dine_in_bills: number
   dine_in_service_charge_satang: number
   dine_in_vat_satang: number
   grabfood_gross_satang: number
@@ -158,6 +159,7 @@ export interface DailySales {
   // Papaya POS
   papaya_revenue_satang: number
   papaya_covers: number
+  papaya_bills: number
   papaya_sales_before_vat_satang: number
   papaya_vat_satang: number
   papaya_rounding_satang: number
