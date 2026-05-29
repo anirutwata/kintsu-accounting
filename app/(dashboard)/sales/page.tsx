@@ -149,7 +149,7 @@ export default function SalesPage() {
         {/* Foodstory POS */}
         <POSSection
           title="Foodstory POS"
-          logo="/logos/foodstory.png"
+          logo="/logos/foodstory_logo.png"
           accentColor="#D33F22"
           form={foodstory}
           onChange={setFoodstory}
@@ -158,7 +158,7 @@ export default function SalesPage() {
         {/* Papaya POS */}
         <POSSection
           title="Papaya POS"
-          logo="/logos/papaya.png"
+          logo="/logos/papaya_logo.png"
           accentColor="#16A34A"
           form={papaya}
           onChange={setPapaya}
