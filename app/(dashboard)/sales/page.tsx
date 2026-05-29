@@ -261,7 +261,8 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: 'var(--border)', borderLeft: `4px solid ${accentColor}` }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={logo} alt={title} className="h-7 w-auto object-contain"
+        <img src={logo} alt={title} className="object-contain"
+          style={{ width: 28, height: 28 }}
           onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
         <h3 className="font-semibold text-sm" style={{ color: 'var(--charcoal)' }}>{title}</h3>
       </div>
