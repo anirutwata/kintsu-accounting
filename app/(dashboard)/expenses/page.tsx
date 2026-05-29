@@ -70,7 +70,7 @@ const emptyForm = () => ({
   receipt_previews: [] as string[],
 })
 
-interface Category { id: string; name: string; sort_order: number }
+interface Category { id: string; name: string; sort_order: number; category_type: string }
 
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([])
@@ -604,7 +604,15 @@ export default function ExpensesPage() {
                 <select required value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
                   className="w-full border rounded-xl px-3 py-2.5" style={{ borderColor: 'var(--border)' }}>
                   <option value="">-- เลือกหมวดหมู่ --</option>
-                  {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  {(['asset', 'expense'] as const).map(type => {
+                    const group = categories.filter(c => c.category_type === type)
+                    if (group.length === 0) return null
+                    return (
+                      <optgroup key={type} label={type === 'asset' ? '🏗️ สินทรัพย์' : '💸 ค่าใช้จ่าย'}>
+                        {group.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                      </optgroup>
+                    )
+                  })}
                 </select>
               </div>
 
