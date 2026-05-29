@@ -292,7 +292,7 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
               style={{ borderColor: 'var(--border)' }} placeholder="0" />
           </div>
           <div>
-            <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>จำนวน cover</label>
+            <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>จำนวนลูกค้า</label>
             <input type="number" min="0" value={form.covers} onChange={set('covers')}
               className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
               style={{ borderColor: 'var(--border)' }} placeholder="0" />
