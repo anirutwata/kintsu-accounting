@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     const { data: admin } = await supabase
       .from('admin_users')
       .select('*')
-      .eq('username', username.trim())
+      .eq('username', username.trim().toLowerCase())
       .eq('is_active', true)
       .single()
 
