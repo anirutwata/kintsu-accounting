@@ -153,12 +153,14 @@ export interface DailySales {
   sales_before_vat_satang: number
   vat_amount_satang: number
   rounding_satang: number
+  discount_satang: number
   // Papaya POS
   papaya_revenue_satang: number
   papaya_covers: number
   papaya_sales_before_vat_satang: number
   papaya_vat_satang: number
   papaya_rounding_satang: number
+  papaya_discount_satang: number
   papaya_cash_satang: number
   papaya_promptpay_satang: number
   papaya_company_transfer_satang: number

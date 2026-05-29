@@ -10,6 +10,7 @@ interface POSForm {
   sales_before_vat: string
   vat_amount: string
   rounding: string
+  discount: string
   cash: string
   promptpay: string
   company_transfer: string
@@ -18,7 +19,7 @@ interface POSForm {
 
 const emptyPOS = (): POSForm => ({
   revenue: '', covers: '',
-  sales_before_vat: '', vat_amount: '', rounding: '',
+  sales_before_vat: '', vat_amount: '', rounding: '', discount: '',
   cash: '', promptpay: '', company_transfer: '', credit_card: '',
 })
 
@@ -48,6 +49,7 @@ export default function SalesPage() {
         sales_before_vat: s.sales_before_vat_satang ? String(s.sales_before_vat_satang / 100) : '',
         vat_amount: s.vat_amount_satang ? String(s.vat_amount_satang / 100) : '',
         rounding: s.rounding_satang ? String(s.rounding_satang / 100) : '',
+        discount: s.discount_satang ? String(s.discount_satang / 100) : '',
         cash: s.cash_satang ? String(s.cash_satang / 100) : '',
         promptpay: s.promptpay_satang ? String(s.promptpay_satang / 100) : '',
         company_transfer: s.company_transfer_satang ? String(s.company_transfer_satang / 100) : '',
@@ -59,6 +61,7 @@ export default function SalesPage() {
         sales_before_vat: s.papaya_sales_before_vat_satang ? String(s.papaya_sales_before_vat_satang / 100) : '',
         vat_amount: s.papaya_vat_satang ? String(s.papaya_vat_satang / 100) : '',
         rounding: s.papaya_rounding_satang ? String(s.papaya_rounding_satang / 100) : '',
+        discount: s.papaya_discount_satang ? String(s.papaya_discount_satang / 100) : '',
         cash: s.papaya_cash_satang ? String(s.papaya_cash_satang / 100) : '',
         promptpay: s.papaya_promptpay_satang ? String(s.papaya_promptpay_satang / 100) : '',
         company_transfer: s.papaya_company_transfer_satang ? String(s.papaya_company_transfer_satang / 100) : '',
@@ -100,6 +103,7 @@ export default function SalesPage() {
             sales_before_vat_satang: toSatang(parseFloat(foodstory.sales_before_vat) || 0),
             vat_satang: toSatang(parseFloat(foodstory.vat_amount) || 0),
             rounding_satang: toSatang(parseFloat(foodstory.rounding) || 0),
+            discount_satang: toSatang(parseFloat(foodstory.discount) || 0),
             cash_satang: toSatang(parseFloat(foodstory.cash) || 0),
             promptpay_satang: toSatang(parseFloat(foodstory.promptpay) || 0),
             company_transfer_satang: toSatang(parseFloat(foodstory.company_transfer) || 0),
@@ -111,6 +115,7 @@ export default function SalesPage() {
             sales_before_vat_satang: toSatang(parseFloat(papaya.sales_before_vat) || 0),
             vat_satang: toSatang(parseFloat(papaya.vat_amount) || 0),
             rounding_satang: toSatang(parseFloat(papaya.rounding) || 0),
+            discount_satang: toSatang(parseFloat(papaya.discount) || 0),
             cash_satang: toSatang(parseFloat(papaya.cash) || 0),
             promptpay_satang: toSatang(parseFloat(papaya.promptpay) || 0),
             company_transfer_satang: toSatang(parseFloat(papaya.company_transfer) || 0),
@@ -281,7 +286,7 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
         {/* VAT breakdown */}
         <div>
           <p className="text-xs font-semibold mb-2" style={{ color: 'var(--charcoal)' }}>รายละเอียด VAT</p>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ก่อน VAT</label>
               <input type="number" step="0.01" min="0" value={form.sales_before_vat} onChange={set('sales_before_vat')}
@@ -295,9 +300,15 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
                 style={{ borderColor: 'var(--border)' }} placeholder="0" />
             </div>
             <div>
-              <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ปัดเศษ</label>
+              <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ยอดปัดเศษ (ขึ้น)</label>
               <input type="number" step="0.01" value={form.rounding} onChange={set('rounding')}
                 className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm"
+                style={{ borderColor: 'var(--border)' }} placeholder="0" />
+            </div>
+            <div>
+              <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ยอดส่วนลด (ติดลบ)</label>
+              <input type="number" step="0.01" max="0" value={form.discount} onChange={set('discount')}
+                className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm text-red-600"
                 style={{ borderColor: 'var(--border)' }} placeholder="0" />
             </div>
           </div>
