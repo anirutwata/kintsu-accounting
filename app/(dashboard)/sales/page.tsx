@@ -295,20 +295,12 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
             className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
             style={{ borderColor: 'var(--border)' }} placeholder="0" />
         </div>
-        {/* Covers + Bills */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>จำนวนลูกค้า</label>
-            <input type="number" min="0" value={form.covers} onChange={set('covers')}
-              className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
-              style={{ borderColor: 'var(--border)' }} placeholder="0" />
-          </div>
-          <div>
-            <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>จำนวนบิล</label>
-            <input type="number" min="0" value={form.bills} onChange={set('bills')}
-              className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
-              style={{ borderColor: 'var(--border)' }} placeholder="0" />
-          </div>
+        {/* Bills */}
+        <div>
+          <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>จำนวนบิล</label>
+          <input type="number" min="0" value={form.bills} onChange={set('bills')}
+            className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
+            style={{ borderColor: 'var(--border)' }} placeholder="0" />
         </div>
 
         {/* VAT breakdown */}
