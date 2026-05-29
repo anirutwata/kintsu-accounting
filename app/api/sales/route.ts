@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   const userId = cookieStore.get('kintsu_acc_user_id')?.value
 
   const body = await req.json()
-  const { date, dine_in, grabfood, takeaway } = body
+  const { date, foodstory, papaya, grabfood, takeaway } = body
 
   if (!date) return NextResponse.json({ error: 'กรุณาระบุวันที่' }, { status: 400 })
 
@@ -36,23 +36,44 @@ export async function POST(req: Request) {
   const grabGross = grabfood?.gross_satang || 0
   const { gpFeeSatang, netSatang: grabNet } = calcGrabNet(grabGross, gpBps)
 
-  const dineRev = dine_in?.revenue_satang || 0
+  const foodstoryRev = foodstory?.revenue_satang || 0
+  const papayaRev = papaya?.revenue_satang || 0
   const takeawayRev = takeaway?.revenue_satang || 0
-  const totalGross = dineRev + grabGross + takeawayRev
-  const totalNet = dineRev + grabNet + takeawayRev
+  const totalGross = foodstoryRev + papayaRev + grabGross + takeawayRev
+  const totalNet = foodstoryRev + papayaRev + grabNet + takeawayRev
 
   const record = {
     id: date,
     date,
-    dine_in_revenue_satang: dineRev,
-    dine_in_covers: dine_in?.covers || 0,
-    dine_in_service_charge_satang: dine_in?.service_charge_satang || 0,
-    dine_in_vat_satang: dine_in?.vat_satang || 0,
+    // Foodstory POS
+    dine_in_revenue_satang: foodstoryRev,
+    dine_in_covers: foodstory?.covers || 0,
+    dine_in_service_charge_satang: 0,
+    dine_in_vat_satang: foodstory?.vat_satang || 0,
+    sales_before_vat_satang: foodstory?.sales_before_vat_satang || 0,
+    vat_amount_satang: foodstory?.vat_satang || 0,
+    rounding_satang: foodstory?.rounding_satang || 0,
+    cash_satang: foodstory?.cash_satang || 0,
+    promptpay_satang: foodstory?.promptpay_satang || 0,
+    company_transfer_satang: foodstory?.company_transfer_satang || 0,
+    credit_card_satang: foodstory?.credit_card_satang || 0,
+    // Papaya POS
+    papaya_revenue_satang: papayaRev,
+    papaya_covers: papaya?.covers || 0,
+    papaya_sales_before_vat_satang: papaya?.sales_before_vat_satang || 0,
+    papaya_vat_satang: papaya?.vat_satang || 0,
+    papaya_rounding_satang: papaya?.rounding_satang || 0,
+    papaya_cash_satang: papaya?.cash_satang || 0,
+    papaya_promptpay_satang: papaya?.promptpay_satang || 0,
+    papaya_company_transfer_satang: papaya?.company_transfer_satang || 0,
+    papaya_credit_card_satang: papaya?.credit_card_satang || 0,
+    // GrabFood
     grabfood_gross_satang: grabGross,
     grabfood_gp_fee_satang: gpFeeSatang,
     grabfood_net_satang: grabNet,
     grabfood_orders: grabfood?.orders || 0,
     grabfood_vat_satang: grabfood?.vat_satang || 0,
+    // Takeaway
     takeaway_revenue_satang: takeawayRev,
     takeaway_orders: takeaway?.orders || 0,
     takeaway_vat_satang: takeaway?.vat_satang || 0,
@@ -62,7 +83,7 @@ export async function POST(req: Request) {
     refund_total_satang: 0,
     total_gross_satang: totalGross,
     total_net_satang: totalNet,
-    total_vat_satang: (dine_in?.vat_satang || 0) + (grabfood?.vat_satang || 0) + (takeaway?.vat_satang || 0),
+    total_vat_satang: (foodstory?.vat_satang || 0) + (papaya?.vat_satang || 0) + (grabfood?.vat_satang || 0),
     source: 'manual',
     updated_at: new Date().toISOString(),
     updated_by: userId || null,

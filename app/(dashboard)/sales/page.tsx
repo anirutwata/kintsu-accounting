@@ -1,8 +1,26 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { formatBaht, toSatang, calculateVAT, calcGrabNet } from '@/lib/money'
+import { formatBaht, toSatang, calcGrabNet } from '@/lib/money'
 import { getTodayBKK } from '@/lib/utils'
 import type { DailySales } from '@/types'
+
+interface POSForm {
+  revenue: string
+  covers: string
+  sales_before_vat: string
+  vat_amount: string
+  rounding: string
+  cash: string
+  promptpay: string
+  company_transfer: string
+  credit_card: string
+}
+
+const emptyPOS = (): POSForm => ({
+  revenue: '', covers: '',
+  sales_before_vat: '', vat_amount: '', rounding: '',
+  cash: '', promptpay: '', company_transfer: '', credit_card: '',
+})
 
 export default function SalesPage() {
   const [date, setDate] = useState(getTodayBKK())
@@ -10,11 +28,11 @@ export default function SalesPage() {
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  const [form, setForm] = useState({
-    dine_in_revenue: '', dine_in_covers: '',
-    grabfood_gross: '',
-    takeaway_revenue: '', takeaway_orders: '',
-  })
+  const [foodstory, setFoodstory] = useState<POSForm>(emptyPOS())
+  const [papaya, setPapaya] = useState<POSForm>(emptyPOS())
+  const [grabGrossStr, setGrabGrossStr] = useState('')
+  const [takeawayStr, setTakeawayStr] = useState('')
+  const [takeawayOrders, setTakeawayOrders] = useState('')
 
   useEffect(() => { loadSales() }, [date])
 
@@ -24,27 +42,48 @@ export default function SalesPage() {
     if (Array.isArray(data) && data.length > 0) {
       const s = data[0] as DailySales
       setExisting(s)
-      setForm({
-        dine_in_revenue: String(s.dine_in_revenue_satang / 100),
-        dine_in_covers: String(s.dine_in_covers),
-        grabfood_gross: String(s.grabfood_gross_satang / 100),
-        takeaway_revenue: String(s.takeaway_revenue_satang / 100),
-        takeaway_orders: String(s.takeaway_orders),
+      setFoodstory({
+        revenue: s.dine_in_revenue_satang ? String(s.dine_in_revenue_satang / 100) : '',
+        covers: s.dine_in_covers ? String(s.dine_in_covers) : '',
+        sales_before_vat: s.sales_before_vat_satang ? String(s.sales_before_vat_satang / 100) : '',
+        vat_amount: s.vat_amount_satang ? String(s.vat_amount_satang / 100) : '',
+        rounding: s.rounding_satang ? String(s.rounding_satang / 100) : '',
+        cash: s.cash_satang ? String(s.cash_satang / 100) : '',
+        promptpay: s.promptpay_satang ? String(s.promptpay_satang / 100) : '',
+        company_transfer: s.company_transfer_satang ? String(s.company_transfer_satang / 100) : '',
+        credit_card: s.credit_card_satang ? String(s.credit_card_satang / 100) : '',
       })
+      setPapaya({
+        revenue: s.papaya_revenue_satang ? String(s.papaya_revenue_satang / 100) : '',
+        covers: s.papaya_covers ? String(s.papaya_covers) : '',
+        sales_before_vat: s.papaya_sales_before_vat_satang ? String(s.papaya_sales_before_vat_satang / 100) : '',
+        vat_amount: s.papaya_vat_satang ? String(s.papaya_vat_satang / 100) : '',
+        rounding: s.papaya_rounding_satang ? String(s.papaya_rounding_satang / 100) : '',
+        cash: s.papaya_cash_satang ? String(s.papaya_cash_satang / 100) : '',
+        promptpay: s.papaya_promptpay_satang ? String(s.papaya_promptpay_satang / 100) : '',
+        company_transfer: s.papaya_company_transfer_satang ? String(s.papaya_company_transfer_satang / 100) : '',
+        credit_card: s.papaya_credit_card_satang ? String(s.papaya_credit_card_satang / 100) : '',
+      })
+      setGrabGrossStr(s.grabfood_gross_satang ? String(s.grabfood_gross_satang / 100) : '')
+      setTakeawayStr(s.takeaway_revenue_satang ? String(s.takeaway_revenue_satang / 100) : '')
+      setTakeawayOrders(s.takeaway_orders ? String(s.takeaway_orders) : '')
     } else {
       setExisting(null)
-      setForm({ dine_in_revenue: '', dine_in_covers: '', grabfood_gross: '', takeaway_revenue: '', takeaway_orders: '' })
+      setFoodstory(emptyPOS())
+      setPapaya(emptyPOS())
+      setGrabGrossStr('')
+      setTakeawayStr('')
+      setTakeawayOrders('')
     }
     setSaved(false)
   }
 
-  const dineRev = toSatang(parseFloat(form.dine_in_revenue) || 0)
-  const grabGross = toSatang(parseFloat(form.grabfood_gross) || 0)
-  const takeawayRev = toSatang(parseFloat(form.takeaway_revenue) || 0)
-
-  const dineVat = calculateVAT(dineRev)
+  const foodstoryRev = toSatang(parseFloat(foodstory.revenue) || 0)
+  const papayaRev = toSatang(parseFloat(papaya.revenue) || 0)
+  const grabGross = toSatang(parseFloat(grabGrossStr) || 0)
+  const takeawayRev = toSatang(parseFloat(takeawayStr) || 0)
   const { gpFeeSatang, netSatang: grabNet } = calcGrabNet(grabGross)
-  const totalNet = dineRev + grabNet + takeawayRev
+  const totalNet = foodstoryRev + papayaRev + grabNet + takeawayRev
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -55,14 +94,30 @@ export default function SalesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date,
-          dine_in: {
-            revenue_satang: dineRev,
-            covers: parseInt(form.dine_in_covers) || 0,
-            service_charge_satang: dineVat.serviceChargeSatang,
-            vat_satang: dineVat.vatSatang,
+          foodstory: {
+            revenue_satang: foodstoryRev,
+            covers: parseInt(foodstory.covers) || 0,
+            sales_before_vat_satang: toSatang(parseFloat(foodstory.sales_before_vat) || 0),
+            vat_satang: toSatang(parseFloat(foodstory.vat_amount) || 0),
+            rounding_satang: toSatang(parseFloat(foodstory.rounding) || 0),
+            cash_satang: toSatang(parseFloat(foodstory.cash) || 0),
+            promptpay_satang: toSatang(parseFloat(foodstory.promptpay) || 0),
+            company_transfer_satang: toSatang(parseFloat(foodstory.company_transfer) || 0),
+            credit_card_satang: toSatang(parseFloat(foodstory.credit_card) || 0),
+          },
+          papaya: {
+            revenue_satang: papayaRev,
+            covers: parseInt(papaya.covers) || 0,
+            sales_before_vat_satang: toSatang(parseFloat(papaya.sales_before_vat) || 0),
+            vat_satang: toSatang(parseFloat(papaya.vat_amount) || 0),
+            rounding_satang: toSatang(parseFloat(papaya.rounding) || 0),
+            cash_satang: toSatang(parseFloat(papaya.cash) || 0),
+            promptpay_satang: toSatang(parseFloat(papaya.promptpay) || 0),
+            company_transfer_satang: toSatang(parseFloat(papaya.company_transfer) || 0),
+            credit_card_satang: toSatang(parseFloat(papaya.credit_card) || 0),
           },
           grabfood: { gross_satang: grabGross, orders: 0, vat_satang: 0 },
-          takeaway: { revenue_satang: takeawayRev, orders: parseInt(form.takeaway_orders) || 0, vat_satang: 0 },
+          takeaway: { revenue_satang: takeawayRev, orders: parseInt(takeawayOrders) || 0, vat_satang: 0 },
         }),
       })
       if (res.ok) { setSaved(true); loadSales() }
@@ -86,109 +141,86 @@ export default function SalesPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Dine-in */}
-        <SalesSection title="หน้าร้าน (Dine-in)" icon="🍽️" color="#D33F22">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>ยอดขาย (บาท)</label>
-              <input type="number" step="1" min="0" value={form.dine_in_revenue}
-                onChange={e => setForm(f => ({ ...f, dine_in_revenue: e.target.value }))}
-                className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
-                style={{ borderColor: 'var(--border)' }} placeholder="0" />
-            </div>
-            <div>
-              <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>จำนวน cover</label>
-              <input type="number" min="0" value={form.dine_in_covers}
-                onChange={e => setForm(f => ({ ...f, dine_in_covers: e.target.value }))}
-                className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
-                style={{ borderColor: 'var(--border)' }} placeholder="0" />
-            </div>
-          </div>
-          {dineRev > 0 && (
-            <div className="mt-2 p-2 rounded-lg text-xs space-y-1" style={{ background: 'var(--muted)' }}>
-              <p style={{ color: 'var(--muted-foreground)' }}>SC 10%: {formatBaht(dineVat.serviceChargeSatang)}</p>
-              <p style={{ color: 'var(--muted-foreground)' }}>VAT 7%: {formatBaht(dineVat.vatSatang)}</p>
-            </div>
-          )}
-        </SalesSection>
+        {/* Foodstory POS */}
+        <POSSection
+          title="Foodstory POS"
+          logo="/logos/foodstory.png"
+          accentColor="#D33F22"
+          form={foodstory}
+          onChange={setFoodstory}
+        />
+
+        {/* Papaya POS */}
+        <POSSection
+          title="Papaya POS"
+          logo="/logos/papaya.png"
+          accentColor="#16A34A"
+          form={papaya}
+          onChange={setPapaya}
+        />
 
         {/* GrabFood */}
-        <SalesSection title="GrabFood Delivery" icon="🛵" color="#9F8966">
-          <div>
-            <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>ยอดขาย Gross (บาท)</label>
-            <input type="number" step="1" min="0" value={form.grabfood_gross}
-              onChange={e => setForm(f => ({ ...f, grabfood_gross: e.target.value }))}
-              className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
-              style={{ borderColor: 'var(--border)' }} placeholder="0" />
+        <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: 'var(--border)', borderLeft: '4px solid #9F8966' }}>
+            <span className="text-xl">🛵</span>
+            <h3 className="font-semibold text-sm" style={{ color: 'var(--charcoal)' }}>GrabFood Delivery</h3>
           </div>
-          {grabGross > 0 && (
-            <div className="mt-2 p-2 rounded-lg text-xs space-y-1" style={{ background: 'var(--muted)' }}>
-              <p className="text-red-600">Grab GP -30%: ({formatBaht(gpFeeSatang)})</p>
-              <p className="font-medium" style={{ color: 'var(--charcoal)' }}>ยอดสุทธิ: {formatBaht(grabNet)}</p>
+          <div className="p-4">
+            <div>
+              <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>ยอดขาย Gross (บาท)</label>
+              <input type="number" step="1" min="0" value={grabGrossStr}
+                onChange={e => setGrabGrossStr(e.target.value)}
+                className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
+                style={{ borderColor: 'var(--border)' }} placeholder="0" />
             </div>
-          )}
-        </SalesSection>
+            {grabGross > 0 && (
+              <div className="mt-2 p-2 rounded-lg text-xs space-y-1" style={{ background: 'var(--muted)' }}>
+                <p className="text-red-600">Grab GP -30%: ({formatBaht(gpFeeSatang)})</p>
+                <p className="font-medium" style={{ color: 'var(--charcoal)' }}>ยอดสุทธิ: {formatBaht(grabNet)}</p>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Takeaway */}
-        <SalesSection title="กลับบ้าน (Takeaway)" icon="🥡" color="#9D1F14">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>ยอดขาย (บาท)</label>
-              <input type="number" step="1" min="0" value={form.takeaway_revenue}
-                onChange={e => setForm(f => ({ ...f, takeaway_revenue: e.target.value }))}
-                className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
-                style={{ borderColor: 'var(--border)' }} placeholder="0" />
-            </div>
-            <div>
-              <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>จำนวน order</label>
-              <input type="number" min="0" value={form.takeaway_orders}
-                onChange={e => setForm(f => ({ ...f, takeaway_orders: e.target.value }))}
-                className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
-                style={{ borderColor: 'var(--border)' }} placeholder="0" />
+        <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: 'var(--border)', borderLeft: '4px solid #9D1F14' }}>
+            <span className="text-xl">🥡</span>
+            <h3 className="font-semibold text-sm" style={{ color: 'var(--charcoal)' }}>กลับบ้าน (Takeaway)</h3>
+          </div>
+          <div className="p-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>ยอดขาย (บาท)</label>
+                <input type="number" step="1" min="0" value={takeawayStr}
+                  onChange={e => setTakeawayStr(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
+                  style={{ borderColor: 'var(--border)' }} placeholder="0" />
+              </div>
+              <div>
+                <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>จำนวน order</label>
+                <input type="number" min="0" value={takeawayOrders}
+                  onChange={e => setTakeawayOrders(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
+                  style={{ borderColor: 'var(--border)' }} placeholder="0" />
+              </div>
             </div>
           </div>
-        </SalesSection>
-
-        {/* Payment Breakdown — แสดงเมื่อมีข้อมูลจาก Foodstory */}
-        {existing && (existing.cash_satang > 0 || existing.card_satang > 0 || existing.sales_before_vat_satang > 0) && (
-          <SalesSection title="ช่องทางชำระเงิน & VAT" icon="💳" color="#9F8966">
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span style={{ color: 'var(--muted-foreground)' }}>ยอดก่อน VAT</span>
-                <span className="font-medium">{formatBaht(existing.sales_before_vat_satang)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span style={{ color: 'var(--muted-foreground)' }}>VAT 7%</span>
-                <span className="font-medium">{formatBaht(existing.vat_amount_satang)}</span>
-              </div>
-              {existing.rounding_satang !== 0 && (
-                <div className="flex justify-between">
-                  <span style={{ color: 'var(--muted-foreground)' }}>เศษสตางค์ (Rounding)</span>
-                  <span className="font-medium">{formatBaht(existing.rounding_satang)}</span>
-                </div>
-              )}
-              <div className="border-t pt-2 mt-1" style={{ borderColor: 'var(--border)' }}>
-                <div className="flex justify-between">
-                  <span style={{ color: 'var(--muted-foreground)' }}>💵 เงินสด</span>
-                  <span className="font-semibold">{formatBaht(existing.cash_satang)}</span>
-                </div>
-                <div className="flex justify-between mt-1">
-                  <span style={{ color: 'var(--muted-foreground)' }}>💳 บัตร / โอน</span>
-                  <span className="font-semibold">{formatBaht(existing.card_satang)}</span>
-                </div>
-              </div>
-              {existing.source === 'foodstory' && (
-                <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>นำเข้าจาก Foodstory อัตโนมัติ</p>
-              )}
-            </div>
-          </SalesSection>
-        )}
+        </div>
 
         {/* Total */}
         {totalNet > 0 && (
           <div className="bg-white rounded-2xl p-4 border" style={{ borderColor: 'var(--border)' }}>
             <p className="text-sm font-medium" style={{ color: 'var(--muted-foreground)' }}>รายได้สุทธิรวม</p>
             <p className="text-2xl font-bold mt-1" style={{ color: 'var(--flame-red)' }}>{formatBaht(totalNet)}</p>
+            {(foodstoryRev > 0 || papayaRev > 0) && (
+              <div className="mt-2 grid grid-cols-2 gap-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                {foodstoryRev > 0 && <span>Foodstory: {formatBaht(foodstoryRev)}</span>}
+                {papayaRev > 0 && <span>Papaya: {formatBaht(papayaRev)}</span>}
+                {grabNet > 0 && <span>Grab (net): {formatBaht(grabNet)}</span>}
+                {takeawayRev > 0 && <span>Takeaway: {formatBaht(takeawayRev)}</span>}
+              </div>
+            )}
           </div>
         )}
 
@@ -202,19 +234,90 @@ export default function SalesPage() {
   )
 }
 
-function SalesSection({ title, icon, color, children }: {
-  title: string; icon: string; color: string; children: React.ReactNode
+const PAYMENT_CHANNELS = [
+  { key: 'cash', label: 'เงินสด', icon: '💵' },
+  { key: 'promptpay', label: 'พร้อมเพย์', icon: '📱' },
+  { key: 'company_transfer', label: 'โอน (บริษัท)', icon: '🏦' },
+  { key: 'credit_card', label: 'บัตรเครดิต', icon: '💳' },
+]
+
+function POSSection({ title, logo, accentColor, form, onChange }: {
+  title: string
+  logo: string
+  accentColor: string
+  form: POSForm
+  onChange: (f: POSForm) => void
 }) {
+  const set = (key: keyof POSForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    onChange({ ...form, [key]: e.target.value })
+
   return (
-    <div className="bg-white rounded-2xl p-4 border" style={{ borderColor: 'var(--border)' }}>
-      <div className="flex items-center gap-2 mb-3">
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-base"
-          style={{ background: color }}>
-          {icon}
-        </div>
+    <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: 'var(--border)', borderLeft: `4px solid ${accentColor}` }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={logo} alt={title} className="h-7 w-auto object-contain"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
         <h3 className="font-semibold text-sm" style={{ color: 'var(--charcoal)' }}>{title}</h3>
       </div>
-      {children}
+
+      <div className="p-4 space-y-3">
+        {/* Revenue + Covers */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>ยอดขาย (บาท)</label>
+            <input type="number" step="1" min="0" value={form.revenue} onChange={set('revenue')}
+              className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
+              style={{ borderColor: 'var(--border)' }} placeholder="0" />
+          </div>
+          <div>
+            <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>จำนวน cover</label>
+            <input type="number" min="0" value={form.covers} onChange={set('covers')}
+              className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
+              style={{ borderColor: 'var(--border)' }} placeholder="0" />
+          </div>
+        </div>
+
+        {/* VAT breakdown */}
+        <div>
+          <p className="text-xs font-semibold mb-2" style={{ color: 'var(--charcoal)' }}>รายละเอียด VAT</p>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ก่อน VAT</label>
+              <input type="number" step="0.01" min="0" value={form.sales_before_vat} onChange={set('sales_before_vat')}
+                className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm"
+                style={{ borderColor: 'var(--border)' }} placeholder="0" />
+            </div>
+            <div>
+              <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>VAT 7%</label>
+              <input type="number" step="0.01" min="0" value={form.vat_amount} onChange={set('vat_amount')}
+                className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm"
+                style={{ borderColor: 'var(--border)' }} placeholder="0" />
+            </div>
+            <div>
+              <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ปัดเศษ</label>
+              <input type="number" step="0.01" value={form.rounding} onChange={set('rounding')}
+                className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm"
+                style={{ borderColor: 'var(--border)' }} placeholder="0" />
+            </div>
+          </div>
+        </div>
+
+        {/* Payment channels */}
+        <div>
+          <p className="text-xs font-semibold mb-2" style={{ color: 'var(--charcoal)' }}>ช่องทางชำระเงิน</p>
+          <div className="grid grid-cols-2 gap-2">
+            {PAYMENT_CHANNELS.map(({ key, label, icon }) => (
+              <div key={key}>
+                <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{icon} {label}</label>
+                <input type="number" step="1" min="0" value={form[key as keyof POSForm]} onChange={set(key as keyof POSForm)}
+                  className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm"
+                  style={{ borderColor: 'var(--border)' }} placeholder="0" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

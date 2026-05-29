@@ -145,12 +145,24 @@ export interface DailySales {
   total_net_satang: number
   total_vat_satang: number
   source: string
-  // Payment breakdown (from Foodstory import)
+  // Foodstory payment breakdown
   cash_satang: number
-  card_satang: number
+  promptpay_satang: number
+  company_transfer_satang: number
+  credit_card_satang: number
   sales_before_vat_satang: number
   vat_amount_satang: number
   rounding_satang: number
+  // Papaya POS
+  papaya_revenue_satang: number
+  papaya_covers: number
+  papaya_sales_before_vat_satang: number
+  papaya_vat_satang: number
+  papaya_rounding_satang: number
+  papaya_cash_satang: number
+  papaya_promptpay_satang: number
+  papaya_company_transfer_satang: number
+  papaya_credit_card_satang: number
 }
 
 export interface VoidRefund {
