@@ -30,14 +30,18 @@ export async function GET(req: Request) {
     .lte('date', `${month}-31`)
     .eq('is_deleted', false)
 
+  const FOOD_COST_CATS = ['วัตถุดิบทางตรง-เนื้อวัว', 'วัตถุดิบทางตรง-เนื้อหมู', 'วัตถุดิบทางตรง-อื่นๆ']
+  const LABOR_COST_CATS = ['เงินเดือนพนักงานประจำและสวัสดิการ', 'เงินเดือน- part time']
+  const ASSET_CATS = ['ส่วนต่อเติมอาคาร', 'ระบบ', 'อุปกรณ์ครัว', 'อุปกรณ์ทั่วไปในร้านอาหาร', 'สินทรัพย์อื่นๆ']
+
   const manualFoodCost = (expenses || [])
-    .filter(e => e.category === 'วัตถุดิบ')
+    .filter(e => FOOD_COST_CATS.includes(e.category))
     .reduce((s, e) => s + e.total_satang, 0)
   const manualLaborCost = (expenses || [])
-    .filter(e => e.category === 'ค่าแรง')
+    .filter(e => LABOR_COST_CATS.includes(e.category))
     .reduce((s, e) => s + e.total_satang, 0)
   const otherExpenses = (expenses || [])
-    .filter(e => !['วัตถุดิบ','ค่าแรง'].includes(e.category))
+    .filter(e => ![...FOOD_COST_CATS, ...LABOR_COST_CATS, ...ASSET_CATS].includes(e.category))
     .reduce((s, e) => s + e.total_satang, 0)
   const totalVatPaid = (expenses || []).reduce((s, e) => s + (e.vat_satang || 0), 0)
 
