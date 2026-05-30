@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   const { data, error } = await supabase
     .from('admin_users')
     .insert({
-      username: username.trim(),
+      username: username.trim().toLowerCase(),
       password_hash: bcrypt.hashSync(password, 10),
       display_name: display_name.trim(),
     })
