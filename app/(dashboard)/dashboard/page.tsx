@@ -6,24 +6,28 @@ import type { KPIResult, DailySales } from '@/types'
 import RevenueChart from '@/components/dashboard/RevenueChart'
 import KPICard from '@/components/dashboard/KPICard'
 
-type ViewMode = 'monthly' | 'daily'
+type ViewMode = 'monthly' | 'daily' | 'range'
 
 export default function DashboardPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('monthly')
   const [month, setMonth] = useState(getMonthKey())
   const [selectedDate, setSelectedDate] = useState(getTodayBKK())
+  const [rangeFrom, setRangeFrom] = useState(() => {
+    const d = new Date(); d.setDate(1)
+    return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+  })
+  const [rangeTo, setRangeTo] = useState(getTodayBKK())
   const [kpi, setKpi] = useState<KPIResult | null>(null)
   const [sales, setSales] = useState<DailySales[]>([])
   const [dailySale, setDailySale] = useState<DailySales | null>(null)
+  const [rangeSales, setRangeSales] = useState<DailySales[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (viewMode === 'monthly') {
-      loadMonthly()
-    } else {
-      loadDaily()
-    }
-  }, [viewMode, month, selectedDate])
+    if (viewMode === 'monthly') loadMonthly()
+    else if (viewMode === 'daily') loadDaily()
+    else loadRange()
+  }, [viewMode, month, selectedDate, rangeFrom, rangeTo])
 
   async function loadMonthly() {
     setLoading(true)
@@ -44,36 +48,65 @@ export default function DashboardPage() {
     setLoading(false)
   }
 
+  async function loadRange() {
+    if (!rangeFrom || !rangeTo || rangeFrom > rangeTo) return
+    setLoading(true)
+    const res = await fetch(`/api/sales?from=${rangeFrom}&to=${rangeTo}`)
+    const data = await res.json()
+    setRangeSales(Array.isArray(data) ? data : [])
+    setLoading(false)
+  }
+
   const todayLabel = new Date().toLocaleDateString('th-TH', {
     timeZone: 'Asia/Bangkok',
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   })
 
+  const MODES: { key: ViewMode; label: string }[] = [
+    { key: 'monthly', label: 'รายเดือน' },
+    { key: 'daily', label: 'รายวัน' },
+    { key: 'range', label: 'ช่วงวัน' },
+  ]
+
   return (
     <div className="space-y-4 py-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold" style={{ color: 'var(--charcoal)' }}>ภาพรวม</h1>
-          <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{todayLabel}</p>
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h1 className="text-lg font-bold" style={{ color: 'var(--charcoal)' }}>ภาพรวม</h1>
+            <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{todayLabel}</p>
+          </div>
         </div>
         {/* View mode toggle */}
-        <div className="flex rounded-lg overflow-hidden border text-sm" style={{ borderColor: 'var(--border)' }}>
-          <button onClick={() => setViewMode('monthly')}
-            className="px-3 py-1.5 font-medium transition-colors"
-            style={{ background: viewMode === 'monthly' ? 'var(--flame-red)' : 'white', color: viewMode === 'monthly' ? 'white' : 'var(--charcoal)' }}>
-            รายเดือน
-          </button>
-          <button onClick={() => setViewMode('daily')}
-            className="px-3 py-1.5 font-medium transition-colors"
-            style={{ background: viewMode === 'daily' ? 'var(--flame-red)' : 'white', color: viewMode === 'daily' ? 'white' : 'var(--charcoal)' }}>
-            รายวัน
-          </button>
+        <div className="flex rounded-lg overflow-hidden border text-sm w-full" style={{ borderColor: 'var(--border)' }}>
+          {MODES.map(m => (
+            <button key={m.key} onClick={() => setViewMode(m.key)}
+              className="flex-1 py-2 font-medium transition-colors"
+              style={{ background: viewMode === m.key ? 'var(--flame-red)' : 'white', color: viewMode === m.key ? 'white' : 'var(--charcoal)' }}>
+              {m.label}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Filter bar */}
-      {viewMode === 'monthly' ? (
+      {viewMode === 'range' ? (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs mb-1 block" style={{ color: 'var(--muted-foreground)' }}>ตั้งแต่วันที่</label>
+            <input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)}
+              className="w-full text-sm border rounded-lg px-3 py-2"
+              style={{ borderColor: 'var(--border)', background: 'white' }} />
+          </div>
+          <div>
+            <label className="text-xs mb-1 block" style={{ color: 'var(--muted-foreground)' }}>ถึงวันที่</label>
+            <input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)}
+              className="w-full text-sm border rounded-lg px-3 py-2"
+              style={{ borderColor: 'var(--border)', background: 'white' }} />
+          </div>
+        </div>
+      ) : viewMode === 'monthly' ? (
         <select value={month} onChange={e => setMonth(e.target.value)}
           className="w-full text-sm border rounded-lg px-3 py-2"
           style={{ borderColor: 'var(--border)', background: 'white' }}>
@@ -98,6 +131,8 @@ export default function DashboardPage() {
         </div>
       ) : viewMode === 'daily' ? (
         <DailyView sale={dailySale} date={selectedDate} />
+      ) : viewMode === 'range' ? (
+        <RangeView sales={rangeSales} from={rangeFrom} to={rangeTo} />
       ) : kpi ? (
         <>
           {/* KPI Cards */}
@@ -242,6 +277,99 @@ function DailyView({ sale, date }: { sale: DailySales | null; date: string }) {
           <div className="flex justify-between text-sm">
             <span style={{ color: 'var(--muted-foreground)' }}>VAT รวม</span>
             <span className="font-medium" style={{ color: 'var(--charcoal)' }}>{formatBaht(sale.total_vat_satang)}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RangeView({ sales, from, to }: { sales: DailySales[]; from: string; to: string }) {
+  if (!from || !to) return null
+  if (sales.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl p-8 border text-center" style={{ borderColor: 'var(--border)' }}>
+        <p className="text-gray-400 text-sm">ไม่มีข้อมูลในช่วงที่เลือก</p>
+      </div>
+    )
+  }
+
+  const sum = (key: keyof DailySales) => sales.reduce((a, s) => a + ((s[key] as number) || 0), 0)
+
+  const totalNet = sum('total_net_satang')
+  const totalGross = sum('total_gross_satang')
+  const foodstoryRev = sum('dine_in_revenue_satang')
+  const papayaRev = sum('papaya_revenue_satang')
+  const grabGross = sum('grabfood_gross_satang')
+  const grabGpFee = sum('grabfood_gp_fee_satang')
+  const takeaway = sum('takeaway_revenue_satang')
+  const totalBills = sum('dine_in_bills') + sum('papaya_bills')
+  const totalOrders = sum('grabfood_orders') + sum('takeaway_orders')
+  const totalVat = sum('total_vat_satang')
+
+  const channels = [
+    { label: 'เงินสด', value: sum('cash_satang') + sum('papaya_cash_satang') },
+    { label: 'พร้อมเพย์', value: sum('promptpay_satang') + sum('papaya_promptpay_satang') },
+    { label: 'โอน (บริษัท)', value: sum('company_transfer_satang') + sum('papaya_company_transfer_satang') },
+    { label: 'บัตรเครดิต', value: sum('credit_card_satang') + sum('papaya_credit_card_satang') },
+  ].filter(p => p.value > 0)
+
+  const rows = [
+    { label: 'Foodstory POS', value: foodstoryRev, icon: '🍽️' },
+    { label: 'Papaya POS', value: papayaRev, icon: '🧾' },
+    { label: 'GrabFood (gross)', value: grabGross, sub: `GP fee: (${formatBaht(grabGpFee)})`, icon: '🛵' },
+    { label: 'Takeaway', value: takeaway, icon: '🥡' },
+  ].filter(r => r.value > 0)
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-2xl p-4" style={{ background: 'var(--flame-red)' }}>
+        <p className="text-sm text-white/80">รายได้สุทธิรวม ({sales.length} วัน)</p>
+        <p className="text-3xl font-bold text-white mt-1">{formatBaht(totalNet)}</p>
+        {totalGross !== totalNet && (
+          <p className="text-xs text-white/70 mt-1">Gross: {formatBaht(totalGross)}</p>
+        )}
+        {(totalBills > 0 || totalOrders > 0) && (
+          <p className="text-xs text-white/70 mt-0.5">
+            {totalBills > 0 ? `${totalBills} บิล` : ''}{totalBills > 0 && totalOrders > 0 ? ' · ' : ''}{totalOrders > 0 ? `${totalOrders} order` : ''}
+          </p>
+        )}
+      </div>
+
+      <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+        <p className="text-xs font-semibold px-4 py-3 border-b" style={{ color: 'var(--charcoal)', borderColor: 'var(--border)' }}>แหล่งรายรับ</p>
+        <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+          {rows.map(r => (
+            <div key={r.label} className="flex items-center justify-between px-4 py-3">
+              <div>
+                <p className="text-sm font-medium" style={{ color: 'var(--charcoal)' }}>{r.icon} {r.label}</p>
+                {r.sub && <p className="text-xs text-red-500">{r.sub}</p>}
+              </div>
+              <p className="text-sm font-semibold" style={{ color: 'var(--charcoal)' }}>{formatBaht(r.value)}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {channels.length > 0 && (
+        <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+          <p className="text-xs font-semibold px-4 py-3 border-b" style={{ color: 'var(--charcoal)', borderColor: 'var(--border)' }}>ช่องทางชำระเงิน</p>
+          <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+            {channels.map(p => (
+              <div key={p.label} className="flex justify-between px-4 py-2.5 text-sm">
+                <span style={{ color: 'var(--muted-foreground)' }}>{p.label}</span>
+                <span className="font-medium" style={{ color: 'var(--charcoal)' }}>{formatBaht(p.value)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {totalVat > 0 && (
+        <div className="bg-white rounded-2xl border p-4" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex justify-between text-sm">
+            <span style={{ color: 'var(--muted-foreground)' }}>VAT รวม</span>
+            <span className="font-medium" style={{ color: 'var(--charcoal)' }}>{formatBaht(totalVat)}</span>
           </div>
         </div>
       )}

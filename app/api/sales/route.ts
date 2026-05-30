@@ -9,9 +9,13 @@ export async function GET(req: Request) {
   const month = searchParams.get('month')
   const date = searchParams.get('date')
 
+  const from = searchParams.get('from')
+  const to = searchParams.get('to')
+
   let query = supabase.from('daily_sales').select('*').order('date', { ascending: false })
   if (date) query = query.eq('date', date)
-  if (month) query = query.gte('date', `${month}-01`).lte('date', `${month}-31`)
+  else if (from && to) query = query.gte('date', from).lte('date', to)
+  else if (month) query = query.gte('date', `${month}-01`).lte('date', `${month}-31`)
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
