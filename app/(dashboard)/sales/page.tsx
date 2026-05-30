@@ -35,6 +35,7 @@ export default function SalesPage() {
   const [existing, setExisting] = useState<DailySales | null>(null)
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [role, setRole] = useState('')
 
   useEffect(() => { setRole(getClientRole()) }, [])
@@ -103,6 +104,7 @@ export default function SalesPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
+    setSaveError('')
     try {
       const res = await fetch('/api/sales', {
         method: 'POST',
@@ -139,7 +141,13 @@ export default function SalesPage() {
           takeaway: { revenue_satang: takeawayRev, orders: parseInt(takeawayOrders) || 0, vat_satang: 0 },
         }),
       })
-      if (res.ok) { setSaved(true); loadSales() }
+      if (res.ok) {
+        setSaved(true)
+        loadSales()
+      } else {
+        const err = await res.json()
+        setSaveError(err.error || 'บันทึกไม่สำเร็จ')
+      }
     } finally {
       setLoading(false)
     }
@@ -162,6 +170,11 @@ export default function SalesPage() {
       {saved && (
         <div className="p-3 rounded-xl bg-green-50 text-green-700 text-sm font-medium">
           ✅ บันทึกแล้ว
+        </div>
+      )}
+      {saveError && (
+        <div className="p-3 rounded-xl bg-red-50 text-red-700 text-sm">
+          ❌ {saveError}
         </div>
       )}
 

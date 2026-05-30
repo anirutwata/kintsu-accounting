@@ -90,7 +90,6 @@ export async function POST(req: Request) {
     total_vat_satang: (foodstory?.vat_satang || 0) + (papaya?.vat_satang || 0) + (grabfood?.vat_satang || 0),
     source: 'manual',
     updated_at: new Date().toISOString(),
-    updated_by: userId || null,
   }
 
   const { data, error } = await supabase
