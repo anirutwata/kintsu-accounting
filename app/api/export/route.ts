@@ -33,13 +33,13 @@ export async function GET(req: Request) {
       .order('created_at'),
     supabase
       .from('daily_sales')
-      .select('date, dine_in_revenue_satang, dine_in_covers, grabfood_gross_satang, grabfood_gp_fee_satang, grabfood_net_satang, takeaway_revenue_satang, total_net_satang')
+      .select('date, dine_in_revenue_satang, dine_in_covers, dine_in_bills, papaya_revenue_satang, papaya_covers, papaya_bills, grabfood_gross_satang, grabfood_gp_fee_satang, grabfood_net_satang, grabfood_orders, takeaway_revenue_satang, takeaway_orders, total_net_satang')
       .gte('date', startDate)
       .lte('date', endDate)
       .order('date'),
     supabase
       .from('expense_categories')
-      .select('name')
+      .select('name, category_type')
       .eq('is_active', true)
       .order('sort_order'),
   ])
@@ -66,10 +66,16 @@ export async function GET(req: Request) {
     date: s.date,
     dine_in: s.dine_in_revenue_satang / 100,
     dine_in_covers: s.dine_in_covers,
+    dine_in_bills: s.dine_in_bills,
+    papaya: s.papaya_revenue_satang / 100,
+    papaya_covers: s.papaya_covers,
+    papaya_bills: s.papaya_bills,
     grabfood_gross: s.grabfood_gross_satang / 100,
     grabfood_gp: s.grabfood_gp_fee_satang / 100,
     grabfood_net: s.grabfood_net_satang / 100,
+    grabfood_orders: s.grabfood_orders,
     takeaway: s.takeaway_revenue_satang / 100,
+    takeaway_orders: s.takeaway_orders,
     total_net: s.total_net_satang / 100,
   }))
 
@@ -95,6 +101,6 @@ export async function GET(req: Request) {
     })
   }
 
-  const categoryNames = (catRows || []).map(c => c.name)
-  return NextResponse.json({ month, expenses: expenseRows, sales: salesRows, categories: categoryNames })
+  const categories = (catRows || []).map(c => ({ name: c.name, type: c.category_type || 'expense' }))
+  return NextResponse.json({ month, expenses: expenseRows, sales: salesRows, categories })
 }
