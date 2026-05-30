@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { formatBaht, toSatang } from '@/lib/money'
 import type { Asset } from '@/types'
 
@@ -38,6 +38,10 @@ interface FormState {
   salvage_amount: string
   useful_life_months: string
   description: string
+  slip_image_url: string
+  slip_preview: string
+  receipt_image_urls: string[]
+  receipt_previews: string[]
 }
 
 function emptyForm(): FormState {
@@ -45,6 +49,8 @@ function emptyForm(): FormState {
     name: '', category: ASSET_CATEGORIES[0].name,
     purchase_date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }),
     purchase_amount: '', salvage_amount: '0', useful_life_months: '60', description: '',
+    slip_image_url: '', slip_preview: '',
+    receipt_image_urls: [], receipt_previews: [],
   }
 }
 
@@ -59,6 +65,12 @@ export default function AssetsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [ocring, setOcring] = useState(false)
+  const [uploadingReceipt, setUploadingReceipt] = useState(false)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+
+  const slipRef = useRef<HTMLInputElement>(null)
+  const receiptRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { load() }, [])
 
@@ -87,6 +99,10 @@ export default function AssetsPage() {
       salvage_amount: String(asset.salvage_satang / 100),
       useful_life_months: String(asset.useful_life_months),
       description: asset.description || '',
+      slip_image_url: (asset as any).slip_image_url || '',
+      slip_preview: (asset as any).slip_image_url || '',
+      receipt_image_urls: (asset as any).receipt_image_urls || [],
+      receipt_previews: (asset as any).receipt_image_urls || [],
     })
     setShowForm(true)
   }
@@ -96,9 +112,66 @@ export default function AssetsPage() {
     setForm(f => ({ ...f, category: cat, useful_life_months: String(def?.defaultMonths || 60) }))
   }
 
+  async function handleSlipUpload(file: File) {
+    setOcring(true)
+    const preview = URL.createObjectURL(file)
+    setForm(f => ({ ...f, slip_preview: preview }))
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/ocr/asset', { method: 'POST', body: fd })
+      const data = await res.json()
+      setForm(f => ({
+        ...f,
+        name: data.name && !f.name ? data.name : f.name,
+        purchase_amount: data.amount_satang && !f.purchase_amount
+          ? String(data.amount_satang / 100)
+          : f.purchase_amount,
+        purchase_date: data.date || f.purchase_date,
+        description: data.description && !f.description
+          ? (data.vendor ? `${data.vendor}${data.description ? ' — ' + data.description : ''}` : data.description)
+          : f.description,
+        slip_image_url: data.image_url || f.slip_image_url,
+        slip_preview: data.image_url || preview,
+      }))
+    } catch { /* ignore */ }
+    setOcring(false)
+  }
+
+  async function handleReceiptUpload(files: FileList) {
+    setUploadingReceipt(true)
+    const newUrls: string[] = []
+    const newPreviews: string[] = []
+    for (const file of Array.from(files)) {
+      newPreviews.push(URL.createObjectURL(file))
+      const fd = new FormData()
+      fd.append('file', file)
+      try {
+        const res = await fetch('/api/upload/receipt', { method: 'POST', body: fd })
+        const data = await res.json()
+        if (data.url) newUrls.push(data.url)
+      } catch { /* ignore */ }
+    }
+    setForm(f => ({
+      ...f,
+      receipt_image_urls: [...f.receipt_image_urls, ...newUrls],
+      receipt_previews: [...f.receipt_previews, ...newPreviews],
+    }))
+    setUploadingReceipt(false)
+  }
+
+  function removeReceipt(idx: number) {
+    setForm(f => ({
+      ...f,
+      receipt_image_urls: f.receipt_image_urls.filter((_, i) => i !== idx),
+      receipt_previews: f.receipt_previews.filter((_, i) => i !== idx),
+    }))
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
+    setSaveError('')
     const payload = {
       name: form.name.trim(),
       category: form.category,
@@ -107,6 +180,8 @@ export default function AssetsPage() {
       salvage_satang: toSatang(parseFloat(form.salvage_amount) || 0),
       useful_life_months: parseInt(form.useful_life_months) || 60,
       description: form.description.trim() || null,
+      slip_image_url: form.slip_image_url || null,
+      receipt_image_urls: form.receipt_image_urls,
     }
     const url = editAsset ? `/api/assets/${editAsset.id}` : '/api/assets'
     const method = editAsset ? 'PUT' : 'POST'
@@ -204,6 +279,9 @@ export default function AssetsPage() {
             const rem = remainingMonths(asset)
             const bookVal = nbv(asset)
             const isFullyDep = rem === 0
+            const slipUrl = (asset as any).slip_image_url as string | null
+            const receiptUrls = ((asset as any).receipt_image_urls || []) as string[]
+            const allImages = [...(slipUrl ? [slipUrl] : []), ...receiptUrls]
             return (
               <div key={asset.id} className="bg-white rounded-2xl border overflow-hidden"
                 style={{ borderColor: 'var(--border)', opacity: asset.is_active ? 1 : 0.6 }}>
@@ -230,6 +308,20 @@ export default function AssetsPage() {
                       style={{ borderColor: 'var(--border)', color: 'var(--charcoal)' }}>แก้ไข</button>
                   </div>
                 </div>
+
+                {/* Image thumbnails */}
+                {allImages.length > 0 && (
+                  <div className="flex gap-2 px-4 pb-3">
+                    {allImages.map((url, i) => (
+                      <button key={i} onClick={() => setLightboxUrl(url)}
+                        className="w-12 h-12 rounded-lg overflow-hidden border shrink-0"
+                        style={{ borderColor: 'var(--border)' }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt="" className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-3 border-t text-center" style={{ borderColor: 'var(--border)' }}>
                   <div className="py-2 border-r" style={{ borderColor: 'var(--border)' }}>
@@ -296,18 +388,57 @@ export default function AssetsPage() {
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-end" style={{ background: 'rgba(0,0,0,0.4)' }}
           onClick={e => e.target === e.currentTarget && setShowForm(false)}>
-          <div className="w-full max-w-2xl mx-auto bg-white rounded-t-2xl overflow-y-auto max-h-[90vh]">
-            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
+          <div className="w-full max-w-2xl mx-auto bg-white rounded-t-2xl overflow-y-auto max-h-[92vh]">
+            <div className="flex items-center justify-between px-4 py-3 border-b sticky top-0 bg-white z-10" style={{ borderColor: 'var(--border)' }}>
               <h2 className="font-semibold" style={{ color: 'var(--charcoal)' }}>
                 {editAsset ? 'แก้ไขสินทรัพย์' : 'เพิ่มสินทรัพย์'}
               </h2>
               <button onClick={() => setShowForm(false)} className="text-gray-400 text-xl leading-none">×</button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4 space-y-4">
+            <form onSubmit={handleSubmit} className="p-4 space-y-4 pb-8">
               {saveError && (
                 <div className="p-3 rounded-xl bg-red-50 text-red-700 text-sm">❌ {saveError}</div>
               )}
+
+              {/* OCR Slip Upload */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold" style={{ color: 'var(--charcoal)' }}>สแกนใบเสร็จ / สลิปโอนเงิน</p>
+                <div className="flex gap-2 items-start">
+                  {form.slip_preview ? (
+                    <div className="relative shrink-0">
+                      <button type="button" onClick={() => setLightboxUrl(form.slip_preview)}
+                        className="w-16 h-16 rounded-xl overflow-hidden border block"
+                        style={{ borderColor: 'var(--border)' }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={form.slip_preview} alt="slip" className="w-full h-full object-cover" />
+                      </button>
+                      <button type="button" onClick={() => setForm(f => ({ ...f, slip_image_url: '', slip_preview: '' }))}
+                        className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] leading-4 text-center">
+                        ×
+                      </button>
+                    </div>
+                  ) : null}
+                  <button type="button"
+                    onClick={() => slipRef.current?.click()}
+                    disabled={ocring}
+                    className="flex-1 flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-3 text-sm disabled:opacity-50"
+                    style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+                    {ocring ? (
+                      <><span className="animate-spin">⏳</span> กำลังอ่าน AI...</>
+                    ) : (
+                      <>📷 {form.slip_preview ? 'เปลี่ยนรูป' : 'ถ่ายรูป / อัปโหลด'}</>
+                    )}
+                  </button>
+                  <input ref={slipRef} type="file" accept="image/*" capture="environment" className="hidden"
+                    onChange={e => e.target.files?.[0] && handleSlipUpload(e.target.files[0])} />
+                </div>
+                {ocring && (
+                  <p className="text-xs" style={{ color: 'var(--flame-red)' }}>AI กำลังอ่านข้อมูลจากรูป...</p>
+                )}
+              </div>
+
+              {/* Name */}
               <div>
                 <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>ชื่อสินทรัพย์</label>
                 <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
@@ -315,6 +446,7 @@ export default function AssetsPage() {
                   placeholder="เช่น ตู้แช่เย็น Daikin 2 ประตู" />
               </div>
 
+              {/* Category */}
               <div>
                 <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>หมวดหมู่</label>
                 <select value={form.category} onChange={e => handleCategoryChange(e.target.value)}
@@ -323,12 +455,14 @@ export default function AssetsPage() {
                 </select>
               </div>
 
+              {/* Date */}
               <div>
                 <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>วันที่ซื้อ</label>
                 <input type="date" value={form.purchase_date} onChange={e => setForm(f => ({ ...f, purchase_date: e.target.value }))}
                   required className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }} />
               </div>
 
+              {/* Amounts */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>ราคาทุน (บาท)</label>
@@ -344,6 +478,7 @@ export default function AssetsPage() {
                 </div>
               </div>
 
+              {/* Useful life */}
               <div>
                 <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>
                   อายุใช้งาน (เดือน)
@@ -356,7 +491,7 @@ export default function AssetsPage() {
                   required className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }} />
               </div>
 
-              {/* Preview depreciation */}
+              {/* Depreciation preview */}
               {form.purchase_amount && form.useful_life_months && (
                 <div className="p-3 rounded-xl text-sm space-y-1" style={{ background: 'var(--muted)' }}>
                   <p className="text-xs font-semibold" style={{ color: 'var(--charcoal)' }}>ตัวอย่างค่าเสื่อมราคา</p>
@@ -365,7 +500,6 @@ export default function AssetsPage() {
                     const salvage = toSatang(parseFloat(form.salvage_amount) || 0)
                     const months = parseInt(form.useful_life_months) || 60
                     const monthly = Math.round((cost - salvage) / months)
-                    const yearly = monthly * 12
                     return (
                       <>
                         <div className="flex justify-between text-xs">
@@ -374,7 +508,7 @@ export default function AssetsPage() {
                         </div>
                         <div className="flex justify-between text-xs">
                           <span style={{ color: 'var(--muted-foreground)' }}>ค่าเสื่อม/ปี</span>
-                          <span className="font-medium" style={{ color: 'var(--charcoal)' }}>{formatBaht(yearly)}</span>
+                          <span className="font-medium" style={{ color: 'var(--charcoal)' }}>{formatBaht(monthly * 12)}</span>
                         </div>
                       </>
                     )
@@ -382,11 +516,48 @@ export default function AssetsPage() {
                 </div>
               )}
 
+              {/* Description */}
               <div>
                 <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>หมายเหตุ</label>
                 <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                   className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}
                   placeholder="ไม่บังคับ" />
+              </div>
+
+              {/* Receipt images */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold" style={{ color: 'var(--charcoal)' }}>ใบเสร็จ / เอกสารแนบ</p>
+                {form.receipt_previews.length > 0 && (
+                  <div className="flex gap-2 flex-wrap">
+                    {form.receipt_previews.map((url, i) => (
+                      <div key={i} className="relative">
+                        <button type="button" onClick={() => setLightboxUrl(url)}
+                          className="w-16 h-16 rounded-xl overflow-hidden border block"
+                          style={{ borderColor: 'var(--border)' }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={url} alt="" className="w-full h-full object-cover" />
+                        </button>
+                        <button type="button" onClick={() => removeReceipt(i)}
+                          className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] leading-4 text-center">
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button type="button"
+                  onClick={() => receiptRef.current?.click()}
+                  disabled={uploadingReceipt}
+                  className="w-full flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-3 text-sm disabled:opacity-50"
+                  style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+                  {uploadingReceipt ? (
+                    <><span className="animate-spin">⏳</span> กำลังอัปโหลด...</>
+                  ) : (
+                    <>🧾 แนบใบเสร็จ / เอกสาร</>
+                  )}
+                </button>
+                <input ref={receiptRef} type="file" accept="image/*" multiple className="hidden"
+                  onChange={e => e.target.files && handleReceiptUpload(e.target.files)} />
               </div>
 
               <button type="submit" disabled={saving}
@@ -396,6 +567,20 @@ export default function AssetsPage() {
               </button>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightboxUrl && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.85)' }}
+          onClick={() => setLightboxUrl(null)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightboxUrl} alt="preview"
+            className="max-w-full max-h-full rounded-xl object-contain"
+            onClick={e => e.stopPropagation()} />
+          <button onClick={() => setLightboxUrl(null)}
+            className="absolute top-4 right-4 text-white text-2xl leading-none">×</button>
         </div>
       )}
     </div>
