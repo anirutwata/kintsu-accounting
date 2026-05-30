@@ -59,7 +59,23 @@ export async function GET(req: Request) {
     ? hrData.laborCostSatang
     : manualLaborCost
 
-  const totalExpenses = foodCost + laborCost + otherExpenses + grabGpCost
+  // Fetch assets and calculate depreciation for the month
+  const [year, mon] = month.split('-').map(Number)
+  const monthLastDay = new Date(year, mon, 0).toISOString().slice(0, 10)
+  const { data: assets } = await supabase
+    .from('assets')
+    .select('purchase_date, purchase_satang, salvage_satang, useful_life_months')
+    .eq('is_active', true)
+    .lte('purchase_date', monthLastDay)
+
+  const depreciationSatang = (assets || []).reduce((sum, asset) => {
+    const pd = new Date(asset.purchase_date)
+    const monthsElapsed = (year - pd.getFullYear()) * 12 + (mon - 1 - pd.getMonth())
+    if (monthsElapsed < 0 || monthsElapsed >= asset.useful_life_months) return sum
+    return sum + Math.round((asset.purchase_satang - asset.salvage_satang) / asset.useful_life_months)
+  }, 0)
+
+  const totalExpenses = foodCost + laborCost + otherExpenses + grabGpCost + depreciationSatang
   const grossProfit = totalRevenue - foodCost
   const netProfit = totalRevenue - totalExpenses
   const vatPayable = totalVat - totalVatPaid
@@ -80,6 +96,7 @@ export async function GET(req: Request) {
     foodCostSatang: foodCost,
     laborCostSatang: laborCost,
     grabGpCostSatang: grabGpCost,
+    depreciationSatang,
     otherExpensesSatang: otherExpenses,
     totalExpensesSatang: totalExpenses,
     grossProfitSatang: grossProfit,

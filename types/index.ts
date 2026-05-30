@@ -208,6 +208,7 @@ export interface KPIResult {
   foodCostSatang: number
   laborCostSatang: number
   grabGpCostSatang: number
+  depreciationSatang: number
   otherExpensesSatang: number
   totalExpensesSatang: number
   grossProfitSatang: number
@@ -223,6 +224,20 @@ export interface KPIResult {
   // integration sources
   foodCostSource: 'kintsu_stock' | 'manual' | 'unavailable'
   laborCostSource: 'kintsu_hr' | 'manual' | 'unavailable'
+}
+
+export interface Asset {
+  id: string
+  name: string
+  category: string
+  purchase_date: string
+  purchase_satang: number
+  salvage_satang: number
+  useful_life_months: number
+  description: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string | null
 }
 
 export interface SessionUser {

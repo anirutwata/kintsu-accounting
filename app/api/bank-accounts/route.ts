@@ -1,14 +1,12 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-export async function GET() {
+export async function GET(req: Request) {
   const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('bank_accounts')
-    .select('*')
-    .eq('is_active', true)
-    .order('sort_order')
-    .order('created_at')
+  const all = new URL(req.url).searchParams.get('all') === 'true'
+  let query = supabase.from('bank_accounts').select('*').order('sort_order').order('created_at')
+  if (!all) query = query.eq('is_active', true)
+  const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data || [])
 }

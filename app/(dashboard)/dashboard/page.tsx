@@ -178,6 +178,7 @@ export default function DashboardPage() {
               <PnLRow label="Food Cost" value={-kpi.foodCostSatang} indent />
               <PnLRow label="Labor Cost" value={-kpi.laborCostSatang} indent />
               <PnLRow label="Grab GP" value={-kpi.grabGpCostSatang} indent />
+              {kpi.depreciationSatang > 0 && <PnLRow label="ค่าเสื่อมราคา" value={-kpi.depreciationSatang} indent />}
               <PnLRow label="ค่าใช้จ่ายอื่นๆ" value={-kpi.otherExpensesSatang} indent />
               <div className="border-t pt-2 mt-2" style={{ borderColor: 'var(--border)' }}>
                 <PnLRow label="กำไรสุทธิ" value={kpi.netProfitSatang} bold
