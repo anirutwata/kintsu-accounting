@@ -1,32 +1,50 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { formatBaht, formatPct } from '@/lib/money'
-import { getMonthKey, formatThaiMonth } from '@/lib/utils'
+import { getMonthKey, formatThaiMonth, getTodayBKK } from '@/lib/utils'
 import type { KPIResult, DailySales } from '@/types'
 import RevenueChart from '@/components/dashboard/RevenueChart'
 import KPICard from '@/components/dashboard/KPICard'
 
+type ViewMode = 'monthly' | 'daily'
+
 export default function DashboardPage() {
+  const [viewMode, setViewMode] = useState<ViewMode>('monthly')
   const [month, setMonth] = useState(getMonthKey())
+  const [selectedDate, setSelectedDate] = useState(getTodayBKK())
   const [kpi, setKpi] = useState<KPIResult | null>(null)
   const [sales, setSales] = useState<DailySales[]>([])
+  const [dailySale, setDailySale] = useState<DailySales | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function load() {
-      setLoading(true)
-      const [kpiRes, salesRes] = await Promise.all([
-        fetch(`/api/integrations/kpi?month=${month}`),
-        fetch(`/api/sales?month=${month}`),
-      ])
-      setKpi(await kpiRes.json())
-      setSales(await salesRes.json())
-      setLoading(false)
+    if (viewMode === 'monthly') {
+      loadMonthly()
+    } else {
+      loadDaily()
     }
-    load()
-  }, [month])
+  }, [viewMode, month, selectedDate])
 
-  const today = new Date().toLocaleDateString('th-TH', {
+  async function loadMonthly() {
+    setLoading(true)
+    const [kpiRes, salesRes] = await Promise.all([
+      fetch(`/api/integrations/kpi?month=${month}`),
+      fetch(`/api/sales?month=${month}`),
+    ])
+    setKpi(await kpiRes.json())
+    setSales(await salesRes.json())
+    setLoading(false)
+  }
+
+  async function loadDaily() {
+    setLoading(true)
+    const res = await fetch(`/api/sales?date=${selectedDate}`)
+    const data = await res.json()
+    setDailySale(Array.isArray(data) && data.length > 0 ? data[0] : null)
+    setLoading(false)
+  }
+
+  const todayLabel = new Date().toLocaleDateString('th-TH', {
     timeZone: 'Asia/Bangkok',
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   })
@@ -37,12 +55,27 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold" style={{ color: 'var(--charcoal)' }}>ภาพรวม</h1>
-          <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{today}</p>
+          <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{todayLabel}</p>
         </div>
-        <select
-          value={month}
-          onChange={e => setMonth(e.target.value)}
-          className="text-sm border rounded-lg px-2 py-1.5"
+        {/* View mode toggle */}
+        <div className="flex rounded-lg overflow-hidden border text-sm" style={{ borderColor: 'var(--border)' }}>
+          <button onClick={() => setViewMode('monthly')}
+            className="px-3 py-1.5 font-medium transition-colors"
+            style={{ background: viewMode === 'monthly' ? 'var(--flame-red)' : 'white', color: viewMode === 'monthly' ? 'white' : 'var(--charcoal)' }}>
+            รายเดือน
+          </button>
+          <button onClick={() => setViewMode('daily')}
+            className="px-3 py-1.5 font-medium transition-colors"
+            style={{ background: viewMode === 'daily' ? 'var(--flame-red)' : 'white', color: viewMode === 'daily' ? 'white' : 'var(--charcoal)' }}>
+            รายวัน
+          </button>
+        </div>
+      </div>
+
+      {/* Filter bar */}
+      {viewMode === 'monthly' ? (
+        <select value={month} onChange={e => setMonth(e.target.value)}
+          className="w-full text-sm border rounded-lg px-3 py-2"
           style={{ borderColor: 'var(--border)', background: 'white' }}>
           {Array.from({ length: 6 }, (_, i) => {
             const d = new Date()
@@ -51,14 +84,20 @@ export default function DashboardPage() {
             return <option key={key} value={key}>{formatThaiMonth(key)}</option>
           })}
         </select>
-      </div>
+      ) : (
+        <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
+          className="w-full text-sm border rounded-lg px-3 py-2"
+          style={{ borderColor: 'var(--border)', background: 'white' }} />
+      )}
 
       {loading ? (
         <div className="grid grid-cols-2 gap-3">
-          {Array.from({ length: 6 }).map((_, i) => (
+          {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="h-24 rounded-2xl bg-gray-100 animate-pulse" />
           ))}
         </div>
+      ) : viewMode === 'daily' ? (
+        <DailyView sale={dailySale} date={selectedDate} />
       ) : kpi ? (
         <>
           {/* KPI Cards */}
@@ -117,6 +156,94 @@ export default function DashboardPage() {
         </>
       ) : (
         <div className="text-center py-12 text-gray-400">ไม่มีข้อมูล</div>
+      )}
+    </div>
+  )
+}
+
+function DailyView({ sale, date }: { sale: DailySales | null; date: string }) {
+  if (!sale) {
+    return (
+      <div className="bg-white rounded-2xl p-8 border text-center" style={{ borderColor: 'var(--border)' }}>
+        <p className="text-gray-400 text-sm">ยังไม่มีข้อมูลรายรับวันที่ {date}</p>
+      </div>
+    )
+  }
+
+  const rows = [
+    { label: 'Foodstory POS', value: sale.dine_in_revenue_satang, icon: '🍽️', bills: sale.dine_in_bills },
+    { label: 'Papaya POS', value: sale.papaya_revenue_satang, icon: '🧾', bills: sale.papaya_bills },
+    { label: 'GrabFood (gross)', value: sale.grabfood_gross_satang, sub: `GP fee: (${formatBaht(sale.grabfood_gp_fee_satang)})`, icon: '🛵' },
+    { label: 'Takeaway', value: sale.takeaway_revenue_satang, icon: '🥡', orders: sale.takeaway_orders },
+  ]
+
+  const payments = [
+    { label: 'เงินสด', value: (sale.cash_satang || 0) + (sale.papaya_cash_satang || 0) },
+    { label: 'พร้อมเพย์', value: (sale.promptpay_satang || 0) + (sale.papaya_promptpay_satang || 0) },
+    { label: 'โอน (บริษัท)', value: (sale.company_transfer_satang || 0) + (sale.papaya_company_transfer_satang || 0) },
+    { label: 'บัตรเครดิต', value: (sale.credit_card_satang || 0) + (sale.papaya_credit_card_satang || 0) },
+  ].filter(p => p.value > 0)
+
+  return (
+    <div className="space-y-3">
+      {/* Total */}
+      <div className="rounded-2xl p-4" style={{ background: 'var(--flame-red)' }}>
+        <p className="text-sm text-white/80">รายได้สุทธิรวม</p>
+        <p className="text-3xl font-bold text-white mt-1">{formatBaht(sale.total_net_satang)}</p>
+        {sale.total_gross_satang !== sale.total_net_satang && (
+          <p className="text-xs text-white/70 mt-1">Gross: {formatBaht(sale.total_gross_satang)}</p>
+        )}
+      </div>
+
+      {/* Channel breakdown */}
+      <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+        <p className="text-xs font-semibold px-4 py-3 border-b" style={{ color: 'var(--charcoal)', borderColor: 'var(--border)' }}>
+          แหล่งรายรับ
+        </p>
+        <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+          {rows.map(r => r.value > 0 && (
+            <div key={r.label} className="flex items-center justify-between px-4 py-3">
+              <div>
+                <p className="text-sm font-medium" style={{ color: 'var(--charcoal)' }}>{r.icon} {r.label}</p>
+                {r.bills !== undefined && r.bills > 0 && (
+                  <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{r.bills} บิล</p>
+                )}
+                {r.orders !== undefined && r.orders > 0 && (
+                  <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{r.orders} order</p>
+                )}
+                {r.sub && <p className="text-xs text-red-500">{r.sub}</p>}
+              </div>
+              <p className="text-sm font-semibold" style={{ color: 'var(--charcoal)' }}>{formatBaht(r.value)}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Payment channels */}
+      {payments.length > 0 && (
+        <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+          <p className="text-xs font-semibold px-4 py-3 border-b" style={{ color: 'var(--charcoal)', borderColor: 'var(--border)' }}>
+            ช่องทางชำระเงิน
+          </p>
+          <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+            {payments.map(p => (
+              <div key={p.label} className="flex justify-between px-4 py-2.5 text-sm">
+                <span style={{ color: 'var(--muted-foreground)' }}>{p.label}</span>
+                <span className="font-medium" style={{ color: 'var(--charcoal)' }}>{formatBaht(p.value)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* VAT */}
+      {sale.total_vat_satang > 0 && (
+        <div className="bg-white rounded-2xl border p-4" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex justify-between text-sm">
+            <span style={{ color: 'var(--muted-foreground)' }}>VAT รวม</span>
+            <span className="font-medium" style={{ color: 'var(--charcoal)' }}>{formatBaht(sale.total_vat_satang)}</span>
+          </div>
+        </div>
       )}
     </div>
   )
