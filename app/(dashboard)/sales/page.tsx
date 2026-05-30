@@ -37,6 +37,9 @@ export default function SalesPage() {
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [role, setRole] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   useEffect(() => { setRole(getClientRole()) }, [])
 
@@ -100,6 +103,20 @@ export default function SalesPage() {
   const takeawayRev = toSatang(parseFloat(takeawayStr) || 0)
   const { gpFeeSatang, netSatang: grabNet } = calcGrabNet(grabGross)
   const totalNet = foodstoryRev + papayaRev + grabNet + takeawayRev
+
+  async function handleDelete() {
+    setDeleting(true)
+    setDeleteError('')
+    const res = await fetch(`/api/sales/${date}`, { method: 'DELETE' })
+    if (res.ok) {
+      setDeleteConfirm(false)
+      loadSales()
+    } else {
+      const err = await res.json()
+      setDeleteError(err.error || 'ลบไม่สำเร็จ')
+    }
+    setDeleting(false)
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -175,6 +192,36 @@ export default function SalesPage() {
       {saveError && (
         <div className="p-3 rounded-xl bg-red-50 text-red-700 text-sm">
           ❌ {saveError}
+        </div>
+      )}
+      {deleteError && (
+        <div className="p-3 rounded-xl bg-red-50 text-red-700 text-sm flex justify-between">
+          <span>❌ {deleteError}</span>
+          <button onClick={() => setDeleteError('')} className="text-red-400 ml-2">✕</button>
+        </div>
+      )}
+
+      {role === 'owner' && existing && (
+        <div className="flex justify-end">
+          {deleteConfirm ? (
+            <div className="flex gap-2 items-center">
+              <span className="text-xs text-red-600">ยืนยันลบข้อมูลวันนี้?</span>
+              <button onClick={handleDelete} disabled={deleting}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+                style={{ background: '#DC2626' }}>
+                {deleting ? '...' : 'ลบ'}
+              </button>
+              <button onClick={() => { setDeleteConfirm(false); setDeleteError('') }}
+                className="px-3 py-1.5 rounded-xl text-xs border" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+                ยกเลิก
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => setDeleteConfirm(true)}
+              className="px-3 py-1.5 rounded-xl text-xs text-red-500 border" style={{ borderColor: 'var(--border)' }}>
+              ลบข้อมูลวันนี้
+            </button>
+          )}
         </div>
       )}
 
