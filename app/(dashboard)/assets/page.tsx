@@ -55,7 +55,10 @@ export default function AssetsPage() {
   const [editAsset, setEditAsset] = useState<Asset | null>(null)
   const [form, setForm] = useState<FormState>(emptyForm())
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => { load() }, [])
 
@@ -69,11 +72,13 @@ export default function AssetsPage() {
   function openAdd() {
     setEditAsset(null)
     setForm(emptyForm())
+    setSaveError('')
     setShowForm(true)
   }
 
   function openEdit(asset: Asset) {
     setEditAsset(asset)
+    setSaveError('')
     setForm({
       name: asset.name,
       category: asset.category,
@@ -105,16 +110,29 @@ export default function AssetsPage() {
     }
     const url = editAsset ? `/api/assets/${editAsset.id}` : '/api/assets'
     const method = editAsset ? 'PUT' : 'POST'
-    await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-    setShowForm(false)
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    if (res.ok) {
+      setShowForm(false)
+      load()
+    } else {
+      const err = await res.json()
+      setSaveError(err.error || 'บันทึกไม่สำเร็จ')
+    }
     setSaving(false)
-    load()
   }
 
   async function handleDelete(id: string) {
-    await fetch(`/api/assets/${id}`, { method: 'DELETE' })
-    setDeleteConfirm(null)
-    load()
+    setDeleting(true)
+    setDeleteError('')
+    const res = await fetch(`/api/assets/${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      setDeleteConfirm(null)
+      load()
+    } else {
+      const err = await res.json()
+      setDeleteError(err.error || 'ลบไม่สำเร็จ')
+    }
+    setDeleting(false)
   }
 
   async function toggleActive(asset: Asset) {
@@ -143,6 +161,13 @@ export default function AssetsPage() {
           + เพิ่มสินทรัพย์
         </button>
       </div>
+
+      {deleteError && (
+        <div className="p-3 rounded-xl bg-red-50 text-red-700 text-sm flex justify-between">
+          <span>❌ {deleteError}</span>
+          <button onClick={() => setDeleteError('')} className="text-red-400 ml-2">✕</button>
+        </div>
+      )}
 
       {/* Summary cards */}
       {activeAssets.length > 0 && (
@@ -245,15 +270,17 @@ export default function AssetsPage() {
                   </button>
                   {deleteConfirm === asset.id ? (
                     <>
-                      <button onClick={() => handleDelete(asset.id)} className="flex-1 py-2 text-xs text-red-600 font-semibold border-l" style={{ borderColor: 'var(--border)' }}>
-                        ยืนยันลบ
+                      <button onClick={() => handleDelete(asset.id)} disabled={deleting}
+                        className="flex-1 py-2 text-xs text-red-600 font-semibold border-l disabled:opacity-50" style={{ borderColor: 'var(--border)' }}>
+                        {deleting ? '...' : 'ยืนยันลบ'}
                       </button>
-                      <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-2 text-xs border-l" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+                      <button onClick={() => { setDeleteConfirm(null); setDeleteError('') }}
+                        className="flex-1 py-2 text-xs border-l" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
                         ยกเลิก
                       </button>
                     </>
                   ) : (
-                    <button onClick={() => setDeleteConfirm(asset.id)}
+                    <button onClick={() => { setDeleteConfirm(asset.id); setDeleteError('') }}
                       className="flex-1 py-2 text-xs text-red-500 border-l" style={{ borderColor: 'var(--border)' }}>
                       ลบ
                     </button>
@@ -278,6 +305,9 @@ export default function AssetsPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="p-4 space-y-4">
+              {saveError && (
+                <div className="p-3 rounded-xl bg-red-50 text-red-700 text-sm">❌ {saveError}</div>
+              )}
               <div>
                 <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>ชื่อสินทรัพย์</label>
                 <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}

@@ -14,53 +14,73 @@ export default function BanksPage() {
   const [editBank, setEditBank] = useState<BankAccount | null>(null)
   const [form, setForm] = useState<FormState>(emptyForm())
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
     const res = await fetch('/api/bank-accounts?all=true')
-    setBanks(await res.json())
+    const data = await res.json()
+    setBanks(Array.isArray(data) ? data : [])
     setLoading(false)
   }
 
   function openAdd() {
     setEditBank(null)
     setForm(emptyForm())
+    setSaveError('')
     setShowForm(true)
   }
 
   function openEdit(bank: BankAccount) {
     setEditBank(bank)
     setForm({ bank_name: bank.bank_name, account_number: bank.account_number, account_name: bank.account_name })
+    setSaveError('')
     setShowForm(true)
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
+    setSaveError('')
     const url = editBank ? `/api/bank-accounts/${editBank.id}` : '/api/bank-accounts'
     const method = editBank ? 'PUT' : 'POST'
-    await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
-    setShowForm(false)
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+    if (res.ok) {
+      setShowForm(false)
+      load()
+    } else {
+      const err = await res.json()
+      setSaveError(err.error || 'เกิดข้อผิดพลาด')
+    }
     setSaving(false)
-    load()
   }
 
   async function toggleActive(bank: BankAccount) {
-    await fetch(`/api/bank-accounts/${bank.id}`, {
+    const res = await fetch(`/api/bank-accounts/${bank.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_active: !bank.is_active }),
     })
-    load()
+    if (res.ok) load()
   }
 
   async function handleDelete(id: string) {
-    await fetch(`/api/bank-accounts/${id}`, { method: 'DELETE' })
-    setDeleteConfirm(null)
-    load()
+    setDeleting(true)
+    setDeleteError('')
+    const res = await fetch(`/api/bank-accounts/${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      setDeleteConfirm(null)
+      load()
+    } else {
+      const err = await res.json()
+      setDeleteError(err.error || 'ลบไม่สำเร็จ')
+    }
+    setDeleting(false)
   }
 
   const set = (key: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -76,6 +96,13 @@ export default function BanksPage() {
           + เพิ่มบัญชี
         </button>
       </div>
+
+      {deleteError && (
+        <div className="p-3 rounded-xl bg-red-50 text-red-700 text-sm flex justify-between">
+          <span>❌ {deleteError}</span>
+          <button onClick={() => setDeleteError('')} className="text-red-400 ml-2">✕</button>
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-3">{[1, 2].map(i => <div key={i} className="h-20 rounded-2xl bg-gray-100 animate-pulse" />)}</div>
@@ -110,11 +137,18 @@ export default function BanksPage() {
                 </button>
                 {deleteConfirm === bank.id ? (
                   <>
-                    <button onClick={() => handleDelete(bank.id)} className="flex-1 py-2 text-xs text-red-600 font-semibold border-l" style={{ borderColor: 'var(--border)' }}>ยืนยันลบ</button>
-                    <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-2 text-xs border-l" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>ยกเลิก</button>
+                    <button onClick={() => handleDelete(bank.id)} disabled={deleting}
+                      className="flex-1 py-2 text-xs text-red-600 font-semibold border-l disabled:opacity-50"
+                      style={{ borderColor: 'var(--border)' }}>
+                      {deleting ? '...' : 'ยืนยันลบ'}
+                    </button>
+                    <button onClick={() => { setDeleteConfirm(null); setDeleteError('') }}
+                      className="flex-1 py-2 text-xs border-l"
+                      style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>ยกเลิก</button>
                   </>
                 ) : (
-                  <button onClick={() => setDeleteConfirm(bank.id)} className="flex-1 py-2 text-xs text-red-500 border-l" style={{ borderColor: 'var(--border)' }}>ลบ</button>
+                  <button onClick={() => { setDeleteConfirm(bank.id); setDeleteError('') }}
+                    className="flex-1 py-2 text-xs text-red-500 border-l" style={{ borderColor: 'var(--border)' }}>ลบ</button>
                 )}
               </div>
             </div>
@@ -131,6 +165,9 @@ export default function BanksPage() {
               <button onClick={() => setShowForm(false)} className="text-gray-400 text-xl leading-none">×</button>
             </div>
             <form onSubmit={handleSubmit} className="p-4 space-y-3">
+              {saveError && (
+                <div className="p-3 rounded-xl bg-red-50 text-red-700 text-sm">❌ {saveError}</div>
+              )}
               <div>
                 <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>ธนาคาร</label>
                 <select value={form.bank_name} onChange={set('bank_name')}
