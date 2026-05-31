@@ -122,7 +122,7 @@ export default function ExpensesPage() {
   }
 
   async function loadCategories() {
-    const res = await fetch('/api/categories')
+    const res = await fetch('/api/categories?type=expense')
     setCategories(await res.json())
   }
 
