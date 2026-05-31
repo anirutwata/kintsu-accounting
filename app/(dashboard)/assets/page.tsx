@@ -86,12 +86,12 @@ export default function AssetsPage() {
     return cats
   }
 
-  async function openAdd() {
+  function openAdd() {
     setEditAsset(null)
     setSaveError('')
-    const cats = await loadCategories()
-    setForm({ ...emptyForm(), category: cats[0]?.name || '' })
+    setForm(emptyForm())
     setShowForm(true)
+    loadCategories()
   }
 
   function openEdit(asset: Asset) {
