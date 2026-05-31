@@ -78,11 +78,12 @@ export default function AssetsPage() {
   }
 
   async function loadCategories(): Promise<Category[]> {
-    const res = await fetch('/api/categories?type=asset')
+    const res = await fetch('/api/categories?type=asset&all=true', { cache: 'no-store' })
     const data = await res.json()
-    const cats = Array.isArray(data) ? data : []
-    setCategories(cats)
-    return cats
+    const cats = Array.isArray(data) ? data : (data.data ?? [])
+    const active = cats.filter((c: Category & { is_active?: boolean }) => c.is_active !== false)
+    setCategories(active)
+    return active
   }
 
   async function openAdd() {

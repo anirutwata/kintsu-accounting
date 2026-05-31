@@ -22,7 +22,16 @@ export async function GET(req: Request) {
   const startDate = `${month}-01`
   const endDate = `${month}-31`
 
-  const [{ data: expenses }, { data: sales }, { data: catRows }] = await Promise.all([
+  // assets_only mode: just return all assets (for GAS sync_assets action)
+  if (searchParams.get('assets_only') === 'true') {
+    const { data: assets } = await supabase
+      .from('assets')
+      .select('name, category, purchase_date, purchase_satang, salvage_satang, useful_life_months, description, is_active')
+      .order('purchase_date', { ascending: false })
+    return NextResponse.json({ assets: assets || [] })
+  }
+
+  const [{ data: expenses }, { data: sales }, { data: catRows }, { data: assetRows }] = await Promise.all([
     supabase
       .from('expenses')
       .select('date, transfer_time, category, amount_satang, payment_method, sender_bank, sender_account, recipient_name, note, created_by_name, created_at')
@@ -42,6 +51,10 @@ export async function GET(req: Request) {
       .select('name, category_type')
       .eq('is_active', true)
       .order('sort_order'),
+    supabase
+      .from('assets')
+      .select('name, category, purchase_date, purchase_satang, salvage_satang, useful_life_months, description, is_active')
+      .order('purchase_date', { ascending: false }),
   ])
 
   const expenseRows = (expenses || []).map(e => {
@@ -102,5 +115,16 @@ export async function GET(req: Request) {
   }
 
   const categories = (catRows || []).map(c => ({ name: c.name, type: c.category_type || 'expense' }))
-  return NextResponse.json({ month, expenses: expenseRows, sales: salesRows, categories })
+  const assetsData = (assetRows || []).map(a => ({
+    name: a.name,
+    category: a.category,
+    purchase_date: a.purchase_date,
+    purchase_amount: a.purchase_satang / 100,
+    salvage_amount: a.salvage_satang / 100,
+    useful_life_months: a.useful_life_months,
+    monthly_dep: Math.round((a.purchase_satang - a.salvage_satang) / a.useful_life_months) / 100,
+    description: a.description || '',
+    is_active: a.is_active,
+  }))
+  return NextResponse.json({ month, expenses: expenseRows, sales: salesRows, categories, assets: assetsData })
 }
