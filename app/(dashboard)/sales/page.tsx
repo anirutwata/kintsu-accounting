@@ -255,6 +255,8 @@ export default function SalesPage() {
               <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>ยอดขาย Gross (บาท)</label>
               <input type="text" inputMode="decimal" value={grabGrossStr}
                 onChange={e => setGrabGrossStr(e.target.value)}
+                onBlur={() => setGrabGrossStr(fmtMoneyVal(grabGrossStr))}
+                onFocus={() => setGrabGrossStr(grabGrossStr.replace(/,/g, ''))}
                 className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
                 style={{ borderColor: 'var(--border)' }} placeholder="0" />
             </div>
@@ -279,6 +281,8 @@ export default function SalesPage() {
                 <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>ยอดขาย (บาท)</label>
                 <input type="text" inputMode="decimal" value={takeawayStr}
                   onChange={e => setTakeawayStr(e.target.value)}
+                  onBlur={() => setTakeawayStr(fmtMoneyVal(takeawayStr))}
+                  onFocus={() => setTakeawayStr(takeawayStr.replace(/,/g, ''))}
                   className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
                   style={{ borderColor: 'var(--border)' }} placeholder="0" />
               </div>
@@ -326,6 +330,12 @@ const PAYMENT_CHANNELS = [
   { key: 'credit_card', label: 'บัตรเครดิต', icon: '💳' },
 ]
 
+function fmtMoneyVal(val: string): string {
+  const num = parseFloat(val.replace(/,/g, ''))
+  if (!val || isNaN(num)) return val
+  return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 function POSSection({ title, logo, accentColor, form, onChange }: {
   title: string
   logo: string
@@ -335,6 +345,12 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
 }) {
   const set = (key: keyof POSForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
     onChange({ ...form, [key]: e.target.value })
+
+  const fmt = (key: keyof POSForm) => () =>
+    onChange({ ...form, [key]: fmtMoneyVal(form[key]) })
+
+  const strip = (key: keyof POSForm) => () =>
+    onChange({ ...form, [key]: form[key].replace(/,/g, '') })
 
   return (
     <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
@@ -351,7 +367,7 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
         {/* Revenue */}
         <div>
           <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>ยอดขาย (บาท)</label>
-          <input type="text" inputMode="decimal" value={form.revenue} onChange={set('revenue')}
+          <input type="text" inputMode="decimal" value={form.revenue} onChange={set('revenue')} onBlur={fmt('revenue')} onFocus={strip('revenue')}
             className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
             style={{ borderColor: 'var(--border)' }} placeholder="0" />
         </div>
@@ -369,25 +385,25 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ยอดขายก่อน VAT</label>
-              <input type="text" inputMode="decimal" value={form.sales_before_vat} onChange={set('sales_before_vat')}
+              <input type="text" inputMode="decimal" value={form.sales_before_vat} onChange={set('sales_before_vat')} onBlur={fmt('sales_before_vat')} onFocus={strip('sales_before_vat')}
                 className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm"
                 style={{ borderColor: 'var(--border)' }} placeholder="0" />
             </div>
             <div>
               <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>VAT 7%</label>
-              <input type="text" inputMode="decimal" value={form.vat_amount} onChange={set('vat_amount')}
+              <input type="text" inputMode="decimal" value={form.vat_amount} onChange={set('vat_amount')} onBlur={fmt('vat_amount')} onFocus={strip('vat_amount')}
                 className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm"
                 style={{ borderColor: 'var(--border)' }} placeholder="0" />
             </div>
             <div>
               <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ยอดปัดเศษ (ขึ้น)</label>
-              <input type="text" inputMode="decimal" value={form.rounding} onChange={set('rounding')}
+              <input type="text" inputMode="decimal" value={form.rounding} onChange={set('rounding')} onBlur={fmt('rounding')} onFocus={strip('rounding')}
                 className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm"
                 style={{ borderColor: 'var(--border)' }} placeholder="0" />
             </div>
             <div>
               <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ยอดส่วนลด (ติดลบ)</label>
-              <input type="text" inputMode="decimal" value={form.discount} onChange={set('discount')}
+              <input type="text" inputMode="decimal" value={form.discount} onChange={set('discount')} onBlur={fmt('discount')} onFocus={strip('discount')}
                 className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm text-red-600"
                 style={{ borderColor: 'var(--border)' }} placeholder="0" />
             </div>
@@ -401,7 +417,7 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
             {PAYMENT_CHANNELS.map(({ key, label, icon }) => (
               <div key={key}>
                 <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{icon} {label}</label>
-                <input type="text" inputMode="decimal" value={form[key as keyof POSForm]} onChange={set(key as keyof POSForm)}
+                <input type="text" inputMode="decimal" value={form[key as keyof POSForm]} onChange={set(key as keyof POSForm)} onBlur={fmt(key as keyof POSForm)} onFocus={strip(key as keyof POSForm)}
                   className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm"
                   style={{ borderColor: 'var(--border)' }} placeholder="0" />
               </div>

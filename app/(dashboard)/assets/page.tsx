@@ -476,12 +476,16 @@ export default function AssetsPage() {
                   <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>ราคาทุน (บาท)</label>
                   <input type="text" inputMode="decimal" value={form.purchase_amount}
                     onChange={e => setForm(f => ({ ...f, purchase_amount: e.target.value }))}
+                    onBlur={() => { const n = parseFloat(form.purchase_amount.replace(/,/g, '')); if (!isNaN(n)) setForm(f => ({ ...f, purchase_amount: n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })) }}
+                    onFocus={() => setForm(f => ({ ...f, purchase_amount: f.purchase_amount.replace(/,/g, '') }))}
                     required className="w-full border rounded-xl px-3 py-2 text-sm text-right" style={{ borderColor: 'var(--border)' }} placeholder="0" />
                 </div>
                 <div>
                   <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>มูลค่าซาก (บาท)</label>
                   <input type="text" inputMode="decimal" value={form.salvage_amount}
                     onChange={e => setForm(f => ({ ...f, salvage_amount: e.target.value }))}
+                    onBlur={() => { const n = parseFloat(form.salvage_amount.replace(/,/g, '')); if (!isNaN(n)) setForm(f => ({ ...f, salvage_amount: n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })) }}
+                    onFocus={() => setForm(f => ({ ...f, salvage_amount: f.salvage_amount.replace(/,/g, '') }))}
                     className="w-full border rounded-xl px-3 py-2 text-sm text-right" style={{ borderColor: 'var(--border)' }} placeholder="0" />
                 </div>
               </div>
