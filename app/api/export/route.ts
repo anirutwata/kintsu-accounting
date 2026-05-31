@@ -28,7 +28,18 @@ export async function GET(req: Request) {
       .from('assets')
       .select('name, category, purchase_date, purchase_satang, salvage_satang, useful_life_months, description, is_active')
       .order('purchase_date', { ascending: false })
-    return NextResponse.json({ assets: assets || [] })
+    const assetsData = (assets || []).map(a => ({
+      name: a.name,
+      category: a.category,
+      purchase_date: a.purchase_date,
+      purchase_amount: a.purchase_satang / 100,
+      salvage_amount: a.salvage_satang / 100,
+      useful_life_months: a.useful_life_months,
+      monthly_dep: Math.round((a.purchase_satang - a.salvage_satang) / a.useful_life_months) / 100,
+      description: a.description || '',
+      is_active: a.is_active,
+    }))
+    return NextResponse.json({ assets: assetsData })
   }
 
   const [{ data: expenses }, { data: sales }, { data: catRows }, { data: assetRows }] = await Promise.all([
