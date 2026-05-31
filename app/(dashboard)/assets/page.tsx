@@ -419,19 +419,20 @@ export default function AssetsPage() {
                       </button>
                     </div>
                   ) : null}
-                  <button type="button"
-                    onClick={() => slipRef.current?.click()}
-                    disabled={ocring}
-                    className="flex-1 flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-3 text-sm disabled:opacity-50"
-                    style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
-                    {ocring ? (
-                      <><span className="animate-spin">⏳</span> กำลังอ่าน AI...</>
-                    ) : (
-                      <>📷 {form.slip_preview ? 'เปลี่ยนรูป' : 'ถ่ายรูป / อัปโหลด'}</>
-                    )}
-                  </button>
-                  <input ref={slipRef} type="file" accept="image/*" className="hidden"
-                    onChange={e => e.target.files?.[0] && handleSlipUpload(e.target.files[0])} />
+                  <div className="relative flex-1">
+                    <div className="flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-3 text-sm pointer-events-none"
+                      style={{ borderColor: ocring ? 'var(--flame-red)' : 'var(--border)', color: 'var(--muted-foreground)', opacity: ocring ? 0.6 : 1 }}>
+                      {ocring ? (
+                        <><span className="animate-spin">⏳</span> กำลังอ่าน AI...</>
+                      ) : (
+                        <>📷 {form.slip_preview ? 'เปลี่ยนรูป' : 'ถ่ายรูป / อัปโหลด'}</>
+                      )}
+                    </div>
+                    <input ref={slipRef} type="file" accept="image/*"
+                      className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                      disabled={ocring}
+                      onChange={e => e.target.files?.[0] && handleSlipUpload(e.target.files[0])} />
+                  </div>
                 </div>
                 {ocring && (
                   <p className="text-xs" style={{ color: 'var(--flame-red)' }}>AI กำลังอ่านข้อมูลจากรูป...</p>
@@ -551,19 +552,20 @@ export default function AssetsPage() {
                     ))}
                   </div>
                 )}
-                <button type="button"
-                  onClick={() => receiptRef.current?.click()}
-                  disabled={uploadingReceipt}
-                  className="w-full flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-3 text-sm disabled:opacity-50"
-                  style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
-                  {uploadingReceipt ? (
-                    <><span className="animate-spin">⏳</span> กำลังอัปโหลด...</>
-                  ) : (
-                    <>🧾 แนบใบเสร็จ / เอกสาร</>
-                  )}
-                </button>
-                <input ref={receiptRef} type="file" accept="image/*" multiple className="hidden"
-                  onChange={e => e.target.files && handleReceiptUpload(e.target.files)} />
+                <div className="relative w-full">
+                  <div className="flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-3 text-sm pointer-events-none"
+                    style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)', opacity: uploadingReceipt ? 0.6 : 1 }}>
+                    {uploadingReceipt ? (
+                      <><span className="animate-spin">⏳</span> กำลังอัปโหลด...</>
+                    ) : (
+                      <>🧾 แนบใบเสร็จ / เอกสาร</>
+                    )}
+                  </div>
+                  <input ref={receiptRef} type="file" accept="image/*" multiple
+                    className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                    disabled={uploadingReceipt}
+                    onChange={e => e.target.files && handleReceiptUpload(e.target.files)} />
+                </div>
               </div>
 
               <button type="submit" disabled={saving}
