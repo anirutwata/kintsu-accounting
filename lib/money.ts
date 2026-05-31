@@ -4,6 +4,17 @@
 export const toSatang = (baht: number): number => Math.round(baht * 100)
 export const toBaht = (satang: number): number => satang / 100
 
+// Format a satang value as plain number with commas for input fields (no currency symbol)
+// e.g. 100050 → "1,000.50"
+export function fmtInput(satang: number): string {
+  return (satang / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// Strip commas before parseFloat
+export function parseInput(val: string): number {
+  return parseFloat(val.replace(/,/g, '')) || 0
+}
+
 export function formatBaht(satang: number): string {
   return new Intl.NumberFormat('th-TH', {
     style: 'currency',

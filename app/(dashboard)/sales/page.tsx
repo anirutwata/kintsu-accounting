@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { formatBaht, toSatang, calcGrabNet } from '@/lib/money'
+import { formatBaht, toSatang, calcGrabNet, fmtInput, parseInput } from '@/lib/money'
 import { getTodayBKK } from '@/lib/utils'
 import type { DailySales } from '@/types'
 
@@ -58,33 +58,33 @@ export default function SalesPage() {
       const s = data[0] as DailySales
       setExisting(s)
       setFoodstory({
-        revenue: s.dine_in_revenue_satang ? String(s.dine_in_revenue_satang / 100) : '',
+        revenue: s.dine_in_revenue_satang ? fmtInput(s.dine_in_revenue_satang) : '',
         covers: s.dine_in_covers ? String(s.dine_in_covers) : '',
         bills: s.dine_in_bills ? String(s.dine_in_bills) : '',
-        sales_before_vat: s.sales_before_vat_satang ? String(s.sales_before_vat_satang / 100) : '',
-        vat_amount: s.vat_amount_satang ? String(s.vat_amount_satang / 100) : '',
-        rounding: s.rounding_satang ? String(s.rounding_satang / 100) : '',
-        discount: s.discount_satang ? String(s.discount_satang / 100) : '',
-        cash: s.cash_satang ? String(s.cash_satang / 100) : '',
-        promptpay: s.promptpay_satang ? String(s.promptpay_satang / 100) : '',
-        company_transfer: s.company_transfer_satang ? String(s.company_transfer_satang / 100) : '',
-        credit_card: s.credit_card_satang ? String(s.credit_card_satang / 100) : '',
+        sales_before_vat: s.sales_before_vat_satang ? fmtInput(s.sales_before_vat_satang) : '',
+        vat_amount: s.vat_amount_satang ? fmtInput(s.vat_amount_satang) : '',
+        rounding: s.rounding_satang ? fmtInput(s.rounding_satang) : '',
+        discount: s.discount_satang ? fmtInput(s.discount_satang) : '',
+        cash: s.cash_satang ? fmtInput(s.cash_satang) : '',
+        promptpay: s.promptpay_satang ? fmtInput(s.promptpay_satang) : '',
+        company_transfer: s.company_transfer_satang ? fmtInput(s.company_transfer_satang) : '',
+        credit_card: s.credit_card_satang ? fmtInput(s.credit_card_satang) : '',
       })
       setPapaya({
-        revenue: s.papaya_revenue_satang ? String(s.papaya_revenue_satang / 100) : '',
+        revenue: s.papaya_revenue_satang ? fmtInput(s.papaya_revenue_satang) : '',
         covers: s.papaya_covers ? String(s.papaya_covers) : '',
         bills: s.papaya_bills ? String(s.papaya_bills) : '',
-        sales_before_vat: s.papaya_sales_before_vat_satang ? String(s.papaya_sales_before_vat_satang / 100) : '',
-        vat_amount: s.papaya_vat_satang ? String(s.papaya_vat_satang / 100) : '',
-        rounding: s.papaya_rounding_satang ? String(s.papaya_rounding_satang / 100) : '',
-        discount: s.papaya_discount_satang ? String(s.papaya_discount_satang / 100) : '',
-        cash: s.papaya_cash_satang ? String(s.papaya_cash_satang / 100) : '',
-        promptpay: s.papaya_promptpay_satang ? String(s.papaya_promptpay_satang / 100) : '',
-        company_transfer: s.papaya_company_transfer_satang ? String(s.papaya_company_transfer_satang / 100) : '',
-        credit_card: s.papaya_credit_card_satang ? String(s.papaya_credit_card_satang / 100) : '',
+        sales_before_vat: s.papaya_sales_before_vat_satang ? fmtInput(s.papaya_sales_before_vat_satang) : '',
+        vat_amount: s.papaya_vat_satang ? fmtInput(s.papaya_vat_satang) : '',
+        rounding: s.papaya_rounding_satang ? fmtInput(s.papaya_rounding_satang) : '',
+        discount: s.papaya_discount_satang ? fmtInput(s.papaya_discount_satang) : '',
+        cash: s.papaya_cash_satang ? fmtInput(s.papaya_cash_satang) : '',
+        promptpay: s.papaya_promptpay_satang ? fmtInput(s.papaya_promptpay_satang) : '',
+        company_transfer: s.papaya_company_transfer_satang ? fmtInput(s.papaya_company_transfer_satang) : '',
+        credit_card: s.papaya_credit_card_satang ? fmtInput(s.papaya_credit_card_satang) : '',
       })
-      setGrabGrossStr(s.grabfood_gross_satang ? String(s.grabfood_gross_satang / 100) : '')
-      setTakeawayStr(s.takeaway_revenue_satang ? String(s.takeaway_revenue_satang / 100) : '')
+      setGrabGrossStr(s.grabfood_gross_satang ? fmtInput(s.grabfood_gross_satang) : '')
+      setTakeawayStr(s.takeaway_revenue_satang ? fmtInput(s.takeaway_revenue_satang) : '')
       setTakeawayOrders(s.takeaway_orders ? String(s.takeaway_orders) : '')
     } else {
       setExisting(null)
@@ -97,10 +97,10 @@ export default function SalesPage() {
     setSaved(false)
   }
 
-  const foodstoryRev = toSatang(parseFloat(foodstory.revenue) || 0)
-  const papayaRev = toSatang(parseFloat(papaya.revenue) || 0)
-  const grabGross = toSatang(parseFloat(grabGrossStr) || 0)
-  const takeawayRev = toSatang(parseFloat(takeawayStr) || 0)
+  const foodstoryRev = toSatang(parseInput(foodstory.revenue))
+  const papayaRev = toSatang(parseInput(papaya.revenue))
+  const grabGross = toSatang(parseInput(grabGrossStr))
+  const takeawayRev = toSatang(parseInput(takeawayStr))
   const { gpFeeSatang, netSatang: grabNet } = calcGrabNet(grabGross)
   const totalNet = foodstoryRev + papayaRev + grabNet + takeawayRev
 
@@ -132,27 +132,27 @@ export default function SalesPage() {
             revenue_satang: foodstoryRev,
             covers: parseInt(foodstory.covers) || 0,
             bills: parseInt(foodstory.bills) || 0,
-            sales_before_vat_satang: toSatang(parseFloat(foodstory.sales_before_vat) || 0),
-            vat_satang: toSatang(parseFloat(foodstory.vat_amount) || 0),
-            rounding_satang: toSatang(parseFloat(foodstory.rounding) || 0),
-            discount_satang: toSatang(parseFloat(foodstory.discount) || 0),
-            cash_satang: toSatang(parseFloat(foodstory.cash) || 0),
-            promptpay_satang: toSatang(parseFloat(foodstory.promptpay) || 0),
-            company_transfer_satang: toSatang(parseFloat(foodstory.company_transfer) || 0),
-            credit_card_satang: toSatang(parseFloat(foodstory.credit_card) || 0),
+            sales_before_vat_satang: toSatang(parseInput(foodstory.sales_before_vat)),
+            vat_satang: toSatang(parseInput(foodstory.vat_amount)),
+            rounding_satang: toSatang(parseInput(foodstory.rounding)),
+            discount_satang: toSatang(parseInput(foodstory.discount)),
+            cash_satang: toSatang(parseInput(foodstory.cash)),
+            promptpay_satang: toSatang(parseInput(foodstory.promptpay)),
+            company_transfer_satang: toSatang(parseInput(foodstory.company_transfer)),
+            credit_card_satang: toSatang(parseInput(foodstory.credit_card)),
           },
           papaya: {
             revenue_satang: papayaRev,
             covers: parseInt(papaya.covers) || 0,
             bills: parseInt(papaya.bills) || 0,
-            sales_before_vat_satang: toSatang(parseFloat(papaya.sales_before_vat) || 0),
-            vat_satang: toSatang(parseFloat(papaya.vat_amount) || 0),
-            rounding_satang: toSatang(parseFloat(papaya.rounding) || 0),
-            discount_satang: toSatang(parseFloat(papaya.discount) || 0),
-            cash_satang: toSatang(parseFloat(papaya.cash) || 0),
-            promptpay_satang: toSatang(parseFloat(papaya.promptpay) || 0),
-            company_transfer_satang: toSatang(parseFloat(papaya.company_transfer) || 0),
-            credit_card_satang: toSatang(parseFloat(papaya.credit_card) || 0),
+            sales_before_vat_satang: toSatang(parseInput(papaya.sales_before_vat)),
+            vat_satang: toSatang(parseInput(papaya.vat_amount)),
+            rounding_satang: toSatang(parseInput(papaya.rounding)),
+            discount_satang: toSatang(parseInput(papaya.discount)),
+            cash_satang: toSatang(parseInput(papaya.cash)),
+            promptpay_satang: toSatang(parseInput(papaya.promptpay)),
+            company_transfer_satang: toSatang(parseInput(papaya.company_transfer)),
+            credit_card_satang: toSatang(parseInput(papaya.credit_card)),
           },
           grabfood: { gross_satang: grabGross, orders: 0, vat_satang: 0 },
           takeaway: { revenue_satang: takeawayRev, orders: parseInt(takeawayOrders) || 0, vat_satang: 0 },
@@ -253,7 +253,7 @@ export default function SalesPage() {
           <div className="p-4">
             <div>
               <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>ยอดขาย Gross (บาท)</label>
-              <input type="number" step="1" min="0" value={grabGrossStr}
+              <input type="text" inputMode="decimal" value={grabGrossStr}
                 onChange={e => setGrabGrossStr(e.target.value)}
                 className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
                 style={{ borderColor: 'var(--border)' }} placeholder="0" />
@@ -277,7 +277,7 @@ export default function SalesPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>ยอดขาย (บาท)</label>
-                <input type="number" step="1" min="0" value={takeawayStr}
+                <input type="text" inputMode="decimal" value={takeawayStr}
                   onChange={e => setTakeawayStr(e.target.value)}
                   className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
                   style={{ borderColor: 'var(--border)' }} placeholder="0" />
@@ -351,7 +351,7 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
         {/* Revenue */}
         <div>
           <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>ยอดขาย (บาท)</label>
-          <input type="number" step="1" min="0" value={form.revenue} onChange={set('revenue')}
+          <input type="text" inputMode="decimal" value={form.revenue} onChange={set('revenue')}
             className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1"
             style={{ borderColor: 'var(--border)' }} placeholder="0" />
         </div>
@@ -369,25 +369,25 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ยอดขายก่อน VAT</label>
-              <input type="number" step="0.01" min="0" value={form.sales_before_vat} onChange={set('sales_before_vat')}
+              <input type="text" inputMode="decimal" value={form.sales_before_vat} onChange={set('sales_before_vat')}
                 className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm"
                 style={{ borderColor: 'var(--border)' }} placeholder="0" />
             </div>
             <div>
               <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>VAT 7%</label>
-              <input type="number" step="0.01" min="0" value={form.vat_amount} onChange={set('vat_amount')}
+              <input type="text" inputMode="decimal" value={form.vat_amount} onChange={set('vat_amount')}
                 className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm"
                 style={{ borderColor: 'var(--border)' }} placeholder="0" />
             </div>
             <div>
               <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ยอดปัดเศษ (ขึ้น)</label>
-              <input type="number" step="0.01" value={form.rounding} onChange={set('rounding')}
+              <input type="text" inputMode="decimal" value={form.rounding} onChange={set('rounding')}
                 className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm"
                 style={{ borderColor: 'var(--border)' }} placeholder="0" />
             </div>
             <div>
               <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ยอดส่วนลด (ติดลบ)</label>
-              <input type="number" step="0.01" max="0" value={form.discount} onChange={set('discount')}
+              <input type="text" inputMode="decimal" value={form.discount} onChange={set('discount')}
                 className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm text-red-600"
                 style={{ borderColor: 'var(--border)' }} placeholder="0" />
             </div>
@@ -401,7 +401,7 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
             {PAYMENT_CHANNELS.map(({ key, label, icon }) => (
               <div key={key}>
                 <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{icon} {label}</label>
-                <input type="number" step="1" min="0" value={form[key as keyof POSForm]} onChange={set(key as keyof POSForm)}
+                <input type="text" inputMode="decimal" value={form[key as keyof POSForm]} onChange={set(key as keyof POSForm)}
                   className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm"
                   style={{ borderColor: 'var(--border)' }} placeholder="0" />
               </div>

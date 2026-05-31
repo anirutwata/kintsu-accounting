@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { formatBaht, toSatang } from '@/lib/money'
+import { formatBaht, toSatang, fmtInput, parseInput } from '@/lib/money'
 import type { Asset } from '@/types'
 
 interface Category { id: string; name: string }
@@ -101,8 +101,8 @@ export default function AssetsPage() {
       name: asset.name,
       category: asset.category,
       purchase_date: asset.purchase_date,
-      purchase_amount: String(asset.purchase_satang / 100),
-      salvage_amount: String(asset.salvage_satang / 100),
+      purchase_amount: fmtInput(asset.purchase_satang),
+      salvage_amount: fmtInput(asset.salvage_satang),
       useful_life_months: String(asset.useful_life_months),
       description: asset.description || '',
       slip_image_url: (asset as any).slip_image_url || '',
@@ -126,7 +126,7 @@ export default function AssetsPage() {
         ...f,
         name: data.name && !f.name ? data.name : f.name,
         purchase_amount: data.amount_satang && !f.purchase_amount
-          ? String(data.amount_satang / 100)
+          ? fmtInput(data.amount_satang)
           : f.purchase_amount,
         purchase_date: data.date || f.purchase_date,
         description: data.description && !f.description
@@ -177,8 +177,8 @@ export default function AssetsPage() {
       name: form.name.trim(),
       category: form.category,
       purchase_date: form.purchase_date,
-      purchase_satang: toSatang(parseFloat(form.purchase_amount) || 0),
-      salvage_satang: toSatang(parseFloat(form.salvage_amount) || 0),
+      purchase_satang: toSatang(parseInput(form.purchase_amount)),
+      salvage_satang: toSatang(parseInput(form.salvage_amount)),
       useful_life_months: parseInt(form.useful_life_months) || 60,
       description: form.description.trim() || null,
       slip_image_url: form.slip_image_url || null,
@@ -474,13 +474,13 @@ export default function AssetsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>ราคาทุน (บาท)</label>
-                  <input type="number" min="0" step="1" value={form.purchase_amount}
+                  <input type="text" inputMode="decimal" value={form.purchase_amount}
                     onChange={e => setForm(f => ({ ...f, purchase_amount: e.target.value }))}
                     required className="w-full border rounded-xl px-3 py-2 text-sm text-right" style={{ borderColor: 'var(--border)' }} placeholder="0" />
                 </div>
                 <div>
                   <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>มูลค่าซาก (บาท)</label>
-                  <input type="number" min="0" step="1" value={form.salvage_amount}
+                  <input type="text" inputMode="decimal" value={form.salvage_amount}
                     onChange={e => setForm(f => ({ ...f, salvage_amount: e.target.value }))}
                     className="w-full border rounded-xl px-3 py-2 text-sm text-right" style={{ borderColor: 'var(--border)' }} placeholder="0" />
                 </div>
@@ -504,8 +504,8 @@ export default function AssetsPage() {
                 <div className="p-3 rounded-xl text-sm space-y-1" style={{ background: 'var(--muted)' }}>
                   <p className="text-xs font-semibold" style={{ color: 'var(--charcoal)' }}>ตัวอย่างค่าเสื่อมราคา</p>
                   {(() => {
-                    const cost = toSatang(parseFloat(form.purchase_amount) || 0)
-                    const salvage = toSatang(parseFloat(form.salvage_amount) || 0)
+                    const cost = toSatang(parseInput(form.purchase_amount))
+                    const salvage = toSatang(parseInput(form.salvage_amount))
                     const months = parseInt(form.useful_life_months) || 60
                     const monthly = Math.round((cost - salvage) / months)
                     return (

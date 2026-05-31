@@ -103,5 +103,15 @@ export async function POST(req: Request) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  const gasUrl = process.env.GAS_WEBHOOK_URL
+  if (gasUrl) {
+    fetch(gasUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ month: date.substring(0, 7) }),
+    }).catch(() => {})
+  }
+
   return NextResponse.json(data)
 }
