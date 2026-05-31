@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { sendTelegram, buildAssetMessage, buildAssetDeleteMessage } from '@/lib/telegram'
 
 function triggerGasSync() {
   const gasUrl = process.env.GAS_WEBHOOK_URL
@@ -20,6 +21,16 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   triggerGasSync()
+  // Only notify for full edits (not just is_active toggle)
+  if (body.name) {
+    sendTelegram(buildAssetMessage({
+      name: data.name,
+      category: data.category,
+      purchaseSatang: data.purchase_satang,
+      usefulLifeMonths: data.useful_life_months,
+      isUpdate: true,
+    }))
+  }
   return NextResponse.json(data)
 }
 
@@ -27,8 +38,10 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const supabase = await createClient()
   const { id } = await params
 
+  const { data: asset } = await supabase.from('assets').select('name').eq('id', id).single()
   const { error } = await supabase.from('assets').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   triggerGasSync()
+  if (asset?.name) sendTelegram(buildAssetDeleteMessage(asset.name))
   return NextResponse.json({ ok: true })
 }

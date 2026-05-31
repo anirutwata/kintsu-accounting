@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { sendTelegram, buildAssetMessage } from '@/lib/telegram'
 
 function triggerGasSync() {
   const gasUrl = process.env.GAS_WEBHOOK_URL
@@ -43,5 +44,12 @@ export async function POST(req: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   triggerGasSync()
+  sendTelegram(buildAssetMessage({
+    name: data.name,
+    category: data.category,
+    purchaseSatang: data.purchase_satang,
+    usefulLifeMonths: data.useful_life_months,
+    isUpdate: false,
+  }))
   return NextResponse.json(data)
 }

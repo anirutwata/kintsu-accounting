@@ -78,6 +78,59 @@ ${lines}
 🕐 ${thaiNow()}`
 }
 
+// Sales saved / updated
+export function buildSalesMessage(data: {
+  date: string
+  isUpdate: boolean
+  totalNetSatang: number
+  foodstoryRev: number
+  papayaRev: number
+  grabNetSatang: number
+  takeawayRev: number
+}) {
+  const parts: string[] = []
+  if (data.foodstoryRev > 0) parts.push(`• Foodstory: ${fmtBaht(data.foodstoryRev)}`)
+  if (data.papayaRev > 0) parts.push(`• Papaya: ${fmtBaht(data.papayaRev)}`)
+  if (data.grabNetSatang > 0) parts.push(`• GrabFood (net): ${fmtBaht(data.grabNetSatang)}`)
+  if (data.takeawayRev > 0) parts.push(`• Takeaway: ${fmtBaht(data.takeawayRev)}`)
+  const action = data.isUpdate ? '🔄 อัปเดตรายรับ' : '💰 บันทึกรายรับ'
+  return `${action}
+📅 ${data.date}
+${parts.length ? parts.join('\n') + '\n' : ''}💵 รวมสุทธิ: <b>${fmtBaht(data.totalNetSatang)}</b>
+🕐 ${thaiNow()}`
+}
+
+// Sales deleted
+export function buildSalesDeleteMessage(date: string) {
+  return `🗑️ <b>ลบรายรับ</b>
+📅 ${date}
+🕐 ${thaiNow()}`
+}
+
+// Asset added / updated
+export function buildAssetMessage(data: {
+  name: string
+  category: string
+  purchaseSatang: number
+  usefulLifeMonths: number
+  isUpdate: boolean
+}) {
+  const dep = Math.round(data.purchaseSatang / data.usefulLifeMonths)
+  const action = data.isUpdate ? '🔄 แก้ไขสินทรัพย์' : '🏗️ เพิ่มสินทรัพย์'
+  return `${action}
+📦 <b>${data.name}</b> (${data.category})
+💰 ราคาทุน: ${fmtBaht(data.purchaseSatang)}
+📉 เสื่อม/เดือน: ${fmtBaht(dep)} × ${data.usefulLifeMonths} เดือน
+🕐 ${thaiNow()}`
+}
+
+// Asset deleted
+export function buildAssetDeleteMessage(name: string) {
+  return `🗑️ <b>ลบสินทรัพย์</b>
+📦 ${name}
+🕐 ${thaiNow()}`
+}
+
 // Expense recorded with slip
 export function buildExpenseMessage(data: {
   category: string

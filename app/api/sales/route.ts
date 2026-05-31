@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { calcGrabNet } from '@/lib/money'
+import { sendTelegram, buildSalesMessage } from '@/lib/telegram'
 
 export async function GET(req: Request) {
   const supabase = await createClient()
@@ -31,6 +32,10 @@ export async function POST(req: Request) {
   const { date, foodstory, papaya, grabfood, takeaway } = body
 
   if (!date) return NextResponse.json({ error: 'กรุณาระบุวันที่' }, { status: 400 })
+
+  // Check if record exists (for update vs new notification)
+  const { data: existing } = await supabase.from('daily_sales').select('id').eq('id', date).maybeSingle()
+  const isUpdate = !!existing
 
   // Fetch current GP rate from settings
   const { data: settings } = await supabase.from('settings').select('grabfood_gp_bps').eq('id', 1).single()
@@ -112,6 +117,16 @@ export async function POST(req: Request) {
       body: JSON.stringify({ month: date.substring(0, 7) }),
     }).catch(() => {})
   }
+
+  sendTelegram(buildSalesMessage({
+    date,
+    isUpdate,
+    totalNetSatang: totalNet,
+    foodstoryRev,
+    papayaRev,
+    grabNetSatang: grabNet,
+    takeawayRev,
+  }))
 
   return NextResponse.json(data)
 }
