@@ -41,7 +41,7 @@ interface FormState {
 
 function emptyForm(): FormState {
   return {
-    name: '', category: ASSET_CATEGORIES[0].name,
+    name: '', category: '',
     purchase_date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }),
     purchase_amount: '', salvage_amount: '0', useful_life_months: '60', description: '',
     slip_image_url: '', slip_preview: '',
