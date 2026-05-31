@@ -77,16 +77,19 @@ export default function AssetsPage() {
     setLoading(false)
   }
 
-  async function loadCategories() {
+  async function loadCategories(): Promise<Category[]> {
     const res = await fetch('/api/categories?type=asset')
     const data = await res.json()
-    setCategories(Array.isArray(data) ? data : [])
+    const cats = Array.isArray(data) ? data : []
+    setCategories(cats)
+    return cats
   }
 
-  function openAdd() {
+  async function openAdd() {
     setEditAsset(null)
-    setForm({ ...emptyForm(), category: categories[0]?.name || '' })
     setSaveError('')
+    const cats = await loadCategories()
+    setForm({ ...emptyForm(), category: cats[0]?.name || '' })
     setShowForm(true)
   }
 
