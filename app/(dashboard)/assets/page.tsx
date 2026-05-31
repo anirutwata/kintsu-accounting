@@ -1,15 +1,10 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import Link from 'next/link'
 import { formatBaht, toSatang } from '@/lib/money'
 import type { Asset } from '@/types'
 
-const ASSET_CATEGORIES = [
-  { name: 'ส่วนต่อเติมอาคาร', defaultMonths: 180 },
-  { name: 'อุปกรณ์ครัว', defaultMonths: 84 },
-  { name: 'อุปกรณ์ทั่วไปในร้านอาหาร', defaultMonths: 60 },
-  { name: 'ระบบ', defaultMonths: 48 },
-  { name: 'สินทรัพย์อื่นๆ', defaultMonths: 60 },
-]
+interface Category { id: string; name: string }
 
 function monthlyDep(asset: Asset) {
   return Math.round((asset.purchase_satang - asset.salvage_satang) / asset.useful_life_months)
@@ -56,6 +51,7 @@ function emptyForm(): FormState {
 
 export default function AssetsPage() {
   const [assets, setAssets] = useState<Asset[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editAsset, setEditAsset] = useState<Asset | null>(null)
@@ -72,7 +68,7 @@ export default function AssetsPage() {
   const slipRef = useRef<HTMLInputElement>(null)
   const receiptRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load(); loadCategories() }, [])
 
   async function load() {
     setLoading(true)
@@ -81,9 +77,15 @@ export default function AssetsPage() {
     setLoading(false)
   }
 
+  async function loadCategories() {
+    const res = await fetch('/api/categories?type=asset')
+    const data = await res.json()
+    setCategories(Array.isArray(data) ? data : [])
+  }
+
   function openAdd() {
     setEditAsset(null)
-    setForm(emptyForm())
+    setForm({ ...emptyForm(), category: categories[0]?.name || '' })
     setSaveError('')
     setShowForm(true)
   }
@@ -105,11 +107,6 @@ export default function AssetsPage() {
       receipt_previews: (asset as any).receipt_image_urls || [],
     })
     setShowForm(true)
-  }
-
-  function handleCategoryChange(cat: string) {
-    const def = ASSET_CATEGORIES.find(c => c.name === cat)
-    setForm(f => ({ ...f, category: cat, useful_life_months: String(def?.defaultMonths || 60) }))
   }
 
   async function handleSlipUpload(file: File) {
@@ -430,7 +427,7 @@ export default function AssetsPage() {
                       <>📷 {form.slip_preview ? 'เปลี่ยนรูป' : 'ถ่ายรูป / อัปโหลด'}</>
                     )}
                   </button>
-                  <input ref={slipRef} type="file" accept="image/*" capture="environment" className="hidden"
+                  <input ref={slipRef} type="file" accept="image/*" className="hidden"
                     onChange={e => e.target.files?.[0] && handleSlipUpload(e.target.files[0])} />
                 </div>
                 {ocring && (
@@ -448,10 +445,16 @@ export default function AssetsPage() {
 
               {/* Category */}
               <div>
-                <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>หมวดหมู่</label>
-                <select value={form.category} onChange={e => handleCategoryChange(e.target.value)}
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>หมวดหมู่</label>
+                  <Link href="/settings/categories?type=asset" className="text-xs" style={{ color: 'var(--flame-red)' }}>
+                    + จัดการหมวดหมู่
+                  </Link>
+                </div>
+                <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
                   className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)', background: 'white' }}>
-                  {ASSET_CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                  {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  {categories.length === 0 && <option value="">-- ยังไม่มีหมวดหมู่ --</option>}
                 </select>
               </div>
 
