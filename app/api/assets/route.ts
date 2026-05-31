@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+function triggerGasSync() {
+  const gasUrl = process.env.GAS_WEBHOOK_URL
+  if (gasUrl) fetch(gasUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'sync_assets' }) }).catch(() => {})
+}
+
 export async function GET() {
   const supabase = await createClient()
   const { data, error } = await supabase
@@ -14,7 +19,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const supabase = await createClient()
   const body = await req.json()
-  const { name, category, purchase_date, purchase_satang, salvage_satang, useful_life_months, description } = body
+  const { name, category, purchase_date, purchase_satang, salvage_satang, useful_life_months, description, slip_image_url, receipt_image_urls } = body
 
   if (!name?.trim() || !category || !purchase_date || !purchase_satang) {
     return NextResponse.json({ error: 'กรุณากรอกข้อมูลให้ครบ' }, { status: 400 })
@@ -30,10 +35,13 @@ export async function POST(req: Request) {
       salvage_satang: Math.round(salvage_satang || 0),
       useful_life_months: Math.round(useful_life_months || 60),
       description: description?.trim() || null,
+      slip_image_url: slip_image_url || null,
+      receipt_image_urls: receipt_image_urls || [],
     })
     .select()
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  triggerGasSync()
   return NextResponse.json(data)
 }
