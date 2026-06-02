@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
+import { sendTelegram } from '@/lib/telegram'
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -53,6 +54,11 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Telegram notification
+  if (data) {
+    sendTelegram(`🗑️ <b>ลบรายจ่าย</b>\n📁 ${data.category}${data.note ? ` — ${data.note}` : ''}\n💰 ฿${(data.amount_satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2 })}\n📅 ${data.date}`)
+  }
 
   // Trigger GAS re-sync (non-blocking)
   const gasUrl = process.env.GAS_WEBHOOK_URL
