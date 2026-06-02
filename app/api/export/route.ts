@@ -20,7 +20,8 @@ export async function GET(req: Request) {
 
   const supabase = await createClient()
   const startDate = `${month}-01`
-  const endDate = `${month}-31`
+  const [ey, em] = month.split('-').map(Number)
+  const endDate = `${month}-${String(new Date(ey, em, 0).getDate()).padStart(2, '0')}`
 
   // assets_only mode: just return all assets (for GAS sync_assets action)
   if (searchParams.get('assets_only') === 'true') {

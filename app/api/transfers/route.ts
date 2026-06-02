@@ -13,7 +13,11 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const month = searchParams.get('month')
   let query = supabase.from('bank_transfers').select('*').order('date', { ascending: false }).order('created_at', { ascending: false })
-  if (month) query = query.gte('date', `${month}-01`).lte('date', `${month}-31`)
+  if (month) {
+    const [y, m] = month.split('-').map(Number)
+    const nextM = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
+    query = query.gte('date', `${month}-01`).lt('date', nextM)
+  }
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data || [])

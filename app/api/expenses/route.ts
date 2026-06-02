@@ -20,7 +20,11 @@ export async function GET(req: Request) {
     .range(offset, offset + limit - 1)
 
   if (date) query = query.eq('date', date)
-  if (month) query = query.gte('date', `${month}-01`).lte('date', `${month}-31`)
+  if (month) {
+    const [y, m] = month.split('-').map(Number)
+    const nextM = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
+    query = query.gte('date', `${month}-01`).lt('date', nextM)
+  }
 
   const { data, error, count } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
