@@ -25,6 +25,8 @@ function remainingMonths(asset: Asset) {
   return Math.max(0, asset.useful_life_months - elapsed)
 }
 
+const PAYMENT_METHODS = ['เงินสด', 'โอนธนาคาร', 'บัตรเครดิต', 'ผ่อนชำระ', 'อื่นๆ']
+
 interface FormState {
   name: string
   category: string
@@ -33,6 +35,9 @@ interface FormState {
   salvage_amount: string
   useful_life_months: string
   description: string
+  payment_method: string
+  payment_bank: string
+  payment_account: string
   slip_image_url: string
   slip_preview: string
   receipt_image_urls: string[]
@@ -44,6 +49,7 @@ function emptyForm(): FormState {
     name: '', category: '',
     purchase_date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }),
     purchase_amount: '', salvage_amount: '0', useful_life_months: '60', description: '',
+    payment_method: '', payment_bank: '', payment_account: '',
     slip_image_url: '', slip_preview: '',
     receipt_image_urls: [], receipt_previews: [],
   }
@@ -105,6 +111,9 @@ export default function AssetsPage() {
       salvage_amount: fmtInput(asset.salvage_satang),
       useful_life_months: String(asset.useful_life_months),
       description: asset.description || '',
+      payment_method: (asset as any).payment_method || '',
+      payment_bank: (asset as any).payment_bank || '',
+      payment_account: (asset as any).payment_account || '',
       slip_image_url: (asset as any).slip_image_url || '',
       slip_preview: (asset as any).slip_image_url || '',
       receipt_image_urls: (asset as any).receipt_image_urls || [],
@@ -181,6 +190,9 @@ export default function AssetsPage() {
       salvage_satang: toSatang(parseInput(form.salvage_amount)),
       useful_life_months: parseInt(form.useful_life_months) || 60,
       description: form.description.trim() || null,
+      payment_method: form.payment_method || null,
+      payment_bank: form.payment_bank.trim() || null,
+      payment_account: form.payment_account.trim() || null,
       slip_image_url: form.slip_image_url || null,
       receipt_image_urls: form.receipt_image_urls,
     }
@@ -302,6 +314,13 @@ export default function AssetsPage() {
                     </p>
                     {asset.description && (
                       <p className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>{asset.description}</p>
+                    )}
+                    {(asset as any).payment_method && (
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
+                        💳 {(asset as any).payment_method}
+                        {(asset as any).payment_bank ? ` · ${(asset as any).payment_bank}` : ''}
+                        {(asset as any).payment_account ? ` ${(asset as any).payment_account}` : ''}
+                      </p>
                     )}
                   </div>
                   <div className="flex gap-2 ml-2 shrink-0">
@@ -534,6 +553,35 @@ export default function AssetsPage() {
                 <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                   className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}
                   placeholder="ไม่บังคับ" />
+              </div>
+
+              {/* Payment info */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold" style={{ color: 'var(--charcoal)' }}>บัญชีจ่ายเงิน</p>
+                <div>
+                  <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>วิธีชำระเงิน</label>
+                  <select value={form.payment_method} onChange={e => setForm(f => ({ ...f, payment_method: e.target.value }))}
+                    className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)', background: 'white' }}>
+                    <option value="">-- ไม่ระบุ --</option>
+                    {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                {(form.payment_method === 'โอนธนาคาร' || form.payment_method === 'บัตรเครดิต' || form.payment_method === 'ผ่อนชำระ') && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>ธนาคาร/บัตร</label>
+                      <input type="text" value={form.payment_bank} onChange={e => setForm(f => ({ ...f, payment_bank: e.target.value }))}
+                        className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}
+                        placeholder="เช่น SCB, KBank" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>เลขบัญชี/บัตร</label>
+                      <input type="text" value={form.payment_account} onChange={e => setForm(f => ({ ...f, payment_account: e.target.value }))}
+                        className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}
+                        placeholder="xxx-x-xxxxx-x" />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Receipt images */}

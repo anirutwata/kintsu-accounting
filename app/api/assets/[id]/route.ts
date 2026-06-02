@@ -29,6 +29,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       purchaseSatang: data.purchase_satang,
       usefulLifeMonths: data.useful_life_months,
       isUpdate: true,
+      paymentMethod: data.payment_method,
+      paymentBank: data.payment_bank,
     }))
   }
   return NextResponse.json(data)

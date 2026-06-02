@@ -114,13 +114,18 @@ export function buildAssetMessage(data: {
   purchaseSatang: number
   usefulLifeMonths: number
   isUpdate: boolean
+  paymentMethod?: string | null
+  paymentBank?: string | null
 }) {
   const dep = Math.round(data.purchaseSatang / data.usefulLifeMonths)
   const action = data.isUpdate ? '🔄 แก้ไขสินทรัพย์' : '🏗️ เพิ่มสินทรัพย์'
+  const paymentLine = data.paymentMethod
+    ? `\n💳 ${data.paymentMethod}${data.paymentBank ? ` · ${data.paymentBank}` : ''}`
+    : ''
   return `${action}
 📦 <b>${data.name}</b> (${data.category})
 💰 ราคาทุน: ${fmtBaht(data.purchaseSatang)}
-📉 เสื่อม/เดือน: ${fmtBaht(dep)} × ${data.usefulLifeMonths} เดือน
+📉 เสื่อม/เดือน: ${fmtBaht(dep)} × ${data.usefulLifeMonths} เดือน${paymentLine}
 🕐 ${thaiNow()}`
 }
 

@@ -20,7 +20,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const supabase = await createClient()
   const body = await req.json()
-  const { name, category, purchase_date, purchase_satang, salvage_satang, useful_life_months, description, slip_image_url, receipt_image_urls } = body
+  const { name, category, purchase_date, purchase_satang, salvage_satang, useful_life_months, description, payment_method, payment_bank, payment_account, slip_image_url, receipt_image_urls } = body
 
   if (!name?.trim() || !category || !purchase_date || !purchase_satang) {
     return NextResponse.json({ error: 'กรุณากรอกข้อมูลให้ครบ' }, { status: 400 })
@@ -36,6 +36,9 @@ export async function POST(req: Request) {
       salvage_satang: Math.round(salvage_satang || 0),
       useful_life_months: Math.round(useful_life_months || 60),
       description: description?.trim() || null,
+      payment_method: payment_method || null,
+      payment_bank: payment_bank?.trim() || null,
+      payment_account: payment_account?.trim() || null,
       slip_image_url: slip_image_url || null,
       receipt_image_urls: receipt_image_urls || [],
     })
@@ -50,6 +53,8 @@ export async function POST(req: Request) {
     purchaseSatang: data.purchase_satang,
     usefulLifeMonths: data.useful_life_months,
     isUpdate: false,
+    paymentMethod: data.payment_method,
+    paymentBank: data.payment_bank,
   }))
   return NextResponse.json(data)
 }
