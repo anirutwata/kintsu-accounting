@@ -57,7 +57,7 @@ export async function GET(req: Request) {
       .order('created_at'),
     supabase
       .from('daily_sales')
-      .select('date, dine_in_revenue_satang, dine_in_covers, dine_in_bills, papaya_revenue_satang, papaya_covers, papaya_bills, grabfood_gross_satang, grabfood_gp_fee_satang, grabfood_net_satang, grabfood_orders, takeaway_revenue_satang, takeaway_orders, total_net_satang')
+      .select('date, dine_in_revenue_satang, dine_in_covers, dine_in_bills, papaya_revenue_satang, papaya_covers, papaya_bills, grabfood_gross_satang, grabfood_gp_fee_satang, grabfood_net_satang, grabfood_orders, takeaway_revenue_satang, takeaway_orders, total_net_satang, cash_satang, promptpay_satang, company_transfer_satang, credit_card_satang, papaya_cash_satang, papaya_promptpay_satang, papaya_company_transfer_satang, papaya_credit_card_satang')
       .gte('date', startDate)
       .lte('date', endDate)
       .order('date'),
@@ -112,6 +112,10 @@ export async function GET(req: Request) {
     takeaway: s.takeaway_revenue_satang / 100,
     takeaway_orders: s.takeaway_orders,
     total_net: s.total_net_satang / 100,
+    cash: (s.cash_satang + s.papaya_cash_satang) / 100,
+    promptpay: (s.promptpay_satang + s.papaya_promptpay_satang) / 100,
+    credit_card: (s.credit_card_satang + s.papaya_credit_card_satang) / 100,
+    company_transfer: (s.company_transfer_satang + s.papaya_company_transfer_satang) / 100,
   }))
 
   if (type === 'csv') {
