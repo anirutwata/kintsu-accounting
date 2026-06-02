@@ -42,7 +42,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ assets: assetsData })
   }
 
-  const [{ data: expenses }, { data: sales }, { data: catRows }, { data: assetRows }] = await Promise.all([
+  const [{ data: expenses }, { data: sales }, { data: catRows }, { data: assetRows }, { data: transferRows }] = await Promise.all([
     supabase
       .from('expenses')
       .select('date, transfer_time, category, amount_satang, payment_method, sender_bank, sender_account, recipient_name, note, created_by_name, created_at')
@@ -64,8 +64,15 @@ export async function GET(req: Request) {
       .order('sort_order'),
     supabase
       .from('assets')
-      .select('name, category, purchase_date, purchase_satang, salvage_satang, useful_life_months, description, is_active')
+      .select('name, category, purchase_date, purchase_satang, salvage_satang, useful_life_months, description, is_active, payment_method, payment_bank, payment_account')
       .order('purchase_date', { ascending: false }),
+    supabase
+      .from('bank_transfers')
+      .select('date, amount_satang, from_bank, from_account, to_bank, to_account, note, created_by_name')
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .order('date')
+      .order('created_at'),
   ])
 
   const expenseRows = (expenses || []).map(e => {
@@ -136,6 +143,21 @@ export async function GET(req: Request) {
     monthly_dep: Math.round((a.purchase_satang - a.salvage_satang) / a.useful_life_months) / 100,
     description: a.description || '',
     is_active: a.is_active,
+    payment_method: a.payment_method || '',
+    payment_bank: a.payment_bank || '',
+    payment_account: a.payment_account || '',
   }))
-  return NextResponse.json({ month, expenses: expenseRows, sales: salesRows, categories, assets: assetsData })
+
+  const transfersData = (transferRows || []).map(t => ({
+    date: t.date,
+    amount: t.amount_satang / 100,
+    from_bank: t.from_bank,
+    from_account: t.from_account || '',
+    to_bank: t.to_bank,
+    to_account: t.to_account || '',
+    note: t.note || '',
+    recorded_by: t.created_by_name || '',
+  }))
+
+  return NextResponse.json({ month, expenses: expenseRows, sales: salesRows, categories, assets: assetsData, transfers: transfersData })
 }

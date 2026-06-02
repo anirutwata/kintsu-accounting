@@ -129,6 +129,33 @@ export function buildAssetMessage(data: {
 🕐 ${thaiNow()}`
 }
 
+// Bank transfer
+export function buildTransferMessage(data: {
+  date: string
+  amountSatang: number
+  fromBank: string
+  fromAccount?: string | null
+  toBank: string
+  toAccount?: string | null
+  note?: string | null
+  isDelete: boolean
+}) {
+  const from = data.fromAccount ? `${data.fromBank} (${data.fromAccount})` : data.fromBank
+  const to = data.toAccount ? `${data.toBank} (${data.toAccount})` : data.toBank
+  if (data.isDelete) {
+    return `🗑️ <b>ยกเลิกการโอนเงิน</b>
+📅 ${data.date}
+${fmtBaht(data.amountSatang)} · ${from} → ${to}
+🕐 ${thaiNow()}`
+  }
+  return `🔄 <b>โอนเงินระหว่างบัญชี</b>
+📅 ${data.date}
+💸 ยอดโอน: <b>${fmtBaht(data.amountSatang)}</b>
+🏦 จาก: ${from}
+🏦 ไปยัง: ${to}${data.note ? `\n📝 ${data.note}` : ''}
+🕐 ${thaiNow()}`
+}
+
 // Asset deleted
 export function buildAssetDeleteMessage(name: string) {
   return `🗑️ <b>ลบสินทรัพย์</b>
