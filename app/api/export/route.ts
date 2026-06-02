@@ -26,7 +26,7 @@ export async function GET(req: Request) {
   if (searchParams.get('assets_only') === 'true') {
     const { data: assets } = await supabase
       .from('assets')
-      .select('name, category, purchase_date, purchase_satang, salvage_satang, useful_life_months, description, is_active')
+      .select('name, category, purchase_date, purchase_satang, salvage_satang, useful_life_months, description, is_active, payment_method, payment_bank, payment_account')
       .order('purchase_date', { ascending: false })
     const assetsData = (assets || []).map(a => ({
       name: a.name,
@@ -38,6 +38,9 @@ export async function GET(req: Request) {
       monthly_dep: Math.round((a.purchase_satang - a.salvage_satang) / a.useful_life_months) / 100,
       description: a.description || '',
       is_active: a.is_active,
+      payment_method: a.payment_method || '',
+      payment_bank: a.payment_bank || '',
+      payment_account: a.payment_account || '',
     }))
     return NextResponse.json({ assets: assetsData })
   }
