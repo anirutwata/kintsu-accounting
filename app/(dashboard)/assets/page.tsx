@@ -5,6 +5,7 @@ import { formatBaht, toSatang, fmtInput, parseInput } from '@/lib/money'
 import type { Asset } from '@/types'
 
 interface Category { id: string; name: string }
+interface BankAccount { id: string; bank_name: string; account_number: string; account_name: string }
 
 function monthlyDep(asset: Asset) {
   return Math.round((asset.purchase_satang - asset.salvage_satang) / asset.useful_life_months)
@@ -58,6 +59,7 @@ function emptyForm(): FormState {
 export default function AssetsPage() {
   const [assets, setAssets] = useState<Asset[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editAsset, setEditAsset] = useState<Asset | null>(null)
@@ -74,13 +76,19 @@ export default function AssetsPage() {
   const slipRef = useRef<HTMLInputElement>(null)
   const receiptRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { load(); loadCategories() }, [])
+  useEffect(() => { load(); loadCategories(); loadBankAccounts() }, [])
 
   async function load() {
     setLoading(true)
     const res = await fetch('/api/assets')
     setAssets(await res.json())
     setLoading(false)
+  }
+
+  async function loadBankAccounts() {
+    const res = await fetch('/api/bank-accounts')
+    const data = await res.json()
+    setBankAccounts(Array.isArray(data) ? data : [])
   }
 
   async function loadCategories(): Promise<Category[]> {
@@ -141,6 +149,9 @@ export default function AssetsPage() {
         description: data.description && !f.description
           ? (data.vendor ? `${data.vendor}${data.description ? ' — ' + data.description : ''}` : data.description)
           : f.description,
+        payment_method: data.payment_bank && !f.payment_method ? 'โอนธนาคาร' : f.payment_method,
+        payment_bank: data.payment_bank && !f.payment_bank ? data.payment_bank : f.payment_bank,
+        payment_account: data.payment_account && !f.payment_account ? data.payment_account : f.payment_account,
         slip_image_url: data.image_url || f.slip_image_url,
         slip_preview: data.image_url || preview,
       }))
@@ -567,18 +578,37 @@ export default function AssetsPage() {
                   </select>
                 </div>
                 {(form.payment_method === 'โอนธนาคาร' || form.payment_method === 'บัตรเครดิต' || form.payment_method === 'ผ่อนชำระ') && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>ธนาคาร/บัตร</label>
-                      <input type="text" value={form.payment_bank} onChange={e => setForm(f => ({ ...f, payment_bank: e.target.value }))}
-                        className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}
-                        placeholder="เช่น SCB, KBank" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>เลขบัญชี/บัตร</label>
-                      <input type="text" value={form.payment_account} onChange={e => setForm(f => ({ ...f, payment_account: e.target.value }))}
-                        className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}
-                        placeholder="xxx-x-xxxxx-x" />
+                  <div className="space-y-2">
+                    {form.payment_method === 'โอนธนาคาร' && bankAccounts.length > 0 && (
+                      <div>
+                        <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>เลือกบัญชีที่มีในระบบ</label>
+                        <select
+                          value={bankAccounts.find(a => a.bank_name === form.payment_bank && a.account_number === form.payment_account)?.id || ''}
+                          onChange={e => {
+                            const acc = bankAccounts.find(a => a.id === e.target.value)
+                            if (acc) setForm(f => ({ ...f, payment_bank: acc.bank_name, payment_account: acc.account_number }))
+                          }}
+                          className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)', background: 'white' }}>
+                          <option value="">-- เลือกบัญชี --</option>
+                          {bankAccounts.map(a => (
+                            <option key={a.id} value={a.id}>{a.bank_name} · {a.account_number} ({a.account_name})</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>ธนาคาร/บัตร</label>
+                        <input type="text" value={form.payment_bank} onChange={e => setForm(f => ({ ...f, payment_bank: e.target.value }))}
+                          className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}
+                          placeholder="เช่น SCB, KBank" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>เลขบัญชี/บัตร</label>
+                        <input type="text" value={form.payment_account} onChange={e => setForm(f => ({ ...f, payment_account: e.target.value }))}
+                          className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}
+                          placeholder="xxx-x-xxxxx-x" />
+                      </div>
                     </div>
                   </div>
                 )}
