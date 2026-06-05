@@ -4,6 +4,8 @@ import { formatBaht, toSatang, parseInput, fmtInput } from '@/lib/money'
 import { getTodayBKK } from '@/lib/utils'
 
 interface BankAccount { id: string; bank_name: string; account_number: string; account_name: string }
+
+const CASH_OPTION = { id: '__cash__', bank_name: 'เงินสด', account_number: '', account_name: 'เงินสด' }
 interface Transfer {
   id: string
   date: string
@@ -98,6 +100,22 @@ export default function TransfersPage() {
     setShowForm(true)
   }
 
+  function matchAccount(bankName: string, accountNum: string): BankAccount | undefined {
+    if (!bankName) return undefined
+    const allAccounts = [CASH_OPTION, ...accounts]
+    // exact match first
+    const exact = allAccounts.find(a =>
+      a.bank_name.toLowerCase() === bankName.toLowerCase() &&
+      (!accountNum || a.account_number === accountNum)
+    )
+    if (exact) return exact
+    // partial match on bank name
+    return allAccounts.find(a =>
+      a.bank_name.toLowerCase().includes(bankName.toLowerCase()) ||
+      bankName.toLowerCase().includes(a.bank_name.toLowerCase())
+    )
+  }
+
   async function handleSlipUpload(file: File) {
     setOcring(true)
     setSlipPreview(URL.createObjectURL(file))
@@ -106,21 +124,25 @@ export default function TransfersPage() {
       fd.append('file', file)
       const res = await fetch('/api/ocr/transfer', { method: 'POST', body: fd })
       const data = await res.json()
-      setForm(f => ({
-        ...f,
-        date: data.date || f.date,
-        amount: data.amount_satang && !f.amount ? fmtInput(data.amount_satang) : f.amount,
-        from_bank: data.from_bank && !f.from_bank ? data.from_bank : f.from_bank,
-        from_account: data.from_account && !f.from_account ? data.from_account : f.from_account,
-        to_bank: data.to_bank && !f.to_bank ? data.to_bank : f.to_bank,
-        to_account: data.to_account && !f.to_account ? data.to_account : f.to_account,
-      }))
+      setForm(f => {
+        const fromMatch = data.from_bank ? matchAccount(data.from_bank, data.from_account) : undefined
+        const toMatch = data.to_bank ? matchAccount(data.to_bank, data.to_account) : undefined
+        return {
+          ...f,
+          date: data.date || f.date,
+          amount: data.amount_satang && !f.amount ? fmtInput(data.amount_satang) : f.amount,
+          from_bank: fromMatch ? fromMatch.bank_name : (data.from_bank && !f.from_bank ? data.from_bank : f.from_bank),
+          from_account: fromMatch ? fromMatch.account_number : (data.from_account && !f.from_account ? data.from_account : f.from_account),
+          to_bank: toMatch ? toMatch.bank_name : (data.to_bank && !f.to_bank ? data.to_bank : f.to_bank),
+          to_account: toMatch ? toMatch.account_number : (data.to_account && !f.to_account ? data.to_account : f.to_account),
+        }
+      })
     } catch { /* ignore */ }
     setOcring(false)
   }
 
   function handleAccountSelect(side: 'from' | 'to', accountId: string) {
-    const acc = accounts.find(a => a.id === accountId)
+    const acc = accountId === CASH_OPTION.id ? CASH_OPTION : accounts.find(a => a.id === accountId)
     if (!acc) {
       setForm(f => side === 'from'
         ? { ...f, from_bank: '', from_account: '' }
@@ -267,17 +289,16 @@ export default function TransfersPage() {
               {/* From account */}
               <div className="p-3 rounded-xl space-y-2" style={{ background: 'var(--muted)' }}>
                 <p className="text-xs font-semibold" style={{ color: 'var(--charcoal)' }}>บัญชีต้นทาง (โอนออก)</p>
-                {accounts.length > 0 && (
-                  <select
-                    value={accounts.find(a => a.bank_name === form.from_bank && a.account_number === form.from_account)?.id || ''}
-                    onChange={e => handleAccountSelect('from', e.target.value)}
-                    className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)', background: 'white' }}>
-                    <option value="">-- เลือกบัญชี --</option>
-                    {accounts.map(a => (
-                      <option key={a.id} value={a.id}>{a.bank_name} · {a.account_number} ({a.account_name})</option>
-                    ))}
-                  </select>
-                )}
+                <select
+                  value={[CASH_OPTION, ...accounts].find(a => a.bank_name === form.from_bank && a.account_number === form.from_account)?.id || ''}
+                  onChange={e => handleAccountSelect('from', e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)', background: 'white' }}>
+                  <option value="">-- เลือกบัญชี --</option>
+                  <option value={CASH_OPTION.id}>💵 เงินสด</option>
+                  {accounts.map(a => (
+                    <option key={a.id} value={a.id}>{a.bank_name} · {a.account_number} ({a.account_name})</option>
+                  ))}
+                </select>
                 <div className="grid grid-cols-2 gap-2">
                   <input type="text" value={form.from_bank} onChange={e => setForm(f => ({ ...f, from_bank: e.target.value }))}
                     required placeholder="ธนาคาร*" className="border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)', background: 'white' }} />
@@ -289,17 +310,16 @@ export default function TransfersPage() {
               {/* To account */}
               <div className="p-3 rounded-xl space-y-2" style={{ background: '#EFF6FF' }}>
                 <p className="text-xs font-semibold" style={{ color: 'var(--charcoal)' }}>บัญชีปลายทาง (รับโอน)</p>
-                {accounts.length > 0 && (
-                  <select
-                    value={accounts.find(a => a.bank_name === form.to_bank && a.account_number === form.to_account)?.id || ''}
-                    onChange={e => handleAccountSelect('to', e.target.value)}
-                    className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)', background: 'white' }}>
-                    <option value="">-- เลือกบัญชี --</option>
-                    {accounts.map(a => (
-                      <option key={a.id} value={a.id}>{a.bank_name} · {a.account_number} ({a.account_name})</option>
-                    ))}
-                  </select>
-                )}
+                <select
+                  value={[CASH_OPTION, ...accounts].find(a => a.bank_name === form.to_bank && a.account_number === form.to_account)?.id || ''}
+                  onChange={e => handleAccountSelect('to', e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)', background: 'white' }}>
+                  <option value="">-- เลือกบัญชี --</option>
+                  <option value={CASH_OPTION.id}>💵 เงินสด</option>
+                  {accounts.map(a => (
+                    <option key={a.id} value={a.id}>{a.bank_name} · {a.account_number} ({a.account_name})</option>
+                  ))}
+                </select>
                 <div className="grid grid-cols-2 gap-2">
                   <input type="text" value={form.to_bank} onChange={e => setForm(f => ({ ...f, to_bank: e.target.value }))}
                     required placeholder="ธนาคาร*" className="border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)', background: 'white' }} />
