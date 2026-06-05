@@ -99,6 +99,7 @@ export async function GET(req: Request) {
 
   const salesRows = (sales || []).map(s => ({
     date: s.date,
+    // Foodstory POS
     dine_in: s.dine_in_revenue_satang / 100,
     dine_in_covers: s.dine_in_covers,
     dine_in_bills: s.dine_in_bills,
@@ -106,6 +107,11 @@ export async function GET(req: Request) {
     dine_in_vat: s.vat_amount_satang / 100,
     dine_in_rounding: s.rounding_satang / 100,
     dine_in_discount: s.discount_satang / 100,
+    fs_cash: s.cash_satang / 100,
+    fs_promptpay: s.promptpay_satang / 100,
+    fs_company_transfer: s.company_transfer_satang / 100,
+    fs_credit_card: s.credit_card_satang / 100,
+    // Papaya POS
     papaya: s.papaya_revenue_satang / 100,
     papaya_covers: s.papaya_covers,
     papaya_bills: s.papaya_bills,
@@ -113,17 +119,20 @@ export async function GET(req: Request) {
     papaya_vat: s.papaya_vat_satang / 100,
     papaya_rounding: s.papaya_rounding_satang / 100,
     papaya_discount: s.papaya_discount_satang / 100,
+    papaya_cash: s.papaya_cash_satang / 100,
+    papaya_promptpay: s.papaya_promptpay_satang / 100,
+    papaya_company_transfer: s.papaya_company_transfer_satang / 100,
+    papaya_credit_card: s.papaya_credit_card_satang / 100,
+    // GrabFood
     grabfood_gross: s.grabfood_gross_satang / 100,
     grabfood_gp: s.grabfood_gp_fee_satang / 100,
     grabfood_net: s.grabfood_net_satang / 100,
     grabfood_orders: s.grabfood_orders,
+    // Takeaway
     takeaway: s.takeaway_revenue_satang / 100,
     takeaway_orders: s.takeaway_orders,
+    // Total
     total_net: s.total_net_satang / 100,
-    cash: (s.cash_satang + s.papaya_cash_satang) / 100,
-    promptpay: (s.promptpay_satang + s.papaya_promptpay_satang) / 100,
-    company_transfer: (s.company_transfer_satang + s.papaya_company_transfer_satang) / 100,
-    credit_card: (s.credit_card_satang + s.papaya_credit_card_satang) / 100,
   }))
 
   if (type === 'csv') {
