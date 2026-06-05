@@ -352,6 +352,25 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
   const strip = (key: keyof POSForm) => () =>
     onChange({ ...form, [key]: form[key].replace(/,/g, '') })
 
+  // ─── Validation ───────────────────────────────────────────────
+  const rev = toSatang(parseInput(form.revenue))
+  const beforeVat = toSatang(parseInput(form.sales_before_vat))
+  const vatAmt = toSatang(parseInput(form.vat_amount))
+  const rounding = toSatang(parseInput(form.rounding))
+  const cash = toSatang(parseInput(form.cash))
+  const promptpay = toSatang(parseInput(form.promptpay))
+  const companyTransfer = toSatang(parseInput(form.company_transfer))
+  const creditCard = toSatang(parseInput(form.credit_card))
+
+  const vatSum = beforeVat + vatAmt + rounding
+  const paySum = cash + promptpay + companyTransfer + creditCard
+
+  const hasVatData = beforeVat > 0 || vatAmt > 0 || rounding > 0
+  const hasPayData = cash > 0 || promptpay > 0 || companyTransfer > 0 || creditCard > 0
+
+  const vatMismatch = rev > 0 && hasVatData && Math.abs(vatSum - rev) > 1
+  const payMismatch = rev > 0 && hasPayData && Math.abs(paySum - rev) > 1
+
   return (
     <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
       {/* Header */}
@@ -410,6 +429,16 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
           </div>
         </div>
 
+        {vatMismatch && (
+          <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2">
+            ⚠️ ยอด VAT ไม่ตรง: {formatBaht(vatSum)} ≠ {formatBaht(rev)}
+            {' '}(ต่าง {formatBaht(Math.abs(vatSum - rev))})
+          </p>
+        )}
+        {!vatMismatch && hasVatData && rev > 0 && (
+          <p className="text-xs text-green-600 bg-green-50 rounded-xl px-3 py-2">✅ ยอด VAT ถูกต้อง</p>
+        )}
+
         {/* Payment channels */}
         <div>
           <p className="text-xs font-semibold mb-2" style={{ color: 'var(--charcoal)' }}>ช่องทางชำระเงิน</p>
@@ -424,6 +453,15 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
             ))}
           </div>
         </div>
+        {payMismatch && (
+          <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2">
+            ⚠️ ยอดชำระไม่ตรง: {formatBaht(paySum)} ≠ {formatBaht(rev)}
+            {' '}(ต่าง {formatBaht(Math.abs(paySum - rev))})
+          </p>
+        )}
+        {!payMismatch && hasPayData && rev > 0 && (
+          <p className="text-xs text-green-600 bg-green-50 rounded-xl px-3 py-2">✅ ยอดชำระถูกต้อง</p>
+        )}
       </div>
     </div>
   )
