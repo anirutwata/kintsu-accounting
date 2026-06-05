@@ -11,12 +11,15 @@ export async function GET(req: Request) {
 
   if (!month) return NextResponse.json({ error: 'กรุณาระบุเดือน' }, { status: 400 })
 
+  const [y, m] = month.split('-').map(Number)
+  const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
+
   // Fetch sales for month
   const { data: sales } = await supabase
     .from('daily_sales')
     .select('total_net_satang, total_vat_satang, grabfood_gp_fee_satang')
     .gte('date', `${month}-01`)
-    .lte('date', `${month}-31`)
+    .lt('date', `${nextMonth}-01`)
 
   const totalRevenue = (sales || []).reduce((s, r) => s + r.total_net_satang, 0)
   const totalVat = (sales || []).reduce((s, r) => s + r.total_vat_satang, 0)
@@ -27,7 +30,7 @@ export async function GET(req: Request) {
     .from('expenses')
     .select('category, total_satang, vat_satang')
     .gte('date', `${month}-01`)
-    .lte('date', `${month}-31`)
+    .lt('date', `${nextMonth}-01`)
     .eq('is_deleted', false)
 
   const FOOD_COST_CATS = ['วัตถุดิบทางตรง-เนื้อวัว', 'วัตถุดิบทางตรง-เนื้อหมู', 'วัตถุดิบทางตรง-อื่นๆ']
@@ -60,8 +63,7 @@ export async function GET(req: Request) {
     : manualLaborCost
 
   // Fetch assets and calculate depreciation for the month
-  const [year, mon] = month.split('-').map(Number)
-  const monthLastDay = new Date(year, mon, 0).toISOString().slice(0, 10)
+  const monthLastDay = new Date(y, m, 0).toISOString().slice(0, 10)
   const { data: assets } = await supabase
     .from('assets')
     .select('purchase_date, purchase_satang, salvage_satang, useful_life_months')
@@ -70,7 +72,7 @@ export async function GET(req: Request) {
 
   const depreciationSatang = (assets || []).reduce((sum, asset) => {
     const pd = new Date(asset.purchase_date)
-    const monthsElapsed = (year - pd.getFullYear()) * 12 + (mon - 1 - pd.getMonth())
+    const monthsElapsed = (y - pd.getFullYear()) * 12 + (m - 1 - pd.getMonth())
     if (monthsElapsed < 0 || monthsElapsed >= asset.useful_life_months) return sum
     return sum + Math.round((asset.purchase_satang - asset.salvage_satang) / asset.useful_life_months)
   }, 0)
