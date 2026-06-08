@@ -5,6 +5,8 @@ import { sendTelegram, buildTransferMessage } from '@/lib/telegram'
 function triggerGasSync(month: string) {
   const gasUrl = process.env.GAS_WEBHOOK_URL
   if (gasUrl) fetch(gasUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month }) }).catch(() => {})
+  const ledgerUrl = process.env.LEDGER_WEBHOOK_URL
+  if (ledgerUrl) fetch(ledgerUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month }) }).catch(() => {})
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {

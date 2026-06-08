@@ -118,6 +118,16 @@ export async function POST(req: Request) {
     }).catch(() => {})
   }
 
+  // Sync Ledger (non-blocking)
+  const ledgerUrl = process.env.LEDGER_WEBHOOK_URL
+  if (ledgerUrl) {
+    fetch(ledgerUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ month: date.substring(0, 7) }),
+    }).catch(() => {})
+  }
+
   sendTelegram(buildSalesMessage({
     date,
     isUpdate,

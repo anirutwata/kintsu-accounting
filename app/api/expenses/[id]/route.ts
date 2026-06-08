@@ -70,5 +70,15 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     }).catch(() => {})
   }
 
+  // Sync Ledger (non-blocking)
+  const ledgerUrl = process.env.LEDGER_WEBHOOK_URL
+  if (ledgerUrl && data?.date) {
+    fetch(ledgerUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ month: data.date.slice(0, 7) }),
+    }).catch(() => {})
+  }
+
   return NextResponse.json(data)
 }
