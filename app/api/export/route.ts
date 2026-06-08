@@ -46,7 +46,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ assets: assetsData })
   }
 
-  const [{ data: expenses }, { data: sales }, { data: catRows }, { data: assetRows }, { data: transferRows }] = await Promise.all([
+  const [{ data: expenses }, { data: sales }, { data: catRows }, { data: assetRows }, { data: transferRows }, { data: bankRows }] = await Promise.all([
     supabase
       .from('expenses')
       .select('date, transfer_time, category, amount_satang, payment_method, sender_bank, sender_account, recipient_name, note, created_by_name, created_at')
@@ -76,6 +76,12 @@ export async function GET(req: Request) {
       .gte('date', startDate)
       .lte('date', endDate)
       .order('date')
+      .order('created_at'),
+    supabase
+      .from('bank_accounts')
+      .select('id, bank_name, account_number, account_name')
+      .eq('is_active', true)
+      .order('sort_order')
       .order('created_at'),
   ])
 
@@ -184,5 +190,5 @@ export async function GET(req: Request) {
     recorded_by: t.created_by_name || '',
   }))
 
-  return NextResponse.json({ month, expenses: expenseRows, sales: salesRows, categories, assets: assetsData, transfers: transfersData })
+  return NextResponse.json({ month, expenses: expenseRows, sales: salesRows, categories, assets: assetsData, transfers: transfersData, bank_accounts: bankRows || [] })
 }
