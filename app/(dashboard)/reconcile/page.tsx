@@ -53,6 +53,15 @@ function getMonthOptions() {
 
 type Tab = 'matched' | 'stmt_only' | 'sys_only'
 
+const DISMISS_REASONS = [
+  'ค่าใช้จ่ายส่วนตัว',
+  'โอนระหว่างบัญชีตัวเอง',
+  'รายการที่ตรวจสอบแล้ว',
+  'บันทึกผิดเดือน',
+  'รายการซ้ำ',
+  'อื่นๆ',
+]
+
 export default function ReconcilePage() {
   const today = getTodayBKK()
   const [accounts, setAccounts] = useState<BankAccount[]>([])
@@ -68,6 +77,19 @@ export default function ReconcilePage() {
   const [exportMsg, setExportMsg] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
   const monthOptions = getMonthOptions()
+  // dismissed: key = 'stmt_i' or 'sys_i', value = reason string
+  const [dismissed, setDismissed] = useState<Record<string, string>>({})
+  const [pendingKey, setPendingKey] = useState<string | null>(null)
+  const [pendingReason, setPendingReason] = useState(DISMISS_REASONS[0])
+
+  function dismiss(key: string) {
+    setDismissed(prev => ({ ...prev, [key]: pendingReason }))
+    setPendingKey(null)
+    setPendingReason(DISMISS_REASONS[0])
+  }
+  function undismiss(key: string) {
+    setDismissed(prev => { const n = { ...prev }; delete n[key]; return n })
+  }
 
   useEffect(() => {
     fetch('/api/bank-accounts').then(r => r.json()).then(d => setAccounts(Array.isArray(d) ? d : []))
@@ -341,55 +363,115 @@ export default function ReconcilePage() {
             {tab === 'stmt_only' && (
               result.statementOnly.length === 0
                 ? <p className="text-center py-8 text-sm" style={{ color: '#16a34a' }}>✅ ทุกรายการใน Statement พบในระบบครบ</p>
-                : result.statementOnly.map((e, i) => (
-                  <div key={i} className="bg-white rounded-2xl border overflow-hidden"
-                    style={{ borderColor: 'var(--border)', borderLeft: '4px solid #f59e0b' }}>
-                    <div className="p-3 flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1 mb-0.5">
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
-                            style={{ background: '#fef9c3', color: '#854d0e' }}>ใน Statement เท่านั้น</span>
-                          <span className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>{fmtDate(e.date)}</span>
+                : result.statementOnly.map((e, i) => {
+                  const key = `stmt_${i}`
+                  const isDismissed = !!dismissed[key]
+                  const isPending = pendingKey === key
+                  return (
+                    <div key={i} className="bg-white rounded-2xl border overflow-hidden"
+                      style={{ borderColor: 'var(--border)', borderLeft: `4px solid ${isDismissed ? '#d1d5db' : '#f59e0b'}`, opacity: isDismissed ? 0.6 : 1 }}>
+                      <div className="p-3 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1 mb-0.5 flex-wrap">
+                              {isDismissed
+                                ? <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#f3f4f6', color: '#6b7280' }}>✓ เคลียร์แล้ว: {dismissed[key]}</span>
+                                : <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#fef9c3', color: '#854d0e' }}>ใน Statement เท่านั้น</span>
+                              }
+                              <span className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>{fmtDate(e.date)}</span>
+                            </div>
+                            <p className="text-xs" style={{ color: 'var(--charcoal)' }}>{e.description}</p>
+                            {!isDismissed && <p className="text-[10px] mt-0.5" style={{ color: '#b45309' }}>→ ยังไม่บันทึกในระบบ หรือบันทึกผิดวัน/ยอด</p>}
+                          </div>
+                          <div className="flex flex-col items-end gap-1 shrink-0">
+                            <p className="text-sm font-bold" style={{ color: e.type === 'in' ? '#16a34a' : '#dc2626' }}>
+                              {e.type === 'in' ? '+' : '-'}฿{fmtBaht(e.amount)}
+                            </p>
+                            {isDismissed
+                              ? <button onClick={() => undismiss(key)} className="text-[10px] underline" style={{ color: 'var(--muted-foreground)' }}>ยกเลิก</button>
+                              : <button onClick={() => { setPendingKey(isPending ? null : key); setPendingReason(DISMISS_REASONS[0]) }}
+                                  className="text-[10px] px-2 py-0.5 rounded-full border font-semibold transition-colors"
+                                  style={{ borderColor: '#d1d5db', color: '#6b7280', background: isPending ? '#f3f4f6' : 'white' }}>
+                                  {isPending ? 'ยกเลิก' : '✕ เคลียร์'}
+                                </button>
+                            }
+                          </div>
                         </div>
-                        <p className="text-xs" style={{ color: 'var(--charcoal)' }}>{e.description}</p>
-                        <p className="text-[10px] mt-0.5" style={{ color: '#b45309' }}>
-                          → ยังไม่บันทึกในระบบ หรือบันทึกผิดวัน/ยอด
-                        </p>
+                        {isPending && (
+                          <div className="flex gap-2 pt-1 border-t" style={{ borderColor: 'var(--border)' }}>
+                            <select value={pendingReason} onChange={e => setPendingReason(e.target.value)}
+                              className="flex-1 text-xs border rounded-lg px-2 py-1.5" style={{ borderColor: 'var(--border)' }}>
+                              {DISMISS_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                            <button onClick={() => dismiss(key)}
+                              className="text-xs px-3 py-1.5 rounded-lg font-semibold text-white"
+                              style={{ background: 'var(--flame-red)' }}>
+                              ยืนยัน
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-sm font-bold shrink-0" style={{ color: e.type === 'in' ? '#16a34a' : '#dc2626' }}>
-                        {e.type === 'in' ? '+' : '-'}฿{fmtBaht(e.amount)}
-                      </p>
                     </div>
-                  </div>
-                ))
+                  )
+                })
             )}
 
             {/* System only (not in statement) */}
             {tab === 'sys_only' && (
               result.systemOnly.length === 0
                 ? <p className="text-center py-8 text-sm" style={{ color: '#16a34a' }}>✅ ทุกรายการในระบบพบใน Statement ครบ</p>
-                : result.systemOnly.map((e, i) => (
-                  <div key={i} className="bg-white rounded-2xl border overflow-hidden"
-                    style={{ borderColor: 'var(--border)', borderLeft: '4px solid #dc2626' }}>
-                    <div className="p-3 flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1 mb-0.5">
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
-                            style={{ background: '#fee2e2', color: '#991b1b' }}>ในระบบเท่านั้น</span>
-                          <span className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>{fmtDate(e.date)}</span>
-                          {e.source && <span className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>{sourceLabel[e.source] ?? e.source}</span>}
+                : result.systemOnly.map((e, i) => {
+                  const key = `sys_${i}`
+                  const isDismissed = !!dismissed[key]
+                  const isPending = pendingKey === key
+                  return (
+                    <div key={i} className="bg-white rounded-2xl border overflow-hidden"
+                      style={{ borderColor: 'var(--border)', borderLeft: `4px solid ${isDismissed ? '#d1d5db' : '#dc2626'}`, opacity: isDismissed ? 0.6 : 1 }}>
+                      <div className="p-3 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1 mb-0.5 flex-wrap">
+                              {isDismissed
+                                ? <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#f3f4f6', color: '#6b7280' }}>✓ เคลียร์แล้ว: {dismissed[key]}</span>
+                                : <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: '#fee2e2', color: '#991b1b' }}>ในระบบเท่านั้น</span>
+                              }
+                              <span className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>{fmtDate(e.date)}</span>
+                              {e.source && <span className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>{sourceLabel[e.source] ?? e.source}</span>}
+                            </div>
+                            <p className="text-xs" style={{ color: 'var(--charcoal)' }}>{e.description}</p>
+                            {!isDismissed && <p className="text-[10px] mt-0.5" style={{ color: '#991b1b' }}>→ อาจบันทึกผิดธนาคาร หรือรายการนี้ไม่ผ่านบัญชีนี้</p>}
+                          </div>
+                          <div className="flex flex-col items-end gap-1 shrink-0">
+                            <p className="text-sm font-bold" style={{ color: e.type === 'in' ? '#16a34a' : '#dc2626' }}>
+                              {e.type === 'in' ? '+' : '-'}฿{fmtBaht(e.amount)}
+                            </p>
+                            {isDismissed
+                              ? <button onClick={() => undismiss(key)} className="text-[10px] underline" style={{ color: 'var(--muted-foreground)' }}>ยกเลิก</button>
+                              : <button onClick={() => { setPendingKey(isPending ? null : key); setPendingReason(DISMISS_REASONS[0]) }}
+                                  className="text-[10px] px-2 py-0.5 rounded-full border font-semibold transition-colors"
+                                  style={{ borderColor: '#d1d5db', color: '#6b7280', background: isPending ? '#f3f4f6' : 'white' }}>
+                                  {isPending ? 'ยกเลิก' : '✕ เคลียร์'}
+                                </button>
+                            }
+                          </div>
                         </div>
-                        <p className="text-xs" style={{ color: 'var(--charcoal)' }}>{e.description}</p>
-                        <p className="text-[10px] mt-0.5" style={{ color: '#991b1b' }}>
-                          → อาจบันทึกผิดธนาคาร หรือรายการนี้ไม่ผ่านบัญชีนี้
-                        </p>
+                        {isPending && (
+                          <div className="flex gap-2 pt-1 border-t" style={{ borderColor: 'var(--border)' }}>
+                            <select value={pendingReason} onChange={e => setPendingReason(e.target.value)}
+                              className="flex-1 text-xs border rounded-lg px-2 py-1.5" style={{ borderColor: 'var(--border)' }}>
+                              {DISMISS_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                            <button onClick={() => dismiss(key)}
+                              className="text-xs px-3 py-1.5 rounded-lg font-semibold text-white"
+                              style={{ background: 'var(--flame-red)' }}>
+                              ยืนยัน
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-sm font-bold shrink-0" style={{ color: e.type === 'in' ? '#16a34a' : '#dc2626' }}>
-                        {e.type === 'in' ? '+' : '-'}฿{fmtBaht(e.amount)}
-                      </p>
                     </div>
-                  </div>
-                ))
+                  )
+                })
             )}
           </div>
         </div>
