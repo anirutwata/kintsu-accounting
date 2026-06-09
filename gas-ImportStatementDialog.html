@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; padding: 18px 22px; margin: 0; background: #fff; color: #333; font-size: 13px; }
+    h3 { margin: 0 0 14px 0; font-size: 14px; color: #1a1a2e; border-bottom: 2px solid #D33F22; padding-bottom: 8px; }
+    label { display: block; margin-top: 11px; font-weight: bold; color: #444; font-size: 12px; }
+    select, input[type="text"] {
+      width: 100%; padding: 7px 9px; margin-top: 4px;
+      border: 1px solid #ccc; border-radius: 4px; font-size: 13px;
+    }
+    select:focus, input:focus { outline: none; border-color: #D33F22; }
+
+    .mode-tabs { display: flex; gap: 0; margin-top: 14px; }
+    .tab {
+      flex: 1; padding: 8px; text-align: center; cursor: pointer;
+      background: #f0f0f0; border: 1px solid #ccc; font-size: 12px;
+    }
+    .tab.active { background: #D33F22; color: #fff; border-color: #D33F22; font-weight: bold; }
+    .tab:first-child { border-radius: 4px 0 0 4px; }
+    .tab:last-child { border-radius: 0 4px 4px 0; }
+
+    .panel { display: none; margin-top: 10px; }
+    .panel.active { display: block; }
+
+    .hint { font-size: 11px; color: #888; margin-top: 5px; line-height: 1.5; }
+    .hint b { color: #555; }
+
+    .btn-row { display: flex; gap: 10px; margin-top: 18px; }
+    .btn-primary {
+      flex: 1; padding: 9px; background: #D33F22; color: #fff;
+      border: none; border-radius: 4px; font-size: 13px; font-weight: bold; cursor: pointer;
+    }
+    .btn-primary:hover { background: #b5351c; }
+    .btn-primary:disabled { background: #ccc; cursor: default; }
+    .btn-secondary {
+      padding: 9px 16px; background: #fff; color: #666;
+      border: 1px solid #ccc; border-radius: 4px; font-size: 13px; cursor: pointer;
+    }
+    .btn-secondary:hover { background: #f5f5f5; }
+    .btn-template {
+      width: 100%; padding: 7px; background: #4a86e8; color: #fff;
+      border: none; border-radius: 4px; font-size: 12px; cursor: pointer; margin-top: 8px;
+    }
+    .btn-template:hover { background: #3a76d8; }
+
+    .msg { font-size: 12px; margin-top: 12px; padding: 8px 12px; border-radius: 4px; display: none; line-height: 1.6; }
+    .msg.error   { background: #fde8e8; color: #c00; display: block; }
+    .msg.success { background: #e8f5e9; color: #2e7d32; display: block; }
+    .msg.info    { background: #e8f0fe; color: #1a56db; display: block; }
+    .required { color: #D33F22; }
+    .loader { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <h3>📄 นำเข้า Bank Statement กระทบยอด</h3>
+
+  <label>ธนาคาร <span class="required">*</span>
+    <select id="bankCode"><option value="">-- กำลังโหลด --</option></select>
+  </label>
+
+  <label>เดือน <span class="required">*</span>
+    <input type="text" id="month" placeholder="YYYY-MM เช่น 2026-06" value="2026-06" />
+  </label>
+
+  <div style="margin-top:14px; font-weight:bold; font-size:12px; color:#444;">วิธีนำเข้าข้อมูล Statement</div>
+  <div class="mode-tabs">
+    <div class="tab active" onclick="switchTab('csv')">📁 CSV/Excel (Drive)</div>
+    <div class="tab" onclick="switchTab('pdf')">📄 PDF (Drive)</div>
+    <div class="tab" onclick="switchTab('sheet')">📝 กรอกมือ (Sheet)</div>
+  </div>
+
+  <!-- CSV Tab -->
+  <div class="panel active" id="panel-csv">
+    <label>Google Drive File ID (ไฟล์ CSV)
+      <input type="text" id="fileIdCsv" placeholder="เช่น 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" />
+    </label>
+    <div class="hint">
+      <b>วิธีหา File ID:</b> เปิดไฟล์ใน Google Drive → URL จะมี <code>.../d/<b>[FILE_ID]</b>/...</code><br>
+      รองรับ: CSV จากธนาคาร (KBANK, TTB, BBL, SCB ฯลฯ) · ตรวจหัวคอลัมน์อัตโนมัติ<br>
+      <b>Excel:</b> บันทึกเป็น .csv ก่อน แล้ว upload ขึ้น Drive
+    </div>
+  </div>
+
+  <!-- PDF Tab -->
+  <div class="panel" id="panel-pdf">
+    <label>Google Drive File ID (ไฟล์ PDF)
+      <input type="text" id="fileIdPdf" placeholder="เช่น 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" />
+    </label>
+    <div class="hint">
+      <b>ใช้ Google Drive OCR</b> แปลง PDF → ข้อความอัตโนมัติ<br>
+      รองรับ PDF ที่เป็นตัวอักษร (digital PDF) ได้ดีกว่า PDF ที่สแกนจากกระดาษ<br>
+      ⚠ ถ้าผลลัพธ์ไม่ถูกต้อง แนะนำให้ใช้ CSV แทน
+    </div>
+  </div>
+
+  <!-- Sheet Tab -->
+  <div class="panel" id="panel-sheet">
+    <div class="hint" style="margin-top:8px;">
+      กรอกข้อมูล Statement ลงใน Sheet ที่ระบบสร้างให้ แล้วกลับมากด "กระทบยอด"<br>
+      คอลัมน์: <b>วันที่ | รายละเอียด | เงินเข้า (บาท) | เงินออก (บาท)</b>
+    </div>
+    <button class="btn-template" onclick="createTemplate()">📋 สร้าง Sheet Template</button>
+  </div>
+
+  <div id="msg" class="msg"></div>
+
+  <div class="btn-row">
+    <button class="btn-primary" id="btnSubmit" onclick="submit()">กระทบยอด</button>
+    <button class="btn-secondary" onclick="google.script.host.close()">ปิด</button>
+  </div>
+
+  <script>
+    var currentTab = 'csv';
+
+    // Load bank list
+    google.script.run
+      .withSuccessHandler(function(banks) {
+        var sel = document.getElementById('bankCode');
+        sel.innerHTML = '<option value="">-- เลือกธนาคาร --</option>';
+        banks.forEach(function(b) {
+          var opt = document.createElement('option');
+          opt.value = b.code;
+          opt.textContent = b.label;
+          sel.appendChild(opt);
+        });
+      })
+      .getAvailableBanks();
+
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.tab').forEach(function(t, i) {
+        var tabs = ['csv','pdf','sheet'];
+        t.classList.toggle('active', tabs[i] === tab);
+      });
+      document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
+      document.getElementById('panel-' + tab).classList.add('active');
+    }
+
+    function createTemplate() {
+      var bankCode = document.getElementById('bankCode').value;
+      var month = document.getElementById('month').value.trim();
+      if (!bankCode || !month) { showMsg('เลือกธนาคารและเดือนก่อน', 'error'); return; }
+      showMsg('กำลังสร้าง Sheet Template...', 'info');
+      google.script.run
+        .withSuccessHandler(function(r) {
+          if (r.ok) showMsg('สร้าง Sheet "' + r.sheetName + '" เรียบร้อย — กรอกข้อมูลแล้วกลับมากด "กระทบยอด"', 'success');
+          else showMsg('เกิดข้อผิดพลาด', 'error');
+        })
+        .createStatementTemplateAction(bankCode, month);
+    }
+
+    function submit() {
+      var bankCode = document.getElementById('bankCode').value;
+      var month = document.getElementById('month').value.trim();
+
+      if (!bankCode) { showMsg('กรุณาเลือกธนาคาร', 'error'); return; }
+      if (!month || !/^\d{4}-\d{2}$/.test(month)) { showMsg('กรุณากรอกเดือนในรูปแบบ YYYY-MM', 'error'); return; }
+
+      var fileId = '';
+      var inputMode = currentTab === 'sheet' ? 'sheet' : (currentTab === 'pdf' ? 'drive_pdf' : 'drive_csv');
+
+      if (currentTab === 'csv') {
+        fileId = document.getElementById('fileIdCsv').value.trim();
+        if (!fileId) { showMsg('กรุณาใส่ File ID ของไฟล์ CSV', 'error'); return; }
+      } else if (currentTab === 'pdf') {
+        fileId = document.getElementById('fileIdPdf').value.trim();
+        if (!fileId) { showMsg('กรุณาใส่ File ID ของไฟล์ PDF', 'error'); return; }
+      }
+
+      // Extract file ID from full URL if pasted
+      var urlMatch = fileId.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      if (urlMatch) fileId = urlMatch[1];
+
+      var btn = document.getElementById('btnSubmit');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="loader"></span>กำลังกระทบยอด...';
+      hideMsg();
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          btn.disabled = false;
+          btn.textContent = 'กระทบยอด';
+          if (result.ok) {
+            var lines = [
+              '✅ กระทบยอดเสร็จสิ้น',
+              '• Statement: ' + result.statementCount + ' รายการ',
+              '• ระบบ: ' + result.journalCount + ' รายการ',
+              '• จับคู่ได้: ' + result.matched + ' รายการ',
+            ];
+            if (result.statementOnly > 0) lines.push('⚠ ใน Statement ไม่พบในระบบ: ' + result.statementOnly + ' รายการ');
+            if (result.systemOnly > 0)   lines.push('⚠ ในระบบไม่พบใน Statement: ' + result.systemOnly + ' รายการ');
+            lines.push('→ ดูผลได้ที่ชีต "กระทบ Statement ..."');
+            showMsg(lines.join('\n'), result.statementOnly > 0 || result.systemOnly > 0 ? 'info' : 'success');
+          } else {
+            showMsg('❌ ' + result.msg, 'error');
+          }
+        })
+        .withFailureHandler(function(e) {
+          btn.disabled = false;
+          btn.textContent = 'กระทบยอด';
+          showMsg('❌ ' + e.message, 'error');
+        })
+        .importAndReconcile({bankCode: bankCode, month: month, fileId: fileId, inputMode: inputMode});
+    }
+
+    function showMsg(text, type) {
+      var el = document.getElementById('msg');
+      el.style.whiteSpace = 'pre-line';
+      el.textContent = text;
+      el.className = 'msg ' + type;
+    }
+    function hideMsg() { document.getElementById('msg').className = 'msg'; }
+  </script>
+</body>
+</html>
