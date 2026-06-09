@@ -321,8 +321,8 @@ function reconcile(statement: StatementEntry[], system: SystemEntry[]) {
       if (Math.abs(s.amount - e.amount) > 1) continue   // amount tolerance: 1 baht
       if (s.type !== e.type) continue
       const dayDiff = Math.abs(daysBetween(s.date, e.date))
-      if (dayDiff > 3) continue
-      const score = 100 - dayDiff * 25 + (Math.abs(s.amount - e.amount) < 0.05 ? 15 : 0)
+      if (dayDiff > 0) continue                         // date must match exactly
+      const score = 100 + (Math.abs(s.amount - e.amount) < 0.05 ? 15 : 0)
       if (score > bestScore) { bestScore = score; bestJ = j }
     }
 

@@ -62,27 +62,6 @@ const DISMISS_REASONS = [
   'อื่นๆ',
 ]
 
-const BANK_NAMES = ['KBANK', 'TTB', 'SCB', 'BBL', 'KTB', 'BAY', 'GSB', 'TMB', 'KKP', 'TISCO', 'UOB', 'CITI', 'GHB', 'BAAC']
-
-interface TransferForm {
-  fromBank: string; fromAccount: string
-  toBank: string; toAccount: string
-  note: string; saving: boolean; saved: boolean
-}
-
-function parseDescForTransfer(desc: string, fromBank: string): Omit<TransferForm, 'saving' | 'saved'> {
-  let toBank = '', toAccount = ''
-  const upper = desc.toUpperCase()
-  for (const b of BANK_NAMES) {
-    if (upper.includes(b)) {
-      toBank = b
-      const m = desc.match(new RegExp(b + '\\s+(\\S+)', 'i'))
-      if (m) toAccount = m[1]
-      break
-    }
-  }
-  return { fromBank, fromAccount: '', toBank, toAccount, note: desc }
-}
 
 export default function ReconcilePage() {
   const today = getTodayBKK()
@@ -106,9 +85,6 @@ export default function ReconcilePage() {
   const [dismissed, setDismissed] = useState<Record<string, string>>({})
   const [pendingKey, setPendingKey] = useState<string | null>(null)
   const [pendingReason, setPendingReason] = useState(DISMISS_REASONS[0])
-  // transfer forms
-  const [transferForms, setTransferForms] = useState<Record<string, TransferForm>>({})
-
   function dismiss(key: string) {
     setDismissed(prev => ({ ...prev, [key]: pendingReason }))
     setPendingKey(null)
@@ -116,49 +92,6 @@ export default function ReconcilePage() {
   }
   function undismiss(key: string) {
     setDismissed(prev => { const n = { ...prev }; delete n[key]; return n })
-  }
-
-  function openTransferForm(key: string, entry: Entry) {
-    const defaults = parseDescForTransfer(entry.description, selectedBank)
-    setTransferForms(prev => ({ ...prev, [key]: { ...defaults, saving: false, saved: false } }))
-    setPendingKey(null)
-  }
-  function closeTransferForm(key: string) {
-    setTransferForms(prev => { const n = { ...prev }; delete n[key]; return n })
-  }
-  function updateTransferForm(key: string, patch: Partial<TransferForm>) {
-    setTransferForms(prev => ({ ...prev, [key]: { ...prev[key], ...patch } }))
-  }
-
-  async function submitTransfer(key: string, entry: Entry) {
-    const form = transferForms[key]
-    if (!form || !form.fromBank || !form.toBank) return
-    updateTransferForm(key, { saving: true })
-    try {
-      const res = await fetch('/api/transfers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date: entry.date,
-          amount_satang: Math.round(entry.amount * 100),
-          from_bank: form.fromBank,
-          from_account: form.fromAccount,
-          to_bank: form.toBank,
-          to_account: form.toAccount,
-          note: form.note,
-        }),
-      })
-      if (res.ok) {
-        updateTransferForm(key, { saving: false, saved: true })
-      } else {
-        const d = await res.json()
-        alert('เกิดข้อผิดพลาด: ' + (d.error || 'unknown'))
-        updateTransferForm(key, { saving: false })
-      }
-    } catch {
-      alert('เชื่อมต่อไม่ได้')
-      updateTransferForm(key, { saving: false })
-    }
   }
 
   useEffect(() => {
@@ -514,75 +447,6 @@ export default function ReconcilePage() {
                             </button>
                           </div>
                         )}
-
-                        {/* Add transfer button (type=out only) */}
-                        {!isDismissed && !isPending && e.type === 'out' && (() => {
-                          const tf = transferForms[key]
-                          if (tf?.saved) return (
-                            <div className="text-[11px] py-1 px-2 rounded-lg text-center font-semibold"
-                              style={{ background: '#dcfce7', color: '#166534' }}>
-                              ✅ บันทึกการโอนเงินแล้ว
-                            </div>
-                          )
-                          if (tf) return (
-                            <div className="pt-2 border-t space-y-2" style={{ borderColor: 'var(--border)' }}>
-                              <p className="text-[11px] font-semibold" style={{ color: 'var(--charcoal)' }}>บันทึกการโอนเงิน</p>
-                              <div className="grid grid-cols-2 gap-1.5">
-                                <div>
-                                  <p className="text-[10px] mb-0.5" style={{ color: 'var(--muted-foreground)' }}>จากธนาคาร</p>
-                                  <select value={tf.fromBank} onChange={ev => updateTransferForm(key, { fromBank: ev.target.value })}
-                                    className="w-full text-xs border rounded-lg px-2 py-1.5" style={{ borderColor: 'var(--border)' }}>
-                                    <option value="">-- เลือก --</option>
-                                    {BANK_NAMES.map(b => <option key={b} value={b}>{b}</option>)}
-                                  </select>
-                                </div>
-                                <div>
-                                  <p className="text-[10px] mb-0.5" style={{ color: 'var(--muted-foreground)' }}>เลขบัญชีต้นทาง</p>
-                                  <input value={tf.fromAccount} onChange={ev => updateTransferForm(key, { fromAccount: ev.target.value })}
-                                    placeholder="เช่น 760-2-31598-3"
-                                    className="w-full text-xs border rounded-lg px-2 py-1.5" style={{ borderColor: 'var(--border)' }} />
-                                </div>
-                                <div>
-                                  <p className="text-[10px] mb-0.5" style={{ color: 'var(--muted-foreground)' }}>ไปธนาคาร</p>
-                                  <select value={tf.toBank} onChange={ev => updateTransferForm(key, { toBank: ev.target.value })}
-                                    className="w-full text-xs border rounded-lg px-2 py-1.5" style={{ borderColor: 'var(--border)' }}>
-                                    <option value="">-- เลือก --</option>
-                                    {BANK_NAMES.map(b => <option key={b} value={b}>{b}</option>)}
-                                  </select>
-                                </div>
-                                <div>
-                                  <p className="text-[10px] mb-0.5" style={{ color: 'var(--muted-foreground)' }}>เลขบัญชีปลายทาง</p>
-                                  <input value={tf.toAccount} onChange={ev => updateTransferForm(key, { toAccount: ev.target.value })}
-                                    placeholder="เช่น X2080"
-                                    className="w-full text-xs border rounded-lg px-2 py-1.5" style={{ borderColor: 'var(--border)' }} />
-                                </div>
-                              </div>
-                              <div>
-                                <p className="text-[10px] mb-0.5" style={{ color: 'var(--muted-foreground)' }}>หมายเหตุ</p>
-                                <input value={tf.note} onChange={ev => updateTransferForm(key, { note: ev.target.value })}
-                                  className="w-full text-xs border rounded-lg px-2 py-1.5" style={{ borderColor: 'var(--border)' }} />
-                              </div>
-                              <div className="flex gap-2">
-                                <button onClick={() => submitTransfer(key, e)} disabled={tf.saving || !tf.fromBank || !tf.toBank}
-                                  className="flex-1 text-xs py-1.5 rounded-lg font-semibold text-white disabled:opacity-50"
-                                  style={{ background: 'var(--flame-red)' }}>
-                                  {tf.saving ? 'กำลังบันทึก...' : 'บันทึก'}
-                                </button>
-                                <button onClick={() => closeTransferForm(key)}
-                                  className="text-xs px-3 py-1.5 rounded-lg border" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
-                                  ยกเลิก
-                                </button>
-                              </div>
-                            </div>
-                          )
-                          return (
-                            <button onClick={() => openTransferForm(key, e)}
-                              className="w-full text-[11px] py-1.5 rounded-lg border font-semibold transition-colors"
-                              style={{ borderColor: '#3b82f6', color: '#2563eb', background: '#eff6ff' }}>
-                              ➕ บันทึกเป็นการโอนเงิน
-                            </button>
-                          )
-                        })()}
                       </div>
                     </div>
                   )
