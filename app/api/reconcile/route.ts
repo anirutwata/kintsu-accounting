@@ -278,7 +278,9 @@ async function getSystemEntries(supabase: Awaited<ReturnType<typeof createClient
     .order('date')
 
   for (const t of transfers || []) {
-    if (bankMatches(t.from_bank, bankName)) {
+    const fromMatch = !bankName || bankMatches(t.from_bank, bankName)
+    const toMatch   = !bankName || bankMatches(t.to_bank, bankName)
+    if (fromMatch) {
       entries.push({
         date: t.date,
         description: `โอนออกไป ${t.to_bank}${t.to_account ? ' ' + t.to_account : ''}${t.note ? ' — ' + t.note : ''}`,
@@ -288,7 +290,7 @@ async function getSystemEntries(supabase: Awaited<ReturnType<typeof createClient
         id: t.id,
       })
     }
-    if (bankMatches(t.to_bank, bankName)) {
+    if (toMatch) {
       entries.push({
         date: t.date,
         description: `รับโอนจาก ${t.from_bank}${t.from_account ? ' ' + t.from_account : ''}${t.note ? ' — ' + t.note : ''}`,
