@@ -62,11 +62,12 @@ async function parsePdfWithClaude(file: File): Promise<StatementEntry[]> {
     max_tokens: 8096,
     messages: [{
       role: 'user',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       content: [
         {
           type: 'document',
           source: { type: 'base64', media_type: 'application/pdf', data: base64 },
-        } as Parameters<typeof anthropic.messages.create>[0]['messages'][0]['content'][0],
+        } as any,
         {
           type: 'text',
           text: `Extract ALL transaction rows from this Thai bank statement.
