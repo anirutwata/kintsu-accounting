@@ -59,7 +59,7 @@ async function parsePdfWithClaude(file: File): Promise<StatementEntry[]> {
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 8096,
+    max_tokens: 16000,
     messages: [{
       role: 'user',
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -70,38 +70,43 @@ async function parsePdfWithClaude(file: File): Promise<StatementEntry[]> {
         } as any,
         {
           type: 'text',
-          text: `Extract ALL transaction rows from this Thai bank statement.
-Return ONLY a JSON array (no markdown, no explanation) where each item is:
-{"date":"YYYY-MM-DD","description":"...","amount":1000.00,"type":"in or out"}
+          text: `You are extracting transactions from a Thai bank statement PDF.
 
-Date conversion rules (IMPORTANT):
-- Dates use Thai Buddhist Era (พ.ศ.) with abbreviated months
-- 2-digit year e.g. "69" means 2569 BE → 2569-543 = 2026 CE
-- Thai months: ม.ค.=01, ก.พ.=02, มี.ค.=03, เม.ย.=04, พ.ค.=05, มิ.ย.=06, ก.ค.=07, ส.ค.=08, ก.ย.=09, ต.ค.=10, พ.ย.=11, ธ.ค.=12
-- Example: "9 มิ.ย. 69" → "2026-06-09"
+TASK: Extract EVERY transaction row. Return ONLY a raw JSON array — no markdown, no code fences, no explanation.
 
-Amount rules:
-- Positive number in จำนวนเงิน column (+) → type "in"
-- Negative number (-) → type "out"
-- amount field is always a positive number
+OUTPUT FORMAT (each item):
+{"date":"YYYY-MM-DD","description":"...","amount":1234.56,"type":"in"}
 
-Description: combine รายการ (transaction type) + รายละเอียด (counterparty/detail), skip ช่องทาง and balance columns.
+DATE RULES (Thai Buddhist Era, 2-digit year):
+- Year "68" = 2568 BE = 2568-543 = 2025 CE
+- Year "69" = 2569 BE = 2569-543 = 2026 CE
+- Month abbreviations: ม.ค.=01 ก.พ.=02 มี.ค.=03 เม.ย.=04 พ.ค.=05 มิ.ย.=06 ก.ค.=07 ส.ค.=08 ก.ย.=09 ต.ค.=10 พ.ย.=11 ธ.ค.=12
+- Example: "9 มิ.ย. 69" → "2026-06-09", "30 มี.ค. 69" → "2026-03-30"
 
-Return only valid JSON array, no other text.`
+AMOUNT RULES (จำนวนเงิน column):
+- Positive (+) or no sign → type "in"
+- Negative (-) → type "out"
+- amount is always positive number (no sign)
+
+DESCRIPTION: combine รายการ + รายละเอียด columns. Skip ช่องทาง, ยอดเงินคงเหลือ.
+
+Start output with [ and end with ]. Nothing else.`
         }
       ]
     }]
   })
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : ''
-  // Extract JSON array from response
-  const match = text.match(/\[[\s\S]*\]/)
-  if (!match) return []
+  const raw = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
+  // Strip markdown fences if present
+  const clean = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+  // Extract JSON array
+  const match = clean.match(/\[[\s\S]*\]/)
+  if (!match) throw new Error(`Claude ไม่ส่งข้อมูลกลับมา (raw: ${raw.slice(0, 200)})`)
   try {
     const parsed = JSON.parse(match[0]) as StatementEntry[]
-    return parsed.filter(e => e.date && e.amount > 0 && (e.type === 'in' || e.type === 'out'))
-  } catch {
-    return []
+    return parsed.filter(e => e.date && typeof e.amount === 'number' && e.amount > 0 && (e.type === 'in' || e.type === 'out'))
+  } catch (e) {
+    throw new Error(`แปลง JSON ไม่ได้: ${e instanceof Error ? e.message : e} | raw: ${raw.slice(0, 200)}`)
   }
 }
 
@@ -382,7 +387,16 @@ export async function POST(req: Request) {
     }
 
     if (statementEntries.length === 0) {
-      return NextResponse.json({ error: 'ไม่พบข้อมูล Statement ตรวจสอบรูปแบบไฟล์' }, { status: 400 })
+      return NextResponse.json({ error: 'ไม่พบข้อมูล Statement — ตรวจสอบว่าไฟล์มีข้อมูลธุรกรรม หรือลอง CSV แทน PDF' }, { status: 400 })
+    }
+
+    // Filter statement to selected month only (statements may span multiple months)
+    const allStatementCount = statementEntries.length
+    statementEntries = statementEntries.filter(e => e.date.startsWith(month))
+    if (statementEntries.length === 0) {
+      return NextResponse.json({
+        error: `ไม่มีรายการใน Statement สำหรับเดือน ${month} (Statement มี ${allStatementCount} รายการ แต่เป็นเดือนอื่นทั้งหมด)`
+      }, { status: 400 })
     }
 
     const supabase = await createClient()
