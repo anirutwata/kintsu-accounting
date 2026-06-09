@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; padding: 16px 20px; margin: 0; background: #fff; color: #333; font-size: 13px; }
+    h3 { margin: 0 0 12px 0; font-size: 14px; color: #D33F22; border-bottom: 2px solid #D33F22; padding-bottom: 7px; }
+
+    .month-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+    .month-row label { font-weight: bold; font-size: 12px; color: #555; white-space: nowrap; }
+    .month-row select { flex: 1; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+    .month-row select:focus { outline: none; border-color: #D33F22; }
+
+    .section { margin-bottom: 14px; }
+    .section-title {
+      font-size: 11px; font-weight: bold; color: #888; text-transform: uppercase;
+      letter-spacing: 0.5px; margin-bottom: 6px; padding-left: 2px;
+    }
+    .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .btn-grid.single { grid-template-columns: 1fr; }
+    .nav-btn {
+      padding: 8px 10px; background: #f8f8f8; border: 1px solid #ddd;
+      border-radius: 5px; font-size: 12px; cursor: pointer; text-align: left;
+      transition: background 0.15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .nav-btn:hover { background: #fde8e3; border-color: #D33F22; color: #D33F22; }
+    .nav-btn.primary { background: #fff3f0; border-color: #D33F22; color: #D33F22; font-weight: bold; }
+    .nav-btn.primary:hover { background: #D33F22; color: #fff; }
+
+    .no-sheet { font-size: 11px; color: #aaa; padding: 6px; }
+    .loading { color: #888; font-size: 12px; padding: 20px 0; text-align: center; }
+    .btn-close {
+      width: 100%; padding: 8px; margin-top: 4px;
+      background: #fff; color: #666; border: 1px solid #ccc;
+      border-radius: 4px; font-size: 13px; cursor: pointer;
+    }
+    .btn-close:hover { background: #f5f5f5; }
+  </style>
+</head>
+<body>
+  <h3>เลือกดูข้อมูล</h3>
+
+  <div class="month-row">
+    <label>เดือน:</label>
+    <select id="monthSel" onchange="renderSheets()">
+      <option value="">-- กำลังโหลด --</option>
+    </select>
+  </div>
+
+  <div id="content"><div class="loading">กำลังโหลด...</div></div>
+
+  <button class="btn-close" onclick="google.script.host.close()">ปิด</button>
+
+  <script>
+    var _data = null;
+
+    google.script.run
+      .withSuccessHandler(function(d) {
+        _data = d;
+        var sel = document.getElementById('monthSel');
+        sel.innerHTML = '';
+        d.months.forEach(function(m) {
+          var opt = document.createElement('option');
+          opt.value = m;
+          // Convert YYYY-MM to Thai month name
+          opt.textContent = thaiMonth(m);
+          sel.appendChild(opt);
+        });
+        renderSheets();
+      })
+      .withFailureHandler(function(e) {
+        document.getElementById('content').innerHTML = '<div class="no-sheet">โหลดข้อมูลไม่ได้: ' + e.message + '</div>';
+      })
+      .getNavigatorData();
+
+    var THAI_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+    function thaiMonth(ym) {
+      var parts = ym.split('-');
+      var y = parseInt(parts[0]) + 543;
+      var m = parseInt(parts[1]) - 1;
+      return THAI_MONTHS[m] + ' ' + (y - 2500 + 2500).toString().slice(-2) + ' (' + ym + ')';
+    }
+
+    function renderSheets() {
+      if (!_data) return;
+      var month = document.getElementById('monthSel').value;
+      var all = _data.all;
+
+      // Per-month sheets
+      var journals = all.filter(function(n) { return n === '\u0e2a\u0e21\u0e38\u0e14\u0e23\u0e32\u0e22\u0e27\u0e31\u0e19 ' + month; });
+      var reconcile = all.filter(function(n) { return n.indexOf('\u0e01\u0e23\u0e30\u0e17\u0e1a') === 0 && n.endsWith(month); });
+
+      var html = '';
+
+      // Journal section
+      html += '<div class="section">';
+      html += '<div class="section-title">📔 สมุดรายวัน</div>';
+      html += '<div class="btn-grid single">';
+      if (journals.length > 0) {
+        journals.forEach(function(n) { html += btnHtml(n, 'primary'); });
+      } else {
+        html += '<div class="no-sheet">ยังไม่มีข้อมูลเดือนนี้</div>';
+      }
+      html += '</div></div>';
+
+      // Reconcile section
+      html += '<div class="section">';
+      html += '<div class="section-title">🏦 กระทบยอด</div>';
+      html += '<div class="btn-grid">';
+      if (reconcile.length > 0) {
+        reconcile.forEach(function(n) {
+          var label = n.replace(' ' + month, '');
+          html += btnHtml(n, '', label);
+        });
+      } else {
+        html += '<div class="no-sheet">ยังไม่มีการกระทบยอด</div>';
+      }
+      html += '</div></div>';
+
+      // Financial statements
+      html += '<div class="section">';
+      html += '<div class="section-title">📊 งบการเงิน (ทั้งปี)</div>';
+      html += '<div class="btn-grid">';
+      _data.financial.forEach(function(n) { html += btnHtml(n); });
+      if (_data.financial.length === 0) html += '<div class="no-sheet">ยังไม่มีงบการเงิน</div>';
+      html += '</div></div>';
+
+      // Fixed sheets
+      html += '<div class="section">';
+      html += '<div class="section-title">⚙️ ผังบัญชี</div>';
+      html += '<div class="btn-grid">';
+      _data.fixed.forEach(function(n) { html += btnHtml(n); });
+      html += '</div></div>';
+
+      document.getElementById('content').innerHTML = html;
+    }
+
+    function btnHtml(sheetName, cls, label) {
+      var display = label || sheetName;
+      return '<button class="nav-btn ' + (cls||'') + '" onclick="goTo(\'' + sheetName.replace(/'/g, "\\'") + '\')" title="' + sheetName + '">' + display + '</button>';
+    }
+
+    function goTo(name) {
+      google.script.run
+        .withSuccessHandler(function(ok) {
+          if (!ok) alert('ไม่พบชีต: ' + name);
+          else google.script.host.close();
+        })
+        .navigateToSheet(name);
+    }
+  </script>
+</body>
+</html>

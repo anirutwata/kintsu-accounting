@@ -8,6 +8,8 @@
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('KINTSU Ledger')
+    .addItem('\u{1f4cb} \u0e40\u0e25\u0e37\u0e2d\u0e01\u0e14\u0e39\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25', 'showNavigatorDialog')
+    .addSeparator()
     .addItem('\u2795 \u0e40\u0e1e\u0e34\u0e48\u0e21\u0e1a\u0e31\u0e0d\u0e0a\u0e35\u0e18\u0e19\u0e32\u0e04\u0e32\u0e23', 'showAddBankDialog')
     .addItem('\u{1f4c4} \u0e19\u0e33\u0e40\u0e02\u0e49\u0e32 Statement \u0e01\u0e23\u0e30\u0e17\u0e1a\u0e22\u0e2d\u0e14', 'showImportStatementDialog')
     .addSeparator()
@@ -21,6 +23,48 @@ function onOpen() {
     .addItem('\u2699\ufe0f Full Setup (\u0e17\u0e38\u0e01\u0e40\u0e14\u0e37\u0e2d\u0e19)', 'fullSetup')
     .addItem('\u{1f9f9} Cleanup Old Sheets', 'cleanupOldSheets')
     .addToUi();
+}
+
+// ========================================
+// NAVIGATOR DIALOG
+// ========================================
+function showNavigatorDialog() {
+  var html = HtmlService.createHtmlOutputFromFile('NavigatorDialog')
+    .setWidth(440).setHeight(500);
+  SpreadsheetApp.getUi().showModalDialog(html, '\u{1f4cb} \u0e40\u0e25\u0e37\u0e2d\u0e01\u0e14\u0e39\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25');
+}
+
+function getNavigatorData() {
+  var ss = SpreadsheetApp.openById(LEDGER_ID);
+  var allNames = ss.getSheets().map(function(s) { return s.getName(); });
+
+  // Extract available months
+  var monthSet = {};
+  allNames.forEach(function(name) {
+    var m = name.match(/(\d{4}-\d{2})$/);
+    if (m) monthSet[m[1]] = true;
+  });
+  var months = Object.keys(monthSet).sort().reverse();
+
+  // Group sheets
+  var financial = allNames.filter(function(n) {
+    return /^(\u0e07\u0e1a\u0e17\u0e14\u0e25\u0e2d\u0e07|\u0e07\u0e1a\u0e01\u0e33\u0e44\u0e23\u0e02\u0e32\u0e14\u0e17\u0e38\u0e19|\u0e07\u0e1a\u0e14\u0e38\u0e25)/.test(n);
+  });
+  var fixed = allNames.filter(function(n) {
+    return /^(\u0e1c\u0e31\u0e07\u0e1a\u0e31\u0e0d\u0e0a\u0e35)/.test(n);
+  });
+
+  return { months: months, financial: financial, fixed: fixed, all: allNames };
+}
+
+function navigateToSheet(sheetName) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(sheetName);
+  if (sh) {
+    ss.setActiveSheet(sh);
+    SpreadsheetApp.flush();
+  }
+  return !!sh;
 }
 
 // ========================================
@@ -711,8 +755,8 @@ function buildAcctTotals(allEntries) {
 function buildTrialBalance(year) {
   var ss = SpreadsheetApp.openById(LEDGER_ID);
   var sh = ss.getSheetByName('\u0e07\u0e1a\u0e17\u0e14\u0e25\u0e2d\u0e07 ' + year);
-  if (!sh) sh = ss.insertSheet('\u0e07\u0e1a\u0e17\u0e14\u0e25\u0e2d\u0e07 ' + year);
-  else sh.clearContents();
+  if (!sh) { try { sh = ss.insertSheet('\u0e07\u0e1a\u0e17\u0e14\u0e25\u0e2d\u0e07 ' + year); } catch(e) { sh = ss.getSheetByName('\u0e07\u0e1a\u0e17\u0e14\u0e25\u0e2d\u0e07 ' + year); } }
+  sh.clearContents();
 
   var totals = buildAcctTotals(collectAllEntries(ss, year));
 
@@ -753,8 +797,8 @@ function buildTrialBalance(year) {
 function buildPnL(year) {
   var ss = SpreadsheetApp.openById(LEDGER_ID);
   var sh = ss.getSheetByName('\u0e07\u0e1a\u0e01\u0e33\u0e44\u0e23\u0e02\u0e32\u0e14\u0e17\u0e38\u0e19 ' + year);
-  if (!sh) sh = ss.insertSheet('\u0e07\u0e1a\u0e01\u0e33\u0e44\u0e23\u0e02\u0e32\u0e14\u0e17\u0e38\u0e19 ' + year);
-  else sh.clearContents();
+  if (!sh) { try { sh = ss.insertSheet('\u0e07\u0e1a\u0e01\u0e33\u0e44\u0e23\u0e02\u0e32\u0e14\u0e17\u0e38\u0e19 ' + year); } catch(e) { sh = ss.getSheetByName('\u0e07\u0e1a\u0e01\u0e33\u0e44\u0e23\u0e02\u0e32\u0e14\u0e17\u0e38\u0e19 ' + year); } }
+  sh.clearContents();
 
   var totals = buildAcctTotals(collectAllEntries(ss, year));
   var codes = Object.keys(totals).sort();
@@ -820,8 +864,8 @@ function buildPnL(year) {
 function buildBalanceSheet(year) {
   var ss = SpreadsheetApp.openById(LEDGER_ID);
   var sh = ss.getSheetByName('\u0e07\u0e1a\u0e14\u0e38\u0e25 ' + year);
-  if (!sh) sh = ss.insertSheet('\u0e07\u0e1a\u0e14\u0e38\u0e25 ' + year);
-  else sh.clearContents();
+  if (!sh) { try { sh = ss.insertSheet('\u0e07\u0e1a\u0e14\u0e38\u0e25 ' + year); } catch(e) { sh = ss.getSheetByName('\u0e07\u0e1a\u0e14\u0e38\u0e25 ' + year); } }
+  sh.clearContents();
 
   var totals = buildAcctTotals(collectAllEntries(ss, year));
   var codes = Object.keys(totals).sort();
