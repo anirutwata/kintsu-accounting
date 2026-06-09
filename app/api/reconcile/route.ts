@@ -224,11 +224,8 @@ function parseCsv(text: string): StatementEntry[] {
   return entries
 }
 
-// Get system transactions for a bank in a month
-async function getSystemEntries(supabase: Awaited<ReturnType<typeof createClient>>, bankName: string, month: string): Promise<SystemEntry[]> {
-  const startDate = `${month}-01`
-  const [y, m] = month.split('-').map(Number)
-  const endDate = `${month}-${new Date(y, m, 0).getDate().toString().padStart(2, '0')}`
+// Get system transactions for a bank in a date range
+async function getSystemEntries(supabase: Awaited<ReturnType<typeof createClient>>, bankName: string, startDate: string, endDate: string): Promise<SystemEntry[]> {
 
   const entries: SystemEntry[] = []
 
@@ -369,10 +366,25 @@ export async function POST(req: Request) {
   const formData = await req.formData()
   const file = formData.get('file') as File | null
   const bankName = (formData.get('bank') as string) || ''
-  const month = formData.get('month') as string
+  const month = (formData.get('month') as string) || ''
+  const dateFromRaw = (formData.get('dateFrom') as string) || ''
+  const dateToRaw   = (formData.get('dateTo')   as string) || ''
 
-  if (!file || !month) {
-    return NextResponse.json({ error: 'กรุณาส่งไฟล์และเดือน' }, { status: 400 })
+  if (!file) {
+    return NextResponse.json({ error: 'กรุณาส่งไฟล์' }, { status: 400 })
+  }
+
+  // Resolve date range
+  let startDate: string, endDate: string
+  if (dateFromRaw && dateToRaw) {
+    startDate = dateFromRaw
+    endDate = dateToRaw
+  } else if (month) {
+    const [y, m] = month.split('-').map(Number)
+    startDate = `${month}-01`
+    endDate = `${month}-${new Date(y, m, 0).getDate().toString().padStart(2, '0')}`
+  } else {
+    return NextResponse.json({ error: 'กรุณาระบุเดือนหรือช่วงเวลา' }, { status: 400 })
   }
 
   try {
@@ -390,17 +402,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'ไม่พบข้อมูล Statement — ตรวจสอบว่าไฟล์มีข้อมูลธุรกรรม หรือลอง CSV แทน PDF' }, { status: 400 })
     }
 
-    // Filter statement to selected month only (statements may span multiple months)
-    const allStatementCount = statementEntries.length
-    statementEntries = statementEntries.filter(e => e.date.startsWith(month))
+    // Filter statement to selected date range (statements may span multiple months)
+    const allCount = statementEntries.length
+    statementEntries = statementEntries.filter(e => e.date >= startDate && e.date <= endDate)
     if (statementEntries.length === 0) {
       return NextResponse.json({
-        error: `ไม่มีรายการใน Statement สำหรับเดือน ${month} (Statement มี ${allStatementCount} รายการ แต่เป็นเดือนอื่นทั้งหมด)`
+        error: `ไม่มีรายการใน Statement สำหรับช่วง ${startDate} ถึง ${endDate} (Statement มี ${allCount} รายการ แต่เป็นช่วงเวลาอื่นทั้งหมด)`
       }, { status: 400 })
     }
 
     const supabase = await createClient()
-    const systemEntries = await getSystemEntries(supabase, bankName, month)
+    const systemEntries = await getSystemEntries(supabase, bankName, startDate, endDate)
     const result = reconcile(statementEntries, systemEntries)
 
     return NextResponse.json({ ...result, statementCount: statementEntries.length, systemCount: systemEntries.length })

@@ -66,7 +66,10 @@ export default function ReconcilePage() {
   const today = getTodayBKK()
   const [accounts, setAccounts] = useState<BankAccount[]>([])
   const [selectedBank, setSelectedBank] = useState('')
+  const [rangeMode, setRangeMode] = useState(false)
   const [month, setMonth] = useState(today.substring(0, 7))
+  const [dateFrom, setDateFrom] = useState(today.substring(0, 7))
+  const [dateTo, setDateTo] = useState(today.substring(0, 7))
   const [file, setFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<ReconcileResult | null>(null)
@@ -126,7 +129,6 @@ export default function ReconcilePage() {
 
   async function handleSubmit() {
     if (!file) { setError('กรุณาเลือกไฟล์ Statement'); return }
-    if (!month) { setError('กรุณาเลือกเดือน'); return }
     setLoading(true)
     setError('')
     setResult(null)
@@ -134,7 +136,12 @@ export default function ReconcilePage() {
       const fd = new FormData()
       fd.append('file', file)
       fd.append('bank', selectedBank)
-      fd.append('month', month)
+      if (rangeMode) {
+        fd.append('dateFrom', dateFrom + '-01')
+        fd.append('dateTo', (() => { const [y, m] = dateTo.split('-').map(Number); return `${dateTo}-${new Date(y, m, 0).getDate()}` })())
+      } else {
+        fd.append('month', month)
+      }
       const res = await fetch('/api/reconcile', { method: 'POST', body: fd })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'เกิดข้อผิดพลาด'); return }
@@ -190,20 +197,33 @@ export default function ReconcilePage() {
           )}
         </div>
 
-        {/* Bank + Month */}
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>ธนาคาร</label>
-            <select value={selectedBank} onChange={e => setSelectedBank(e.target.value)}
-              className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}>
-              <option value="">ทุกธนาคาร</option>
-              {accounts.map(a => (
-                <option key={a.id} value={a.bank_name}>
-                  {a.bank_name} {a.account_number}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Bank */}
+        <div>
+          <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>ธนาคาร</label>
+          <select value={selectedBank} onChange={e => setSelectedBank(e.target.value)}
+            className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}>
+            <option value="">ทุกธนาคาร</option>
+            {accounts.map(a => (
+              <option key={a.id} value={a.bank_name}>{a.bank_name} {a.account_number}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Date range toggle */}
+        <div className="flex rounded-xl overflow-hidden border text-xs font-semibold" style={{ borderColor: 'var(--border)' }}>
+          <button onClick={() => setRangeMode(false)}
+            className="flex-1 py-2 transition-colors"
+            style={{ background: !rangeMode ? 'var(--flame-red)' : 'white', color: !rangeMode ? 'white' : 'var(--muted-foreground)' }}>
+            เดือนเดียว
+          </button>
+          <button onClick={() => setRangeMode(true)}
+            className="flex-1 py-2 transition-colors"
+            style={{ background: rangeMode ? 'var(--flame-red)' : 'white', color: rangeMode ? 'white' : 'var(--muted-foreground)' }}>
+            ช่วงเวลา
+          </button>
+        </div>
+
+        {!rangeMode ? (
           <div>
             <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>เดือน</label>
             <select value={month} onChange={e => setMonth(e.target.value)}
@@ -211,7 +231,24 @@ export default function ReconcilePage() {
               {monthOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>ตั้งแต่</label>
+              <select value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}>
+                {monthOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>ถึง</label>
+              <select value={dateTo} onChange={e => setDateTo(e.target.value)}
+                className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}>
+                {monthOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
 
         {error && <p className="text-xs text-red-600 bg-red-50 rounded-xl p-3">{error}</p>}
 
