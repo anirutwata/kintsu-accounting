@@ -14,20 +14,17 @@ interface JournalEntry {
   amount: number   // baht
 }
 
+// Name-based fallback — codes match sequential sort_order: KBANK=1102, TTB=1103, UOB=1104
 function bankAccount(bank: string | null, method?: string | null): { code: string; name: string } {
   if (!bank && method === 'เงินสด') return { code: '1101', name: 'เงินสด' }
   if (!bank) return { code: '1101', name: 'เงินสด' }
   const b = bank.toLowerCase().replace(/\s/g, '')
-  if (b.includes('ttb') || b.includes('ทหารไทย') || b.includes('tmb') || b.includes('ธนชาต'))
-    return { code: '1102', name: 'เงินฝากธนาคาร TTB' }
   if (b.includes('kbank') || b.includes('กสิกร'))
-    return { code: '1103', name: 'เงินฝากธนาคาร กสิกรไทย' }
+    return { code: '1102', name: 'เงินฝากธนาคาร กสิกรไทย' }
+  if (b.includes('ttb') || b.includes('ทหารไทย') || b.includes('tmb') || b.includes('ธนชาต'))
+    return { code: '1103', name: 'เงินฝากธนาคาร TTB' }
   if (b.includes('uob') || b.includes('ยูโอบี'))
     return { code: '1104', name: 'เงินฝากธนาคาร UOB' }
-  if (b.includes('scb') || b.includes('ไทยพาณิชย์'))
-    return { code: '1105', name: 'เงินฝากธนาคาร SCB' }
-  if (b.includes('bbl') || b.includes('กรุงเทพ'))
-    return { code: '1105', name: 'เงินฝากธนาคาร BBL' }
   return { code: '1105', name: `เงินฝากธนาคารอื่น (${bank})` }
 }
 
@@ -85,33 +82,31 @@ export async function GET(req: Request) {
   const supabase = await createClient()
   const entries: JournalEntry[] = []
 
-  // Fetch settings for income bank accounts
-  const { data: settingsRow } = await supabase
-    .from('settings')
-    .select('grab_bank_account_id, fs_promptpay_bank_id, fs_company_transfer_bank_id, fs_credit_card_bank_id, pp_promptpay_bank_id, pp_company_transfer_bank_id, pp_credit_card_bank_id')
-    .eq('id', 1).single()
+  // Fetch settings via RPC (bypasses anon role UUID column restriction)
+  const { data: settingsRow } = await supabase.rpc('get_settings')
+
+  // Build UUID → {code, name} map from bank_accounts ordered by sort_order
+  const { data: allBanks } = await supabase.from('bank_accounts').select('id, bank_name, account_number, account_name').eq('is_active', true).order('sort_order')
+  const bankMap = new Map<string, { code: string; name: string }>()
+  ;(allBanks || []).forEach((ba, i) => {
+    bankMap.set(ba.id, { code: String(1102 + i), name: `เงินฝากธนาคาร ${ba.bank_name} ${ba.account_number}` })
+  })
 
   const defaultBank = { code: '1102', name: 'เงินฝากธนาคาร (รายรับ)' }
-  const defaultGrab = { code: '1103', name: 'เงินฝากธนาคาร (Grab)' }
+  const defaultGrab = { code: '1102', name: 'เงินฝากธนาคาร (Grab)' }
 
-  async function resolveBankId(id: string | null | undefined): Promise<{ code: string; name: string }> {
+  function resolveBankId(id: string | null | undefined): { code: string; name: string } {
     if (!id) return defaultBank
-    const { data: ba } = await supabase.from('bank_accounts').select('bank_name').eq('id', id).single()
-    return ba ? bankAccount(ba.bank_name) : defaultBank
+    return bankMap.get(id) ?? defaultBank
   }
 
-  const [fsPromptpay, fsCompanyTransfer, fsCreditCard, ppPromptpay, ppCompanyTransfer, ppCreditCard, grabBankAccount] = await Promise.all([
-    resolveBankId(settingsRow?.fs_promptpay_bank_id),
-    resolveBankId(settingsRow?.fs_company_transfer_bank_id),
-    resolveBankId(settingsRow?.fs_credit_card_bank_id),
-    resolveBankId(settingsRow?.pp_promptpay_bank_id),
-    resolveBankId(settingsRow?.pp_company_transfer_bank_id),
-    resolveBankId(settingsRow?.pp_credit_card_bank_id),
-    settingsRow?.grab_bank_account_id
-      ? supabase.from('bank_accounts').select('bank_name').eq('id', settingsRow.grab_bank_account_id).single()
-          .then(({ data: ba }) => ba ? bankAccount(ba.bank_name) : defaultGrab)
-      : Promise.resolve(defaultGrab),
-  ])
+  const fsPromptpay      = resolveBankId(settingsRow?.fs_promptpay_bank_id)
+  const fsCompanyTransfer = resolveBankId(settingsRow?.fs_company_transfer_bank_id)
+  const fsCreditCard     = resolveBankId(settingsRow?.fs_credit_card_bank_id)
+  const ppPromptpay      = resolveBankId(settingsRow?.pp_promptpay_bank_id)
+  const ppCompanyTransfer = resolveBankId(settingsRow?.pp_company_transfer_bank_id)
+  const ppCreditCard     = resolveBankId(settingsRow?.pp_credit_card_bank_id)
+  const grabBankAccount  = resolveBankId(settingsRow?.grab_bank_account_id) ?? defaultGrab
 
   // 1. Expenses
   const { data: expenses } = await supabase
