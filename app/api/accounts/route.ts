@@ -32,15 +32,7 @@ export async function GET() {
     })),
   ]
 
-  // Deduplicate bank entries by code (keep first occurrence per code)
-  const seen = new Set<string>()
-  const uniqueBankEntries = bankEntries.filter(e => {
-    if (seen.has(e.code)) return false
-    seen.add(e.code)
-    return true
-  })
-
-  const all = [...uniqueBankEntries, ...(accounts || [])].sort((a, b) => a.code.localeCompare(b.code))
+  const all = [...bankEntries, ...(accounts || [])].sort((a, b) => a.code.localeCompare(b.code) || a.name.localeCompare(b.name))
   return NextResponse.json(all)
 }
 
