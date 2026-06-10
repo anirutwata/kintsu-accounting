@@ -21,35 +21,55 @@ function bankAccount(bank: string | null, method?: string | null): { code: strin
   if (b.includes('ttb') || b.includes('ทหารไทย') || b.includes('tmb') || b.includes('ธนชาต'))
     return { code: '1102', name: 'เงินฝากธนาคาร TTB' }
   if (b.includes('kbank') || b.includes('กสิกร'))
-    return { code: '1103', name: 'เงินฝากธนาคาร KBANK' }
+    return { code: '1103', name: 'เงินฝากธนาคาร กสิกรไทย' }
+  if (b.includes('uob') || b.includes('ยูโอบี'))
+    return { code: '1104', name: 'เงินฝากธนาคาร UOB' }
   if (b.includes('scb') || b.includes('ไทยพาณิชย์'))
-    return { code: '1104', name: 'เงินฝากธนาคาร SCB' }
+    return { code: '1105', name: 'เงินฝากธนาคาร SCB' }
   if (b.includes('bbl') || b.includes('กรุงเทพ'))
-    return { code: '1104', name: 'เงินฝากธนาคาร BBL' }
-  return { code: '1104', name: `เงินฝากธนาคาร (${bank})` }
+    return { code: '1105', name: 'เงินฝากธนาคาร BBL' }
+  return { code: '1105', name: `เงินฝากธนาคารอื่น (${bank})` }
 }
 
 function categoryAccount(category: string): { code: string; name: string } {
-  const c = category.toLowerCase()
-  if (c.includes('วัตถุดิบ') || c.includes('อาหาร') || c.includes('เครื่องดื่ม') || c.includes('ส่วนผสม'))
-    return { code: '5101', name: 'ต้นทุนวัตถุดิบ' }
-  if (c.includes('เงินเดือน') || c.includes('ค่าแรง') || c.includes('แรงงาน') || c.includes('ค่าจ้าง'))
-    return { code: '5201', name: 'เงินเดือนและค่าแรง' }
-  if (c.includes('เช่า'))
-    return { code: '5301', name: 'ค่าเช่า' }
-  if (c.includes('ไฟ') || c.includes('น้ำ') || c.includes('สาธารณ') || c.includes('อินเทอร์') || c.includes('โทรศัพท์'))
-    return { code: '5302', name: 'ค่าสาธารณูปโภค' }
-  if (c.includes('ซ่อม') || c.includes('บำรุง'))
-    return { code: '5303', name: 'ค่าซ่อมแซมและบำรุงรักษา' }
-  if (c.includes('บรรจุ') || c.includes('วัสดุ') || c.includes('กล่อง') || c.includes('ถุง'))
-    return { code: '5304', name: 'ค่าบรรจุภัณฑ์และวัสดุ' }
-  if (c.includes('การตลาด') || c.includes('โฆษณา') || c.includes('ประชาสัมพันธ์'))
-    return { code: '5305', name: 'ค่าใช้จ่ายทางการตลาด' }
-  if (c.includes('เสื่อม'))
-    return { code: '5401', name: 'ค่าเสื่อมราคา' }
-  if (c.includes('ธนาคาร') || c.includes('ค่าธรรมเนียม'))
-    return { code: '5501', name: 'ค่าธรรมเนียมธนาคาร' }
-  return { code: '5601', name: 'ค่าใช้จ่ายทั่วไป' }
+  const map: Record<string, { code: string; name: string }> = {
+    'วัตถุดิบทางตรง-เนื้อวัว':                   { code: '5101', name: 'วัตถุดิบทางตรง-เนื้อวัว' },
+    'วัตถุดิบทางตรง-เนื้อหมู':                   { code: '5102', name: 'วัตถุดิบทางตรง-เนื้อหมู' },
+    'วัตถุดิบทางตรง-อื่นๆ':                      { code: '5103', name: 'วัตถุดิบทางตรง-อื่นๆ' },
+    'เครื่องดื่ม':                               { code: '5104', name: 'เครื่องดื่ม' },
+    'บรรจุภัณฑ์':                               { code: '5201', name: 'บรรจุภัณฑ์' },
+    'วัสดุสิ้นเปลืองในครัว':                     { code: '5202', name: 'วัสดุสิ้นเปลืองในครัว' },
+    'วัสดุสิ้นเปลืองทั่วไปในร้านอาหาร':          { code: '5203', name: 'วัสดุสิ้นเปลืองทั่วไปในร้านอาหาร' },
+    'เงินเดือนพนักงานประจำและสวัสดิการ':          { code: '5301', name: 'เงินเดือนพนักงานประจำและสวัสดิการ' },
+    'เงินเดือน- part time':                      { code: '5302', name: 'เงินเดือน-Part Time' },
+    'ค่าเช่า':                                   { code: '5401', name: 'ค่าเช่า' },
+    'ค่าบริการเช่าพื้นที่':                       { code: '5402', name: 'ค่าบริการเช่าพื้นที่' },
+    'ค่าน้ำ':                                    { code: '5501', name: 'ค่าน้ำ' },
+    'ค่าไฟ':                                     { code: '5502', name: 'ค่าไฟ' },
+    'ค่าระบบต่างๆ':                              { code: '5503', name: 'ค่าระบบต่างๆ' },
+    'ค่าประกัน':                                 { code: '5504', name: 'ค่าประกัน' },
+    'ค่าการตลาด':                                { code: '5601', name: 'ค่าการตลาด' },
+    'Commission - Grab food':                    { code: '5701', name: 'Commission-Grab food' },
+    'ค่าขนส่ง':                                  { code: '5702', name: 'ค่าขนส่ง' },
+    'ค่าซ่อมบำรุง':                              { code: '5703', name: 'ค่าซ่อมบำรุง' },
+    'ดอกเบี้ย':                                  { code: '5704', name: 'ดอกเบี้ย' },
+    'ค่าบริการอื่นๆ':                            { code: '5705', name: 'ค่าบริการอื่นๆ' },
+    'เงินขาด/เกิน':                              { code: '5706', name: 'เงินขาด/เกิน' },
+    'ภาษีโรงเรือน':                              { code: '5801', name: 'ภาษีโรงเรือน' },
+    'ภาษีมูลค่าเพิ่ม':                           { code: '5802', name: 'ภาษีมูลค่าเพิ่ม' },
+    'ภาษีอื่นๆ':                                 { code: '5803', name: 'ภาษีอื่นๆ' },
+  }
+  return map[category] ?? { code: '5705', name: 'ค่าบริการอื่นๆ' }
+}
+
+function assetAccount(category: string): { code: string; name: string } {
+  const map: Record<string, { code: string; name: string }> = {
+    'ส่วนต่อเติมอาคาร':          { code: '1501', name: 'ส่วนต่อเติมอาคาร' },
+    'ระบบ':                      { code: '1502', name: 'ระบบ' },
+    'อุปกรณ์ครัว':               { code: '1503', name: 'อุปกรณ์ครัว' },
+    'อุปกรณ์ทั่วไปในร้านอาหาร':  { code: '1504', name: 'อุปกรณ์ทั่วไปในร้านอาหาร' },
+  }
+  return map[category] ?? { code: '1505', name: 'สินทรัพย์อื่นๆ' }
 }
 
 export async function GET(req: Request) {
@@ -134,25 +154,25 @@ export async function GET(req: Request) {
       entries.push({ id, date: s.date, type: 'sales', description: desc, ref, debit_code: bank.code, debit_name: bank.name, credit_code: credit, credit_name: creditName, amount })
     }
 
-    // Foodstory
-    push(`fs_cash_${s.date}`,            'Foodstory รายได้ (เงินสด)',        'Foodstory POS', { code: '1101', name: 'เงินสด' },       '4101', 'รายได้จากการขาย (Dine-in)', (s.cash_satang || 0) / 100)
-    push(`fs_promptpay_${s.date}`,       'Foodstory รายได้ (พร้อมเพย์)',     'Foodstory POS', fsPromptpay,       '4101', 'รายได้จากการขาย (Dine-in)', (s.promptpay_satang || 0) / 100)
-    push(`fs_company_${s.date}`,         'Foodstory รายได้ (โอนบริษัท)',     'Foodstory POS', fsCompanyTransfer, '4101', 'รายได้จากการขาย (Dine-in)', (s.company_transfer_satang || 0) / 100)
-    push(`fs_card_${s.date}`,            'Foodstory รายได้ (บัตรเครดิต)',    'Foodstory POS', fsCreditCard,      '4101', 'รายได้จากการขาย (Dine-in)', (s.credit_card_satang || 0) / 100)
+    // Foodstory → 4101
+    push(`fs_cash_${s.date}`,      'Foodstory รายได้ (เงินสด)',     'Foodstory POS', { code: '1101', name: 'เงินสด' }, '4101', 'รายได้ Foodstory (Dine-in)', (s.cash_satang || 0) / 100)
+    push(`fs_promptpay_${s.date}`, 'Foodstory รายได้ (พร้อมเพย์)',  'Foodstory POS', fsPromptpay,       '4101', 'รายได้ Foodstory (Dine-in)', (s.promptpay_satang || 0) / 100)
+    push(`fs_company_${s.date}`,   'Foodstory รายได้ (โอนบริษัท)', 'Foodstory POS', fsCompanyTransfer, '4101', 'รายได้ Foodstory (Dine-in)', (s.company_transfer_satang || 0) / 100)
+    push(`fs_card_${s.date}`,      'Foodstory รายได้ (บัตรเครดิต)','Foodstory POS', fsCreditCard,      '4101', 'รายได้ Foodstory (Dine-in)', (s.credit_card_satang || 0) / 100)
 
-    // Papaya
-    push(`pp_cash_${s.date}`,            'Papaya รายได้ (เงินสด)',           'Papaya POS',    { code: '1101', name: 'เงินสด' },       '4101', 'รายได้จากการขาย (Dine-in)', (s.papaya_cash_satang || 0) / 100)
-    push(`pp_promptpay_${s.date}`,       'Papaya รายได้ (พร้อมเพย์)',        'Papaya POS',    ppPromptpay,       '4101', 'รายได้จากการขาย (Dine-in)', (s.papaya_promptpay_satang || 0) / 100)
-    push(`pp_company_${s.date}`,         'Papaya รายได้ (โอนบริษัท)',        'Papaya POS',    ppCompanyTransfer, '4101', 'รายได้จากการขาย (Dine-in)', (s.papaya_company_transfer_satang || 0) / 100)
-    push(`pp_card_${s.date}`,            'Papaya รายได้ (บัตรเครดิต)',       'Papaya POS',    ppCreditCard,      '4101', 'รายได้จากการขาย (Dine-in)', (s.papaya_credit_card_satang || 0) / 100)
+    // Papaya → 4102
+    push(`pp_cash_${s.date}`,      'Papaya รายได้ (เงินสด)',        'Papaya POS', { code: '1101', name: 'เงินสด' }, '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_cash_satang || 0) / 100)
+    push(`pp_promptpay_${s.date}`, 'Papaya รายได้ (พร้อมเพย์)',     'Papaya POS', ppPromptpay,       '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_promptpay_satang || 0) / 100)
+    push(`pp_company_${s.date}`,   'Papaya รายได้ (โอนบริษัท)',     'Papaya POS', ppCompanyTransfer, '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_company_transfer_satang || 0) / 100)
+    push(`pp_card_${s.date}`,      'Papaya รายได้ (บัตรเครดิต)',    'Papaya POS', ppCreditCard,      '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_credit_card_satang || 0) / 100)
 
-    // Grab
+    // Grab → 4103
     const grabGross = ((s.grab_satang || 0) + (s.papaya_grab_satang || 0)) / 100
     const grabNet   = (s.grab_net_satang || 0) / 100
     const grabFee   = Math.round((grabGross - grabNet) * 100) / 100
     push(`grab_${s.date}`, 'Grab รายได้ (ยอดสุทธิ)',
       `รวม ${grabGross.toLocaleString('th-TH', { minimumFractionDigits: 2 })} หัก GP ${grabFee.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`,
-      grabBankAccount, '4102', 'รายได้จากการขาย (Grab)', grabNet)
+      grabBankAccount, '4103', 'รายได้จากการขาย (Grab)', grabNet)
   }
 
   // 3. Bank Transfers
@@ -190,14 +210,15 @@ export async function GET(req: Request) {
 
   for (const a of assets || []) {
     const credit = bankAccount(a.payment_bank)
+    const debit = assetAccount(a.category)
     entries.push({
       id: a.id,
       date: a.purchase_date,
       type: 'asset',
       description: `ซื้อสินทรัพย์: ${a.name}`,
       ref: a.category || '',
-      debit_code: '1501',
-      debit_name: 'ที่ดิน อาคาร และอุปกรณ์',
+      debit_code: debit.code,
+      debit_name: debit.name,
       credit_code: credit.code,
       credit_name: credit.name,
       amount: a.purchase_satang / 100,
