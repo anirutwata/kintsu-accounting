@@ -66,18 +66,32 @@ export async function GET(req: Request) {
   const entries: JournalEntry[] = []
 
   // Fetch settings for income bank accounts
-  const { data: settingsRow } = await supabase.from('settings').select('income_bank_account_id, grab_bank_account_id').eq('id', 1).single()
-  let incomeBankAccount: { code: string; name: string } = { code: '1102', name: 'เงินฝากธนาคาร (รายรับ)' }
-  let grabBankAccount:   { code: string; name: string } = { code: '1103', name: 'เงินฝากธนาคาร (Grab)' }
+  const { data: settingsRow } = await supabase
+    .from('settings')
+    .select('grab_bank_account_id, fs_promptpay_bank_id, fs_company_transfer_bank_id, fs_credit_card_bank_id, pp_promptpay_bank_id, pp_company_transfer_bank_id, pp_credit_card_bank_id')
+    .eq('id', 1).single()
 
-  if (settingsRow?.income_bank_account_id) {
-    const { data: ba } = await supabase.from('bank_accounts').select('bank_name, account_number').eq('id', settingsRow.income_bank_account_id).single()
-    if (ba) incomeBankAccount = bankAccount(ba.bank_name)
+  const defaultBank = { code: '1102', name: 'เงินฝากธนาคาร (รายรับ)' }
+  const defaultGrab = { code: '1103', name: 'เงินฝากธนาคาร (Grab)' }
+
+  async function resolveBankId(id: string | null | undefined): Promise<{ code: string; name: string }> {
+    if (!id) return defaultBank
+    const { data: ba } = await supabase.from('bank_accounts').select('bank_name').eq('id', id).single()
+    return ba ? bankAccount(ba.bank_name) : defaultBank
   }
-  if (settingsRow?.grab_bank_account_id) {
-    const { data: ba } = await supabase.from('bank_accounts').select('bank_name, account_number').eq('id', settingsRow.grab_bank_account_id).single()
-    if (ba) grabBankAccount = bankAccount(ba.bank_name)
-  }
+
+  const [fsPromptpay, fsCompanyTransfer, fsCreditCard, ppPromptpay, ppCompanyTransfer, ppCreditCard, grabBankAccount] = await Promise.all([
+    resolveBankId(settingsRow?.fs_promptpay_bank_id),
+    resolveBankId(settingsRow?.fs_company_transfer_bank_id),
+    resolveBankId(settingsRow?.fs_credit_card_bank_id),
+    resolveBankId(settingsRow?.pp_promptpay_bank_id),
+    resolveBankId(settingsRow?.pp_company_transfer_bank_id),
+    resolveBankId(settingsRow?.pp_credit_card_bank_id),
+    settingsRow?.grab_bank_account_id
+      ? supabase.from('bank_accounts').select('bank_name').eq('id', settingsRow.grab_bank_account_id).single()
+          .then(({ data: ba }) => ba ? bankAccount(ba.bank_name) : defaultGrab)
+      : Promise.resolve(defaultGrab),
+  ])
 
   // 1. Expenses
   const { data: expenses } = await supabase
@@ -115,51 +129,30 @@ export async function GET(req: Request) {
     .order('date')
 
   for (const s of sales || []) {
-    const cash = ((s.cash_satang || 0) + (s.papaya_cash_satang || 0)) / 100
-    const electronic = (
-      (s.promptpay_satang || 0) + (s.company_transfer_satang || 0) + (s.credit_card_satang || 0) +
-      (s.papaya_promptpay_satang || 0) + (s.papaya_company_transfer_satang || 0) + (s.papaya_credit_card_satang || 0)
-    ) / 100
-    const grabGross = ((s.grab_satang || 0) + (s.papaya_grab_satang || 0)) / 100
-    const grabNet = ((s.grab_net_satang || 0)) / 100
-    const grabFee = Math.round((grabGross - grabNet) * 100) / 100
+    const push = (id: string, desc: string, ref: string, bank: { code: string; name: string }, credit: string, creditName: string, amount: number) => {
+      if (amount <= 0) return
+      entries.push({ id, date: s.date, type: 'sales', description: desc, ref, debit_code: bank.code, debit_name: bank.name, credit_code: credit, credit_name: creditName, amount })
+    }
 
-    if (cash > 0) {
-      entries.push({
-        id: `sales_cash_${s.date}`,
-        date: s.date,
-        type: 'sales',
-        description: 'รายได้ยอดขาย (เงินสด)',
-        ref: 'Dine-in / Takeaway',
-        debit_code: '1101', debit_name: 'เงินสด',
-        credit_code: '4101', credit_name: 'รายได้จากการขาย (Dine-in)',
-        amount: cash,
-      })
-    }
-    if (electronic > 0) {
-      entries.push({
-        id: `sales_elec_${s.date}`,
-        date: s.date,
-        type: 'sales',
-        description: 'รายได้ยอดขาย (โอน/พร้อมเพย์/บัตร)',
-        ref: 'Dine-in / Takeaway',
-        debit_code: incomeBankAccount.code, debit_name: incomeBankAccount.name,
-        credit_code: '4101', credit_name: 'รายได้จากการขาย (Dine-in)',
-        amount: electronic,
-      })
-    }
-    if (grabNet > 0) {
-      entries.push({
-        id: `sales_grab_${s.date}`,
-        date: s.date,
-        type: 'sales',
-        description: `รายได้ Grab (ยอดสุทธิ)`,
-        ref: `รวม ${grabGross.toLocaleString('th-TH', { minimumFractionDigits: 2 })} หัก GP ${grabFee.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`,
-        debit_code: grabBankAccount.code, debit_name: grabBankAccount.name,
-        credit_code: '4102', credit_name: 'รายได้จากการขาย (Grab)',
-        amount: grabNet,
-      })
-    }
+    // Foodstory
+    push(`fs_cash_${s.date}`,            'Foodstory รายได้ (เงินสด)',        'Foodstory POS', { code: '1101', name: 'เงินสด' },       '4101', 'รายได้จากการขาย (Dine-in)', (s.cash_satang || 0) / 100)
+    push(`fs_promptpay_${s.date}`,       'Foodstory รายได้ (พร้อมเพย์)',     'Foodstory POS', fsPromptpay,       '4101', 'รายได้จากการขาย (Dine-in)', (s.promptpay_satang || 0) / 100)
+    push(`fs_company_${s.date}`,         'Foodstory รายได้ (โอนบริษัท)',     'Foodstory POS', fsCompanyTransfer, '4101', 'รายได้จากการขาย (Dine-in)', (s.company_transfer_satang || 0) / 100)
+    push(`fs_card_${s.date}`,            'Foodstory รายได้ (บัตรเครดิต)',    'Foodstory POS', fsCreditCard,      '4101', 'รายได้จากการขาย (Dine-in)', (s.credit_card_satang || 0) / 100)
+
+    // Papaya
+    push(`pp_cash_${s.date}`,            'Papaya รายได้ (เงินสด)',           'Papaya POS',    { code: '1101', name: 'เงินสด' },       '4101', 'รายได้จากการขาย (Dine-in)', (s.papaya_cash_satang || 0) / 100)
+    push(`pp_promptpay_${s.date}`,       'Papaya รายได้ (พร้อมเพย์)',        'Papaya POS',    ppPromptpay,       '4101', 'รายได้จากการขาย (Dine-in)', (s.papaya_promptpay_satang || 0) / 100)
+    push(`pp_company_${s.date}`,         'Papaya รายได้ (โอนบริษัท)',        'Papaya POS',    ppCompanyTransfer, '4101', 'รายได้จากการขาย (Dine-in)', (s.papaya_company_transfer_satang || 0) / 100)
+    push(`pp_card_${s.date}`,            'Papaya รายได้ (บัตรเครดิต)',       'Papaya POS',    ppCreditCard,      '4101', 'รายได้จากการขาย (Dine-in)', (s.papaya_credit_card_satang || 0) / 100)
+
+    // Grab
+    const grabGross = ((s.grab_satang || 0) + (s.papaya_grab_satang || 0)) / 100
+    const grabNet   = (s.grab_net_satang || 0) / 100
+    const grabFee   = Math.round((grabGross - grabNet) * 100) / 100
+    push(`grab_${s.date}`, 'Grab รายได้ (ยอดสุทธิ)',
+      `รวม ${grabGross.toLocaleString('th-TH', { minimumFractionDigits: 2 })} หัก GP ${grabFee.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`,
+      grabBankAccount, '4102', 'รายได้จากการขาย (Grab)', grabNet)
   }
 
   // 3. Bank Transfers

@@ -19,8 +19,13 @@ export default function SystemSettingsPage() {
   const [tgToken, setTgToken] = useState('')
   const [tgChatId, setTgChatId] = useState('')
   const [showToken, setShowToken] = useState(false)
-  const [incomeBankId, setIncomeBankId] = useState('')
   const [grabBankId, setGrabBankId] = useState('')
+  const [fsPromptpayBankId, setFsPromptpayBankId] = useState('')
+  const [fsCompanyTransferBankId, setFsCompanyTransferBankId] = useState('')
+  const [fsCreditCardBankId, setFsCreditCardBankId] = useState('')
+  const [ppPromptpayBankId, setPpPromptpayBankId] = useState('')
+  const [ppCompanyTransferBankId, setPpCompanyTransferBankId] = useState('')
+  const [ppCreditCardBankId, setPpCreditCardBankId] = useState('')
 
   useEffect(() => {
     load()
@@ -39,8 +44,13 @@ export default function SystemSettingsPage() {
       setScPct(s.service_charge_bps ? String(s.service_charge_bps / 100) : '10')
       setTgToken(s.telegram_bot_token || '')
       setTgChatId(s.telegram_chat_id || '')
-      setIncomeBankId(s.income_bank_account_id || '')
       setGrabBankId(s.grab_bank_account_id || '')
+      setFsPromptpayBankId(s.fs_promptpay_bank_id || '')
+      setFsCompanyTransferBankId(s.fs_company_transfer_bank_id || '')
+      setFsCreditCardBankId(s.fs_credit_card_bank_id || '')
+      setPpPromptpayBankId(s.pp_promptpay_bank_id || '')
+      setPpCompanyTransferBankId(s.pp_company_transfer_bank_id || '')
+      setPpCreditCardBankId(s.pp_credit_card_bank_id || '')
     }
     setLoading(false)
   }
@@ -59,8 +69,13 @@ export default function SystemSettingsPage() {
         service_charge_bps: Math.round((parseFloat(scPct) || 0) * 100),
         telegram_bot_token: tgToken.trim() || null,
         telegram_chat_id: tgChatId.trim() || null,
-        income_bank_account_id: incomeBankId || null,
         grab_bank_account_id: grabBankId || null,
+        fs_promptpay_bank_id: fsPromptpayBankId || null,
+        fs_company_transfer_bank_id: fsCompanyTransferBankId || null,
+        fs_credit_card_bank_id: fsCreditCardBankId || null,
+        pp_promptpay_bank_id: ppPromptpayBankId || null,
+        pp_company_transfer_bank_id: ppCompanyTransferBankId || null,
+        pp_credit_card_bank_id: ppCreditCardBankId || null,
       }),
     })
     setSaving(false)
@@ -114,31 +129,58 @@ export default function SystemSettingsPage() {
         </div>
 
         {/* Income bank accounts */}
-        <div className="bg-white rounded-2xl border p-4 space-y-3" style={{ borderColor: 'var(--border)' }}>
+        <div className="bg-white rounded-2xl border p-4 space-y-4" style={{ borderColor: 'var(--border)' }}>
           <p className="text-xs font-semibold" style={{ color: 'var(--charcoal)' }}>บัญชีรับรายได้</p>
-          <div>
-            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>
-              รับโอน / พร้อมเพย์ / บัตรเครดิต
-            </label>
-            <select value={incomeBankId} onChange={e => setIncomeBankId(e.target.value)}
-              className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}>
-              <option value="">-- ไม่ระบุ --</option>
-              {banks.map(b => (
-                <option key={b.id} value={b.id}>{b.bank_name} {b.account_number} ({b.account_name})</option>
-              ))}
-            </select>
+
+          {/* Foodstory */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium px-1" style={{ color: 'var(--flame-red)' }}>Foodstory POS</p>
+            {([
+              { label: 'พร้อมเพย์', value: fsPromptpayBankId, set: setFsPromptpayBankId },
+              { label: 'โอนบริษัท', value: fsCompanyTransferBankId, set: setFsCompanyTransferBankId },
+              { label: 'บัตรเครดิต', value: fsCreditCardBankId, set: setFsCreditCardBankId },
+            ] as { label: string; value: string; set: (v: string) => void }[]).map(({ label, value, set }) => (
+              <div key={label} className="flex items-center gap-2">
+                <span className="text-xs w-20 shrink-0" style={{ color: 'var(--muted-foreground)' }}>{label}</span>
+                <select value={value} onChange={e => set(e.target.value)}
+                  className="flex-1 border rounded-xl px-3 py-2 text-xs" style={{ borderColor: 'var(--border)' }}>
+                  <option value="">-- ไม่ระบุ --</option>
+                  {banks.map(b => <option key={b.id} value={b.id}>{b.bank_name} {b.account_number}</option>)}
+                </select>
+              </div>
+            ))}
           </div>
-          <div>
-            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>
-              รับรายได้ Grab
-            </label>
-            <select value={grabBankId} onChange={e => setGrabBankId(e.target.value)}
-              className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}>
-              <option value="">-- ไม่ระบุ --</option>
-              {banks.map(b => (
-                <option key={b.id} value={b.id}>{b.bank_name} {b.account_number} ({b.account_name})</option>
-              ))}
-            </select>
+
+          {/* Papaya */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium px-1" style={{ color: '#16a34a' }}>Papaya POS</p>
+            {([
+              { label: 'พร้อมเพย์', value: ppPromptpayBankId, set: setPpPromptpayBankId },
+              { label: 'โอนบริษัท', value: ppCompanyTransferBankId, set: setPpCompanyTransferBankId },
+              { label: 'บัตรเครดิต', value: ppCreditCardBankId, set: setPpCreditCardBankId },
+            ] as { label: string; value: string; set: (v: string) => void }[]).map(({ label, value, set }) => (
+              <div key={label} className="flex items-center gap-2">
+                <span className="text-xs w-20 shrink-0" style={{ color: 'var(--muted-foreground)' }}>{label}</span>
+                <select value={value} onChange={e => set(e.target.value)}
+                  className="flex-1 border rounded-xl px-3 py-2 text-xs" style={{ borderColor: 'var(--border)' }}>
+                  <option value="">-- ไม่ระบุ --</option>
+                  {banks.map(b => <option key={b.id} value={b.id}>{b.bank_name} {b.account_number}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+
+          {/* Grab */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium px-1" style={{ color: '#9F8966' }}>Grab</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs w-20 shrink-0" style={{ color: 'var(--muted-foreground)' }}>รับรายได้</span>
+              <select value={grabBankId} onChange={e => setGrabBankId(e.target.value)}
+                className="flex-1 border rounded-xl px-3 py-2 text-xs" style={{ borderColor: 'var(--border)' }}>
+                <option value="">-- ไม่ระบุ --</option>
+                {banks.map(b => <option key={b.id} value={b.id}>{b.bank_name} {b.account_number}</option>)}
+              </select>
+            </div>
           </div>
         </div>
 

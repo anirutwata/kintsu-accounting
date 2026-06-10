@@ -16,8 +16,14 @@ export interface Settings {
   grabfood_gp_bps: number
   telegram_bot_token?: string
   telegram_chat_id?: string
-  income_bank_account_id?: string | null
+  income_bank_account_id?: string | null   // legacy
   grab_bank_account_id?: string | null
+  fs_promptpay_bank_id?: string | null
+  fs_company_transfer_bank_id?: string | null
+  fs_credit_card_bank_id?: string | null
+  pp_promptpay_bank_id?: string | null
+  pp_company_transfer_bank_id?: string | null
+  pp_credit_card_bank_id?: string | null
   updated_at: string
 }
 
