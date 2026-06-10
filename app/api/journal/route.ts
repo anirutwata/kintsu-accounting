@@ -71,13 +71,15 @@ function assetAccount(category: string): { code: string; name: string } {
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
-  const month = searchParams.get('month') || ''
-  if (!month) return NextResponse.json({ error: 'กรุณาระบุเดือน' }, { status: 400 })
+  const month     = searchParams.get('month') || ''
+  const fromParam = searchParams.get('from')  || month
+  const toParam   = searchParams.get('to')    || month
+  if (!fromParam) return NextResponse.json({ error: 'กรุณาระบุเดือน' }, { status: 400 })
 
-  const [y, m] = month.split('-').map(Number)
-  const startDate = `${month}-01`
-  const endDate = `${month}-${new Date(y, m, 0).getDate().toString().padStart(2, '0')}`
-  const nextMonth = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
+  const [ty, tm] = toParam.split('-').map(Number)
+  const startDate = `${fromParam}-01`
+  const endDate   = `${toParam}-${new Date(ty, tm, 0).getDate().toString().padStart(2, '0')}`
+  const nextMonth = tm === 12 ? `${ty + 1}-01-01` : `${ty}-${String(tm + 1).padStart(2, '0')}-01`
 
   const supabase = await createClient()
   const entries: JournalEntry[] = []
