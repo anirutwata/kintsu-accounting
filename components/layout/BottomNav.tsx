@@ -10,6 +10,7 @@ const navItems = [
   { href: '/expenses',  label: 'รายจ่าย',  icon: '🧾', roles: ['owner', 'manager', 'purchasing'] },
   { href: '/sales',     label: 'รายรับ',   icon: '💰', roles: ['owner', 'manager', 'cashier'] },
   { href: '/transfers', label: 'โอนเงิน',  icon: '🔄', roles: ['owner', 'manager'] },
+  { href: '/journal',   label: 'สมุดรายวัน', icon: '📔', roles: ['owner', 'manager'] },
   { href: '/reconcile', label: 'กระทบยอด', icon: '🏦', roles: ['owner', 'manager'] },
   { href: '/assets',    label: 'สินทรัพย์', icon: '🏗️', roles: ['owner'] },
   { href: '/accounts',  label: 'ผังบัญชี', icon: '📒', roles: ['owner'] },
