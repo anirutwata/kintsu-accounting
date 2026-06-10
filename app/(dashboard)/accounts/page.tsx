@@ -9,6 +9,7 @@ interface Account {
   parent_code: string | null
   note: string | null
   is_active: boolean
+  auto?: boolean  // true = auto-generated from bank_accounts (read-only)
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -204,28 +205,37 @@ export default function AccountsPage() {
                       </div>
                       {/* Actions */}
                       <div className="flex items-center gap-1 shrink-0">
-                        <button onClick={() => openEdit(a)}
-                          className="text-xs px-2 py-1 rounded-lg border transition-colors"
-                          style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
-                          แก้ไข
-                        </button>
-                        <button onClick={() => toggleActive(a)}
-                          className="text-xs px-2 py-1 rounded-lg border transition-colors"
-                          style={{ borderColor: 'var(--border)', color: a.is_active ? '#6b7280' : 'var(--flame-red)' }}>
-                          {a.is_active ? 'ปิด' : 'เปิด'}
-                        </button>
-                        {confirmDelete === a.id ? (
-                          <button onClick={() => deleteAccount(a.id)}
-                            className="text-xs px-2 py-1 rounded-lg font-semibold text-white"
-                            style={{ background: '#dc2626' }}>
-                            ยืนยันลบ
-                          </button>
+                        {a.auto ? (
+                          <span className="text-[10px] px-2 py-1 rounded-lg font-semibold"
+                            style={{ background: '#eff6ff', color: '#1d4ed8' }}>
+                            อัตโนมัติ
+                          </span>
                         ) : (
-                          <button onClick={() => setConfirmDelete(a.id)}
-                            className="text-xs px-2 py-1 rounded-lg"
-                            style={{ color: '#dc2626' }}>
-                            ลบ
-                          </button>
+                          <>
+                            <button onClick={() => openEdit(a)}
+                              className="text-xs px-2 py-1 rounded-lg border transition-colors"
+                              style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+                              แก้ไข
+                            </button>
+                            <button onClick={() => toggleActive(a)}
+                              className="text-xs px-2 py-1 rounded-lg border transition-colors"
+                              style={{ borderColor: 'var(--border)', color: a.is_active ? '#6b7280' : 'var(--flame-red)' }}>
+                              {a.is_active ? 'ปิด' : 'เปิด'}
+                            </button>
+                            {confirmDelete === a.id ? (
+                              <button onClick={() => deleteAccount(a.id)}
+                                className="text-xs px-2 py-1 rounded-lg font-semibold text-white"
+                                style={{ background: '#dc2626' }}>
+                                ยืนยันลบ
+                              </button>
+                            ) : (
+                              <button onClick={() => setConfirmDelete(a.id)}
+                                className="text-xs px-2 py-1 rounded-lg"
+                                style={{ color: '#dc2626' }}>
+                                ลบ
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
