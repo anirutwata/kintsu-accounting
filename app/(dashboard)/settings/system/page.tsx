@@ -9,6 +9,7 @@ export default function SystemSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [banks, setBanks] = useState<BankAccount[]>([])
 
   // form fields
@@ -59,7 +60,8 @@ export default function SystemSettingsPage() {
     e.preventDefault()
     setSaving(true)
     setSaved(false)
-    await fetch('/api/settings', {
+    setSaveError('')
+    const res = await fetch('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -79,8 +81,13 @@ export default function SystemSettingsPage() {
       }),
     })
     setSaving(false)
-    setSaved(true)
-    load()
+    if (res.ok) {
+      setSaved(true)
+      load()
+    } else {
+      const d = await res.json()
+      setSaveError(d.error || 'บันทึกไม่สำเร็จ')
+    }
   }
 
   if (loading) return <div className="py-10 text-center text-gray-400 text-sm">กำลังโหลด...</div>
@@ -89,9 +96,8 @@ export default function SystemSettingsPage() {
     <div className="space-y-4 py-4">
       <h1 className="text-lg font-bold" style={{ color: 'var(--charcoal)' }}>ตั้งค่าระบบ</h1>
 
-      {saved && (
-        <div className="p-3 rounded-xl bg-green-50 text-green-700 text-sm">✅ บันทึกการตั้งค่าแล้ว</div>
-      )}
+      {saved && <div className="p-3 rounded-xl bg-green-50 text-green-700 text-sm">✅ บันทึกการตั้งค่าแล้ว</div>}
+      {saveError && <div className="p-3 rounded-xl bg-red-50 text-red-700 text-sm">❌ {saveError}</div>}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* General */}
