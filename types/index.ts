@@ -16,6 +16,8 @@ export interface Settings {
   grabfood_gp_bps: number
   telegram_bot_token?: string
   telegram_chat_id?: string
+  income_bank_account_id?: string | null
+  grab_bank_account_id?: string | null
   updated_at: string
 }
 

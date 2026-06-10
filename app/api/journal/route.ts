@@ -65,6 +65,20 @@ export async function GET(req: Request) {
   const supabase = await createClient()
   const entries: JournalEntry[] = []
 
+  // Fetch settings for income bank accounts
+  const { data: settingsRow } = await supabase.from('settings').select('income_bank_account_id, grab_bank_account_id').eq('id', 1).single()
+  let incomeBankAccount: { code: string; name: string } = { code: '1102', name: 'เงินฝากธนาคาร (รายรับ)' }
+  let grabBankAccount:   { code: string; name: string } = { code: '1103', name: 'เงินฝากธนาคาร (Grab)' }
+
+  if (settingsRow?.income_bank_account_id) {
+    const { data: ba } = await supabase.from('bank_accounts').select('bank_name, account_number').eq('id', settingsRow.income_bank_account_id).single()
+    if (ba) incomeBankAccount = bankAccount(ba.bank_name)
+  }
+  if (settingsRow?.grab_bank_account_id) {
+    const { data: ba } = await supabase.from('bank_accounts').select('bank_name, account_number').eq('id', settingsRow.grab_bank_account_id).single()
+    if (ba) grabBankAccount = bankAccount(ba.bank_name)
+  }
+
   // 1. Expenses
   const { data: expenses } = await supabase
     .from('expenses')
@@ -129,7 +143,7 @@ export async function GET(req: Request) {
         type: 'sales',
         description: 'รายได้ยอดขาย (โอน/พร้อมเพย์/บัตร)',
         ref: 'Dine-in / Takeaway',
-        debit_code: '1102', debit_name: 'เงินฝากธนาคาร TTB',
+        debit_code: incomeBankAccount.code, debit_name: incomeBankAccount.name,
         credit_code: '4101', credit_name: 'รายได้จากการขาย (Dine-in)',
         amount: electronic,
       })
@@ -141,7 +155,7 @@ export async function GET(req: Request) {
         type: 'sales',
         description: `รายได้ Grab (ยอดสุทธิ)`,
         ref: `รวม ${grabGross.toLocaleString('th-TH', { minimumFractionDigits: 2 })} หัก GP ${grabFee.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`,
-        debit_code: '1103', debit_name: 'เงินฝากธนาคาร KBANK',
+        debit_code: grabBankAccount.code, debit_name: grabBankAccount.name,
         credit_code: '4102', credit_name: 'รายได้จากการขาย (Grab)',
         amount: grabNet,
       })

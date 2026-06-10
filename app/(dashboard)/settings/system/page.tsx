@@ -2,11 +2,14 @@
 import { useState, useEffect } from 'react'
 import type { Settings } from '@/types'
 
+interface BankAccount { id: string; bank_name: string; account_number: string; account_name: string }
+
 export default function SystemSettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [banks, setBanks] = useState<BankAccount[]>([])
 
   // form fields
   const [restaurantName, setRestaurantName] = useState('')
@@ -16,8 +19,13 @@ export default function SystemSettingsPage() {
   const [tgToken, setTgToken] = useState('')
   const [tgChatId, setTgChatId] = useState('')
   const [showToken, setShowToken] = useState(false)
+  const [incomeBankId, setIncomeBankId] = useState('')
+  const [grabBankId, setGrabBankId] = useState('')
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    fetch('/api/bank-accounts').then(r => r.json()).then(d => setBanks(Array.isArray(d) ? d : []))
+  }, [])
 
   async function load() {
     setLoading(true)
@@ -31,6 +39,8 @@ export default function SystemSettingsPage() {
       setScPct(s.service_charge_bps ? String(s.service_charge_bps / 100) : '10')
       setTgToken(s.telegram_bot_token || '')
       setTgChatId(s.telegram_chat_id || '')
+      setIncomeBankId(s.income_bank_account_id || '')
+      setGrabBankId(s.grab_bank_account_id || '')
     }
     setLoading(false)
   }
@@ -49,6 +59,8 @@ export default function SystemSettingsPage() {
         service_charge_bps: Math.round((parseFloat(scPct) || 0) * 100),
         telegram_bot_token: tgToken.trim() || null,
         telegram_chat_id: tgChatId.trim() || null,
+        income_bank_account_id: incomeBankId || null,
+        grab_bank_account_id: grabBankId || null,
       }),
     })
     setSaving(false)
@@ -98,6 +110,35 @@ export default function SystemSettingsPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Income bank accounts */}
+        <div className="bg-white rounded-2xl border p-4 space-y-3" style={{ borderColor: 'var(--border)' }}>
+          <p className="text-xs font-semibold" style={{ color: 'var(--charcoal)' }}>บัญชีรับรายได้</p>
+          <div>
+            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>
+              รับโอน / พร้อมเพย์ / บัตรเครดิต
+            </label>
+            <select value={incomeBankId} onChange={e => setIncomeBankId(e.target.value)}
+              className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}>
+              <option value="">-- ไม่ระบุ --</option>
+              {banks.map(b => (
+                <option key={b.id} value={b.id}>{b.bank_name} {b.account_number} ({b.account_name})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>
+              รับรายได้ Grab
+            </label>
+            <select value={grabBankId} onChange={e => setGrabBankId(e.target.value)}
+              className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}>
+              <option value="">-- ไม่ระบุ --</option>
+              {banks.map(b => (
+                <option key={b.id} value={b.id}>{b.bank_name} {b.account_number} ({b.account_name})</option>
+              ))}
+            </select>
           </div>
         </div>
 
