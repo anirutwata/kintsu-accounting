@@ -12,6 +12,7 @@ const navItems = [
   { href: '/transfers', label: 'โอนเงิน',  icon: '🔄', roles: ['owner', 'manager'] },
   { href: '/reconcile', label: 'กระทบยอด', icon: '🏦', roles: ['owner', 'manager'] },
   { href: '/assets',    label: 'สินทรัพย์', icon: '🏗️', roles: ['owner'] },
+  { href: '/accounts',  label: 'ผังบัญชี', icon: '📒', roles: ['owner'] },
   { href: '/reports',   label: 'รายงาน',   icon: '📈', roles: ['owner'] },
   { href: '/settings',  label: 'ตั้งค่า',  icon: '⚙️', roles: ['owner'] },
 ]
