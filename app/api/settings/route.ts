@@ -20,7 +20,5 @@ export async function PUT(req: Request) {
     .update({ ...body, updated_at: new Date().toISOString() })
     .eq('id', 1)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  const { data, error: fetchError } = await supabase.from('settings').select('*').eq('id', 1).single()
-  if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json({ ok: true })
 }
