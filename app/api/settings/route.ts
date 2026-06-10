@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,7 +14,7 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const body = await req.json()
   const { error } = await supabase
     .from('settings')
