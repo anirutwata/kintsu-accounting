@@ -29,7 +29,8 @@ const TYPE_COLORS: Record<string, { bg: string; color: string; border: string }>
 
 const TYPES = ['asset', 'liability', 'equity', 'income', 'expense'] as const
 
-const EMPTY_FORM = { code: '', name: '', type: 'expense' as const, parent_code: '', note: '' }
+type AccountType = typeof TYPES[number]
+const EMPTY_FORM = { code: '', name: '', type: 'expense' as AccountType, parent_code: '', note: '' }
 
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -255,7 +256,7 @@ export default function AccountsPage() {
               </div>
               <div>
                 <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>ประเภท *</label>
-                <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value as typeof form.type }))}
+                <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value as AccountType }))}
                   className="w-full border rounded-xl px-3 py-2 text-sm"
                   style={{ borderColor: 'var(--border)' }}>
                   {TYPES.map(t => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
