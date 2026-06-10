@@ -138,7 +138,7 @@ export async function GET(req: Request) {
   // 2. Daily Sales
   const { data: sales } = await supabase
     .from('daily_sales')
-    .select('date, cash_satang, papaya_cash_satang, promptpay_satang, company_transfer_satang, credit_card_satang, papaya_promptpay_satang, papaya_company_transfer_satang, papaya_credit_card_satang, grab_net_satang, grab_satang, papaya_grab_satang')
+    .select('date, dine_in_revenue_satang, cash_satang, promptpay_satang, company_transfer_satang, credit_card_satang, papaya_revenue_satang, papaya_cash_satang, papaya_promptpay_satang, papaya_company_transfer_satang, papaya_credit_card_satang, grabfood_gross_satang, grabfood_net_satang, takeaway_revenue_satang')
     .gte('date', startDate)
     .lt('date', nextMonth)
     .order('date')
@@ -149,25 +149,38 @@ export async function GET(req: Request) {
       entries.push({ id, date: s.date, type: 'sales', description: desc, ref, debit_code: bank.code, debit_name: bank.name, credit_code: credit, credit_name: creditName, amount })
     }
 
-    // Foodstory → 4101
-    push(`fs_cash_${s.date}`,      'Foodstory รายได้ (เงินสด)',     'Foodstory POS', { code: '1101', name: 'เงินสด' }, '4101', 'รายได้ Foodstory (Dine-in)', (s.cash_satang || 0) / 100)
-    push(`fs_promptpay_${s.date}`, 'Foodstory รายได้ (พร้อมเพย์)',  'Foodstory POS', fsPromptpay,       '4101', 'รายได้ Foodstory (Dine-in)', (s.promptpay_satang || 0) / 100)
-    push(`fs_company_${s.date}`,   'Foodstory รายได้ (โอนบริษัท)', 'Foodstory POS', fsCompanyTransfer, '4101', 'รายได้ Foodstory (Dine-in)', (s.company_transfer_satang || 0) / 100)
-    push(`fs_card_${s.date}`,      'Foodstory รายได้ (บัตรเครดิต)','Foodstory POS', fsCreditCard,      '4101', 'รายได้ Foodstory (Dine-in)', (s.credit_card_satang || 0) / 100)
+    // Foodstory → 4101 (use payment breakdown if filled, else use total revenue)
+    const fsPaySum = (s.cash_satang || 0) + (s.promptpay_satang || 0) + (s.company_transfer_satang || 0) + (s.credit_card_satang || 0)
+    if (fsPaySum > 0) {
+      push(`fs_cash_${s.date}`,      'Foodstory รายได้ (เงินสด)',     'Foodstory POS', { code: '1101', name: 'เงินสด' }, '4101', 'รายได้ Foodstory (Dine-in)', (s.cash_satang || 0) / 100)
+      push(`fs_promptpay_${s.date}`, 'Foodstory รายได้ (พร้อมเพย์)',  'Foodstory POS', fsPromptpay,       '4101', 'รายได้ Foodstory (Dine-in)', (s.promptpay_satang || 0) / 100)
+      push(`fs_company_${s.date}`,   'Foodstory รายได้ (โอนบริษัท)', 'Foodstory POS', fsCompanyTransfer, '4101', 'รายได้ Foodstory (Dine-in)', (s.company_transfer_satang || 0) / 100)
+      push(`fs_card_${s.date}`,      'Foodstory รายได้ (บัตรเครดิต)','Foodstory POS', fsCreditCard,      '4101', 'รายได้ Foodstory (Dine-in)', (s.credit_card_satang || 0) / 100)
+    } else {
+      push(`fs_total_${s.date}`, 'Foodstory รายได้', 'Foodstory POS', defaultBank, '4101', 'รายได้ Foodstory (Dine-in)', (s.dine_in_revenue_satang || 0) / 100)
+    }
 
     // Papaya → 4102
-    push(`pp_cash_${s.date}`,      'Papaya รายได้ (เงินสด)',        'Papaya POS', { code: '1101', name: 'เงินสด' }, '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_cash_satang || 0) / 100)
-    push(`pp_promptpay_${s.date}`, 'Papaya รายได้ (พร้อมเพย์)',     'Papaya POS', ppPromptpay,       '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_promptpay_satang || 0) / 100)
-    push(`pp_company_${s.date}`,   'Papaya รายได้ (โอนบริษัท)',     'Papaya POS', ppCompanyTransfer, '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_company_transfer_satang || 0) / 100)
-    push(`pp_card_${s.date}`,      'Papaya รายได้ (บัตรเครดิต)',    'Papaya POS', ppCreditCard,      '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_credit_card_satang || 0) / 100)
+    const ppPaySum = (s.papaya_cash_satang || 0) + (s.papaya_promptpay_satang || 0) + (s.papaya_company_transfer_satang || 0) + (s.papaya_credit_card_satang || 0)
+    if (ppPaySum > 0) {
+      push(`pp_cash_${s.date}`,      'Papaya รายได้ (เงินสด)',        'Papaya POS', { code: '1101', name: 'เงินสด' }, '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_cash_satang || 0) / 100)
+      push(`pp_promptpay_${s.date}`, 'Papaya รายได้ (พร้อมเพย์)',     'Papaya POS', ppPromptpay,       '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_promptpay_satang || 0) / 100)
+      push(`pp_company_${s.date}`,   'Papaya รายได้ (โอนบริษัท)',     'Papaya POS', ppCompanyTransfer, '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_company_transfer_satang || 0) / 100)
+      push(`pp_card_${s.date}`,      'Papaya รายได้ (บัตรเครดิต)',    'Papaya POS', ppCreditCard,      '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_credit_card_satang || 0) / 100)
+    } else {
+      push(`pp_total_${s.date}`, 'Papaya POS รายได้', 'Papaya POS', defaultBank, '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_revenue_satang || 0) / 100)
+    }
 
     // Grab → 4103
-    const grabGross = ((s.grab_satang || 0) + (s.papaya_grab_satang || 0)) / 100
-    const grabNet   = (s.grab_net_satang || 0) / 100
+    const grabGross = (s.grabfood_gross_satang || 0) / 100
+    const grabNet   = (s.grabfood_net_satang || 0) / 100
     const grabFee   = Math.round((grabGross - grabNet) * 100) / 100
     push(`grab_${s.date}`, 'Grab รายได้ (ยอดสุทธิ)',
       `รวม ${grabGross.toLocaleString('th-TH', { minimumFractionDigits: 2 })} หัก GP ${grabFee.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`,
       grabBankAccount, '4103', 'รายได้จากการขาย (Grab)', grabNet)
+
+    // Takeaway → 4104
+    push(`tw_${s.date}`, 'กลับบ้าน (Takeaway)', 'Takeaway', { code: '1101', name: 'เงินสด' }, '4104', 'รายได้จากการขาย (Takeaway)', (s.takeaway_revenue_satang || 0) / 100)
   }
 
   // 3. Bank Transfers
