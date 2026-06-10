@@ -15,17 +15,18 @@ interface JournalEntry {
 }
 
 // Name-based fallback — codes match sequential sort_order: KBANK=1102, TTB=1103, UOB=1104
+// Fallback uses 1199 (safe code, never assigned to a real bank via sort_order)
 function bankAccount(bank: string | null, method?: string | null): { code: string; name: string } {
   if (!bank && method === 'เงินสด') return { code: '1101', name: 'เงินสด' }
   if (!bank) return { code: '1101', name: 'เงินสด' }
   const b = bank.toLowerCase().replace(/\s/g, '')
-  if (b.includes('kbank') || b.includes('กสิกร'))
+  if (b.includes('kbank') || b.includes('กสิกร') || b.includes('kasikorn'))
     return { code: '1102', name: 'เงินฝากธนาคาร กสิกรไทย' }
   if (b.includes('ttb') || b.includes('ทหารไทย') || b.includes('tmb') || b.includes('ธนชาต'))
     return { code: '1103', name: 'เงินฝากธนาคาร TTB' }
-  if (b.includes('uob') || b.includes('ยูโอบี'))
+  if (b.includes('uob') || b.includes('ยูโอบี') || b.includes('united'))
     return { code: '1104', name: 'เงินฝากธนาคาร UOB' }
-  return { code: '1105', name: `เงินฝากธนาคารอื่น (${bank})` }
+  return { code: '1199', name: `เงินฝากธนาคารอื่น (${bank})` }
 }
 
 function categoryAccount(category: string): { code: string; name: string } {
