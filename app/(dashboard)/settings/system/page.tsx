@@ -82,8 +82,22 @@ export default function SystemSettingsPage() {
     })
     setSaving(false)
     if (res.ok) {
+      const saved: Settings = await res.json()
       setSaved(true)
-      load()
+      // Populate from what was actually written to the DB
+      setRestaurantName(saved.restaurant_name || '')
+      setGrabGpPct(saved.grabfood_gp_bps ? String(saved.grabfood_gp_bps / 100) : '30')
+      setVatPct(saved.vat_rate_bps ? String(saved.vat_rate_bps / 100) : '7')
+      setScPct(saved.service_charge_bps ? String(saved.service_charge_bps / 100) : '0')
+      setTgToken(saved.telegram_bot_token || '')
+      setTgChatId(saved.telegram_chat_id || '')
+      setGrabBankId(saved.grab_bank_account_id || '')
+      setFsPromptpayBankId(saved.fs_promptpay_bank_id || '')
+      setFsCompanyTransferBankId(saved.fs_company_transfer_bank_id || '')
+      setFsCreditCardBankId(saved.fs_credit_card_bank_id || '')
+      setPpPromptpayBankId(saved.pp_promptpay_bank_id || '')
+      setPpCompanyTransferBankId(saved.pp_company_transfer_bank_id || '')
+      setPpCreditCardBankId(saved.pp_credit_card_bank_id || '')
     } else {
       const d = await res.json()
       setSaveError(d.error || 'บันทึกไม่สำเร็จ')
