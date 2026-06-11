@@ -357,6 +357,15 @@ function POSSection({ title, logo, accentColor, form, onChange, date }: {
   const strip = (key: keyof POSForm) => () =>
     onChange({ ...form, [key]: form[key].replace(/,/g, '') })
 
+  // Auto-negate: user types positive, system converts to negative on blur
+  const autoNegate = (key: keyof POSForm) => () => {
+    const num = parseFloat(form[key].replace(/,/g, ''))
+    if (!isNaN(num) && num > 0)
+      onChange({ ...form, [key]: (-num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })
+    else
+      onChange({ ...form, [key]: fmtMoneyVal(form[key]) })
+  }
+
   // ─── Validation ───────────────────────────────────────────────
   const rev = toSatang(parseInput(form.revenue))
   const beforeVat = toSatang(parseInput(form.sales_before_vat))
@@ -368,10 +377,10 @@ function POSSection({ title, logo, accentColor, form, onChange, date }: {
   const creditCard = toSatang(parseInput(form.credit_card))
 
   const isRoundDown = date >= ROUND_DOWN_DATE
-  const vatSum = isRoundDown ? beforeVat + vatAmt - rounding : beforeVat + vatAmt + rounding
+  const vatSum = beforeVat + vatAmt + rounding   // rounding is negative for round-down (auto-negated)
   const paySum = cash + promptpay + companyTransfer + creditCard
 
-  const hasVatData = beforeVat > 0 || vatAmt > 0 || rounding > 0
+  const hasVatData = beforeVat > 0 || vatAmt > 0 || rounding !== 0
   const hasPayData = cash > 0 || promptpay > 0 || companyTransfer > 0 || creditCard > 0
 
   const vatMismatch = rev > 0 && hasVatData && Math.abs(vatSum - rev) > 1
@@ -422,13 +431,19 @@ function POSSection({ title, logo, accentColor, form, onChange, date }: {
             </div>
             <div>
               <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{isRoundDown ? 'ยอดปัดเศษ (ลง)' : 'ยอดปัดเศษ (ขึ้น)'}</label>
-              <input type="text" inputMode="decimal" value={form.rounding} onChange={set('rounding')} onBlur={fmt('rounding')} onFocus={strip('rounding')}
+              <input type="text" inputMode="decimal" value={form.rounding}
+                onChange={set('rounding')}
+                onBlur={isRoundDown ? autoNegate('rounding') : fmt('rounding')}
+                onFocus={strip('rounding')}
                 className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm"
-                style={{ borderColor: 'var(--border)' }} placeholder="0" />
+                style={{ borderColor: 'var(--border)', color: rounding < 0 ? '#dc2626' : undefined }} placeholder="0" />
             </div>
             <div>
               <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ยอดส่วนลด (ติดลบ)</label>
-              <input type="text" inputMode="decimal" value={form.discount} onChange={set('discount')} onBlur={fmt('discount')} onFocus={strip('discount')}
+              <input type="text" inputMode="decimal" value={form.discount}
+                onChange={set('discount')}
+                onBlur={autoNegate('discount')}
+                onFocus={strip('discount')}
                 className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm text-red-600"
                 style={{ borderColor: 'var(--border)' }} placeholder="0" />
             </div>
