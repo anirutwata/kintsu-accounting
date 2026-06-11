@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 interface JournalEntry {
   id: string
   date: string
-  type: 'expense' | 'sales' | 'transfer' | 'asset'
+  type: 'expense' | 'sales' | 'transfer' | 'asset' | 'manual'
   description: string
   ref: string
   debit_code: string
@@ -232,6 +232,30 @@ export async function GET(req: Request) {
       credit_code: credit.code,
       credit_name: credit.name,
       amount: a.purchase_satang / 100,
+    })
+  }
+
+  // 5. Manual Journal Entries
+  const { data: manualEntries } = await supabase
+    .from('manual_journal_entries')
+    .select('id, date, description, reference, debit_code, debit_name, credit_code, credit_name, amount_satang')
+    .is('deleted_at', null)
+    .gte('date', startDate)
+    .lt('date', nextMonth)
+    .order('date')
+
+  for (const m of manualEntries || []) {
+    entries.push({
+      id: m.id,
+      date: m.date,
+      type: 'manual',
+      description: m.description,
+      ref: m.reference || '',
+      debit_code: m.debit_code,
+      debit_name: m.debit_name,
+      credit_code: m.credit_code,
+      credit_name: m.credit_name,
+      amount: m.amount_satang / 100,
     })
   }
 
