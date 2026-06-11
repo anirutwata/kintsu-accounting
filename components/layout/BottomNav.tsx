@@ -16,8 +16,9 @@ const navItems = [
   { href: '/accounts',       label: 'ผังบัญชี',  icon: '📒', roles: ['owner'] },
   { href: '/trial-balance',    label: 'งบทดลอง',      icon: '⚖️', roles: ['owner'] },
   { href: '/income-statement', label: 'งบกำไรขาดทุน', icon: '📉', roles: ['owner'] },
-  { href: '/balance-sheet',    label: 'งบดุล',         icon: '🏛️', roles: ['owner'] },
-  { href: '/reports',          label: 'รายงาน',        icon: '📈', roles: ['owner'] },
+  { href: '/balance-sheet',    label: 'งบดุล',          icon: '🏛️', roles: ['owner'] },
+  { href: '/cash-flow',        label: 'กระแสเงินสด',   icon: '💵', roles: ['owner'] },
+  { href: '/reports',          label: 'รายงาน',         icon: '📈', roles: ['owner'] },
   { href: '/settings',  label: 'ตั้งค่า',  icon: '⚙️', roles: ['owner'] },
 ]
 
