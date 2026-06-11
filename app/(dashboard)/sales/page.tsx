@@ -233,6 +233,7 @@ export default function SalesPage() {
           accentColor="#D33F22"
           form={foodstory}
           onChange={setFoodstory}
+          date={date}
         />
 
         {/* Papaya POS */}
@@ -242,6 +243,7 @@ export default function SalesPage() {
           accentColor="#16A34A"
           form={papaya}
           onChange={setPapaya}
+          date={date}
         />
 
         {/* GrabFood */}
@@ -336,12 +338,15 @@ function fmtMoneyVal(val: string): string {
   return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-function POSSection({ title, logo, accentColor, form, onChange }: {
+const ROUND_DOWN_DATE = '2026-06-11'
+
+function POSSection({ title, logo, accentColor, form, onChange, date }: {
   title: string
   logo: string
   accentColor: string
   form: POSForm
   onChange: (f: POSForm) => void
+  date: string
 }) {
   const set = (key: keyof POSForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
     onChange({ ...form, [key]: e.target.value })
@@ -362,7 +367,8 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
   const companyTransfer = toSatang(parseInput(form.company_transfer))
   const creditCard = toSatang(parseInput(form.credit_card))
 
-  const vatSum = beforeVat + vatAmt + rounding
+  const isRoundDown = date >= ROUND_DOWN_DATE
+  const vatSum = isRoundDown ? beforeVat + vatAmt - rounding : beforeVat + vatAmt + rounding
   const paySum = cash + promptpay + companyTransfer + creditCard
 
   const hasVatData = beforeVat > 0 || vatAmt > 0 || rounding > 0
@@ -415,7 +421,7 @@ function POSSection({ title, logo, accentColor, form, onChange }: {
                 style={{ borderColor: 'var(--border)' }} placeholder="0" />
             </div>
             <div>
-              <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ยอดปัดเศษ (ขึ้น)</label>
+              <label className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{isRoundDown ? 'ยอดปัดเศษ (ลง)' : 'ยอดปัดเศษ (ขึ้น)'}</label>
               <input type="text" inputMode="decimal" value={form.rounding} onChange={set('rounding')} onBlur={fmt('rounding')} onFocus={strip('rounding')}
                 className="w-full border rounded-xl px-3 py-2 text-right money-input mt-1 text-sm"
                 style={{ borderColor: 'var(--border)' }} placeholder="0" />
