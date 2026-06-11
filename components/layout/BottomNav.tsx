@@ -64,7 +64,7 @@ export default function BottomNav({ role }: Props) {
         </div>
       )}
 
-      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t"
+      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t print:hidden"
         style={{ background: 'white', borderColor: 'var(--border)' }}>
         <div className="max-w-2xl mx-auto flex">
           {visible.map(item => {

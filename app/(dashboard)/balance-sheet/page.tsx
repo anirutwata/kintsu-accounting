@@ -139,9 +139,12 @@ export default function BalanceSheetPage() {
 
   return (
     <div className="space-y-4 py-4">
-      <h1 className="text-lg font-bold" style={{ color: 'var(--charcoal)' }}>งบดุล</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-bold" style={{ color: 'var(--charcoal)' }}>งบดุล</h1>
+        <button onClick={() => window.print()} className="text-xs px-3 py-1.5 rounded-xl font-semibold text-white print:hidden" style={{ background: 'var(--flame-red)' }}>🖨️ พิมพ์</button>
+      </div>
 
-      <div>
+      <div className="print:hidden">
         <p className="text-xs mb-1" style={{ color: 'var(--muted-foreground)' }}>ณ สิ้นเดือน</p>
         <select value={toMonth} onChange={e => setToMonth(e.target.value)}
           className="w-full border rounded-xl px-3 py-2 text-sm"

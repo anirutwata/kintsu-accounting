@@ -66,7 +66,11 @@ export default function ReportsPage() {
     <div className="space-y-4 py-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-bold" style={{ color: 'var(--charcoal)' }}>รายงาน P&L</h1>
-        <select value={month} onChange={e => setMonth(e.target.value)}
+        <div className="flex items-center gap-2">
+          <button onClick={() => window.print()}
+            className="text-xs px-3 py-1.5 rounded-xl font-semibold text-white print:hidden"
+            style={{ background: 'var(--flame-red)' }}>🖨️ พิมพ์</button>
+          <select value={month} onChange={e => setMonth(e.target.value)}
           className="text-sm border rounded-lg px-2 py-1.5" style={{ borderColor: 'var(--border)', background: 'white' }}>
           {Array.from({ length: 12 }, (_, i) => {
             const d = new Date()
@@ -75,6 +79,7 @@ export default function ReportsPage() {
             return <option key={key} value={key}>{formatThaiMonth(key)}</option>
           })}
         </select>
+        </div>
       </div>
 
       {loading ? (
@@ -160,10 +165,30 @@ export default function ReportsPage() {
 
           {/* Send Telegram */}
           <button onClick={sendTelegramSummary} disabled={sending}
-            className="w-full py-3 rounded-2xl font-semibold border-2 transition-colors disabled:opacity-60"
+            className="w-full py-3 rounded-2xl font-semibold border-2 transition-colors disabled:opacity-60 print:hidden"
             style={{ borderColor: 'var(--flame-red)', color: 'var(--flame-red)' }}>
             {sending ? 'กำลังส่ง...' : '📲 ส่งสรุปไป Telegram'}
           </button>
+
+          {/* Financial statement links */}
+          <div className="print:hidden">
+            <p className="text-xs font-semibold mb-2 mt-2" style={{ color: 'var(--charcoal)' }}>งบการเงิน</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { href: '/trial-balance',    label: 'งบทดลอง',       icon: '⚖️',  color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe' },
+                { href: '/income-statement', label: 'งบกำไรขาดทุน',  icon: '📉',  color: '#166534', bg: '#f0fdf4', border: '#bbf7d0' },
+                { href: '/balance-sheet',    label: 'งบดุล',          icon: '🏛️', color: '#6d28d9', bg: '#f5f3ff', border: '#ddd6fe' },
+                { href: '/cash-flow',        label: 'งบกระแสเงินสด', icon: '💵',  color: '#0369a1', bg: '#e0f2fe', border: '#bae6fd' },
+              ].map(s => (
+                <a key={s.href} href={s.href}
+                  className="rounded-2xl border p-3 flex flex-col items-center gap-1 text-center no-underline"
+                  style={{ background: s.bg, borderColor: s.border }}>
+                  <span className="text-xl">{s.icon}</span>
+                  <span className="text-xs font-semibold" style={{ color: s.color }}>{s.label}</span>
+                </a>
+              ))}
+            </div>
+          </div>
         </>
       ) : (
         <div className="text-center py-12 text-gray-400">ไม่มีข้อมูล</div>

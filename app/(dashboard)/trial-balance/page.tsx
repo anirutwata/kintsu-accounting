@@ -118,15 +118,20 @@ export default function TrialBalancePage() {
 
   return (
     <div className="space-y-4 py-4">
-      <h1 className="text-lg font-bold" style={{ color: 'var(--charcoal)' }}>งบทดลอง</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-bold" style={{ color: 'var(--charcoal)' }}>งบทดลอง</h1>
+        <button onClick={() => window.print()} className="text-xs px-3 py-1.5 rounded-xl font-semibold text-white print:hidden" style={{ background: 'var(--flame-red)' }}>🖨️ พิมพ์</button>
+      </div>
 
-      <select value={month} onChange={e => setMonth(e.target.value)}
-        className="w-full border rounded-xl px-3 py-2 text-sm"
-        style={{ borderColor: 'var(--border)' }}>
-        {months.map(m => <option key={m.val} value={m.val}>{m.label}</option>)}
-      </select>
+      <div className="print:hidden">
+        <select value={month} onChange={e => setMonth(e.target.value)}
+          className="w-full border rounded-xl px-3 py-2 text-sm"
+          style={{ borderColor: 'var(--border)' }}>
+          {months.map(m => <option key={m.val} value={m.val}>{m.label}</option>)}
+        </select>
+      </div>
 
-      {error && <p className="text-xs text-red-600 bg-red-50 rounded-xl p-3">{error}</p>}
+      {error && <p className="text-xs text-red-600 bg-red-50 rounded-xl p-3 print:hidden">{error}</p>}
 
       {loading ? (
         <p className="text-center py-8 text-sm" style={{ color: 'var(--muted-foreground)' }}>กำลังโหลด...</p>

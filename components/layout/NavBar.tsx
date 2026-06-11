@@ -20,7 +20,7 @@ export default function NavBar({ name, role }: Props) {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b" style={{ background: 'white', borderColor: 'var(--border)' }}>
+    <header className="sticky top-0 z-40 border-b print:hidden" style={{ background: 'white', borderColor: 'var(--border)' }}>
       <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'var(--flame-red)' }}>
