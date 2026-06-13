@@ -2,10 +2,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { formatBaht, toSatang, parseInput, fmtInput } from '@/lib/money'
 import { getTodayBKK } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
 
 interface BankAccount { id: string; bank_name: string; account_number: string; account_name: string }
 
 const CASH_OPTION = { id: '__cash__', bank_name: 'เงินสด', account_number: '', account_name: 'เงินสด' }
+
 interface Transfer {
   id: string
   date: string
@@ -15,6 +17,7 @@ interface Transfer {
   to_bank: string
   to_account: string | null
   note: string | null
+  slip_image_url: string | null
   created_by_name: string | null
 }
 
@@ -52,12 +55,16 @@ export default function TransfersPage() {
   const [selectedMonth, setSelectedMonth] = useState(currentMonth)
 
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [ocring, setOcring] = useState(false)
   const [slipPreview, setSlipPreview] = useState('')
+  const [slipFile, setSlipFile] = useState<File | null>(null)
+  const [slipUrl, setSlipUrl] = useState('')
+  const [lightbox, setLightbox] = useState('')
 
   const slipRef = useRef<HTMLInputElement>(null)
 
@@ -93,32 +100,66 @@ export default function TransfersPage() {
     setAccounts(Array.isArray(data) ? data : [])
   }
 
-  function openAdd() {
+  function resetForm() {
     setForm({ date: today, amount: '', from_bank: '', from_account: '', to_bank: '', to_account: '', note: '' })
     setSaveError('')
     setSlipPreview('')
+    setSlipFile(null)
+    setSlipUrl('')
+    setEditingId(null)
+  }
+
+  function openAdd() {
+    resetForm()
+    setShowForm(true)
+  }
+
+  function openEdit(t: Transfer) {
+    setForm({
+      date: t.date,
+      amount: fmtMoneyVal(String(t.amount_satang / 100)),
+      from_bank: t.from_bank,
+      from_account: t.from_account || '',
+      to_bank: t.to_bank,
+      to_account: t.to_account || '',
+      note: t.note || '',
+    })
+    setSlipPreview(t.slip_image_url || '')
+    setSlipFile(null)
+    setSlipUrl(t.slip_image_url || '')
+    setSaveError('')
+    setEditingId(t.id)
     setShowForm(true)
   }
 
   function matchAccount(bankName: string, accountNum: string): BankAccount | undefined {
     if (!bankName) return undefined
     const allAccounts = [CASH_OPTION, ...accounts]
-    // exact match first
     const exact = allAccounts.find(a =>
       a.bank_name.toLowerCase() === bankName.toLowerCase() &&
       (!accountNum || a.account_number === accountNum)
     )
     if (exact) return exact
-    // partial match on bank name
     return allAccounts.find(a =>
       a.bank_name.toLowerCase().includes(bankName.toLowerCase()) ||
       bankName.toLowerCase().includes(a.bank_name.toLowerCase())
     )
   }
 
+  async function uploadSlip(file: File): Promise<string> {
+    const supabase = createClient()
+    const ext = file.name.split('.').pop() || 'jpg'
+    const path = `transfers/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+    const { error } = await supabase.storage.from('slips').upload(path, file, { upsert: true })
+    if (error) throw new Error(error.message)
+    return supabase.storage.from('slips').getPublicUrl(path).data.publicUrl
+  }
+
   async function handleSlipUpload(file: File) {
     setOcring(true)
     setSlipPreview(URL.createObjectURL(file))
+    setSlipFile(file)
+    setSlipUrl('')
     try {
       const fd = new FormData()
       fd.append('file', file)
@@ -162,10 +203,15 @@ export default function TransfersPage() {
     }
     setSaving(true)
     setSaveError('')
-    const res = await fetch('/api/transfers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+
+    try {
+      let finalSlipUrl = slipUrl
+      if (slipFile) {
+        finalSlipUrl = await uploadSlip(slipFile)
+        setSlipUrl(finalSlipUrl)
+      }
+
+      const body = {
         date: form.date,
         amount_satang: toSatang(parseInput(form.amount)),
         from_bank: form.from_bank,
@@ -173,14 +219,28 @@ export default function TransfersPage() {
         to_bank: form.to_bank,
         to_account: form.to_account || null,
         note: form.note || null,
-      }),
-    })
-    if (res.ok) {
-      setShowForm(false)
-      load(selectedMonth)
-    } else {
-      const err = await res.json()
-      setSaveError(err.error || 'บันทึกไม่สำเร็จ')
+        slip_image_url: finalSlipUrl || null,
+      }
+
+      const url = editingId ? `/api/transfers/${editingId}` : '/api/transfers'
+      const method = editingId ? 'PATCH' : 'POST'
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      if (res.ok) {
+        setShowForm(false)
+        resetForm()
+        load(selectedMonth)
+      } else {
+        const err = await res.json()
+        setSaveError(err.error || 'บันทึกไม่สำเร็จ')
+      }
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ')
     }
     setSaving(false)
   }
@@ -232,8 +292,10 @@ export default function TransfersPage() {
         <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.4)' }}>
           <div className="bg-white w-full max-w-lg rounded-t-2xl p-4 space-y-3 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="font-semibold" style={{ color: 'var(--charcoal)' }}>บันทึกการโอนเงิน</h2>
-              <button onClick={() => setShowForm(false)} className="text-gray-400 text-xl">✕</button>
+              <h2 className="font-semibold" style={{ color: 'var(--charcoal)' }}>
+                {editingId ? 'แก้ไขการโอนเงิน' : 'บันทึกการโอนเงิน'}
+              </h2>
+              <button onClick={() => { setShowForm(false); resetForm() }} className="text-gray-400 text-xl">✕</button>
             </div>
 
             {/* Slip OCR */}
@@ -243,8 +305,10 @@ export default function TransfersPage() {
                 {slipPreview && (
                   <div className="relative shrink-0">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={slipPreview} alt="slip" className="w-16 h-16 rounded-xl object-cover border" style={{ borderColor: 'var(--border)' }} />
-                    <button type="button" onClick={() => setSlipPreview('')}
+                    <img src={slipPreview} alt="slip" className="w-16 h-16 rounded-xl object-cover border cursor-pointer"
+                      style={{ borderColor: 'var(--border)' }}
+                      onClick={() => setLightbox(slipPreview)} />
+                    <button type="button" onClick={() => { setSlipPreview(''); setSlipFile(null); setSlipUrl('') }}
                       className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] leading-4 text-center">
                       ×
                     </button>
@@ -338,10 +402,23 @@ export default function TransfersPage() {
               <button type="submit" disabled={saving || ocring}
                 className="w-full py-3 rounded-2xl font-semibold text-white disabled:opacity-60"
                 style={{ background: 'var(--flame-red)' }}>
-                {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+                {saving ? 'กำลังบันทึก...' : editingId ? 'บันทึกการแก้ไข' : 'บันทึก'}
               </button>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.85)' }}
+          onClick={() => setLightbox('')}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightbox} alt="slip" className="max-w-full max-h-full rounded-2xl object-contain"
+            onClick={e => e.stopPropagation()} />
+          <button className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 text-white text-lg leading-8 text-center"
+            onClick={() => setLightbox('')}>✕</button>
         </div>
       )}
 
@@ -355,10 +432,19 @@ export default function TransfersPage() {
           {transfers.map(t => (
             <div key={t.id} className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)', borderLeft: '4px solid #9F8966' }}>
               <div className="p-3">
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2">
+                  {/* Slip thumbnail */}
+                  {t.slip_image_url && (
+                    <button type="button" onClick={() => setLightbox(t.slip_image_url!)}
+                      className="shrink-0 w-12 h-12 rounded-xl overflow-hidden border" style={{ borderColor: 'var(--border)' }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={t.slip_image_url} alt="slip" className="w-full h-full object-cover" />
+                    </button>
+                  )}
+
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold" style={{ color: 'var(--flame-red)' }}>{formatBaht(t.amount_satang)}</p>
-                    <div className="mt-1 space-y-0.5">
+                    <div className="mt-0.5 space-y-0.5">
                       <div className="flex items-center gap-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
                         <span className="shrink-0">จาก:</span>
                         <span className="font-medium" style={{ color: 'var(--charcoal)' }}>
@@ -374,13 +460,14 @@ export default function TransfersPage() {
                       {t.note && <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{t.note}</p>}
                     </div>
                   </div>
+
                   <div className="text-right shrink-0">
                     <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
                       {new Date(t.date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
                     </p>
                     {(role === 'owner' || role === 'manager') && (
                       deleteConfirm === t.id ? (
-                        <div className="flex gap-1 mt-1">
+                        <div className="flex gap-1 mt-1 justify-end">
                           <button onClick={() => handleDelete(t.id)} disabled={deleting}
                             className="text-xs px-2 py-1 rounded-lg text-white disabled:opacity-50"
                             style={{ background: '#DC2626' }}>
@@ -392,8 +479,12 @@ export default function TransfersPage() {
                           </button>
                         </div>
                       ) : (
-                        <button onClick={() => setDeleteConfirm(t.id)}
-                          className="mt-1 text-xs text-red-400">ลบ</button>
+                        <div className="flex gap-2 mt-1 justify-end">
+                          <button onClick={() => openEdit(t)}
+                            className="text-xs" style={{ color: '#9F8966' }}>แก้ไข</button>
+                          <button onClick={() => setDeleteConfirm(t.id)}
+                            className="text-xs text-red-400">ลบ</button>
+                        </div>
                       )
                     )}
                   </div>

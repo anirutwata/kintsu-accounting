@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   const userName = cookieStore.get('kintsu_acc_name')?.value || ''
 
   const body = await req.json()
-  const { date, amount_satang, from_bank, from_account, to_bank, to_account, note } = body
+  const { date, amount_satang, from_bank, from_account, to_bank, to_account, note, slip_image_url } = body
 
   if (!date || !amount_satang || !from_bank || !to_bank) {
     return NextResponse.json({ error: 'กรุณากรอกข้อมูลให้ครบ' }, { status: 400 })
@@ -47,6 +47,7 @@ export async function POST(req: Request) {
       to_bank,
       to_account: to_account || null,
       note: note?.trim() || null,
+      slip_image_url: slip_image_url || null,
       created_by_name: userName,
     })
     .select()

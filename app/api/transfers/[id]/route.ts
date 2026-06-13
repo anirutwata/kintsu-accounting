@@ -9,6 +9,34 @@ function triggerGasSync(month: string) {
   if (ledgerUrl) fetch(ledgerUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month }) }).catch(() => {})
 }
 
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const supabase = await createClient()
+  const { id } = await params
+  const body = await req.json()
+  const { date, amount_satang, from_bank, from_account, to_bank, to_account, note, slip_image_url } = body
+
+  const { data, error } = await supabase
+    .from('bank_transfers')
+    .update({
+      date,
+      amount_satang: Math.round(amount_satang),
+      from_bank,
+      from_account: from_account || null,
+      to_bank,
+      to_account: to_account || null,
+      note: note?.trim() || null,
+      slip_image_url: slip_image_url || null,
+    })
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  triggerGasSync(data.date.substring(0, 7))
+  return NextResponse.json(data)
+}
+
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const { id } = await params
