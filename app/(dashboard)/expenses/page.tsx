@@ -55,7 +55,8 @@ function formatDate(dateStr: string) {
 }
 
 const emptyForm = () => ({
-  date: getTodayBKK(),
+  document_date: getTodayBKK(),  // วันที่เอกสาร/ใบแจ้งหนี้ — ใช้คำนวณ P&L
+  date: getTodayBKK(),           // วันที่ชำระเงินจริง — ใช้กระทบยอดธนาคาร
   transfer_time: '',
   amount: '',
   category: '',
@@ -181,6 +182,7 @@ export default function ExpensesPage() {
       setForm(f => ({
         ...f,
         amount: data.amount_satang ? (data.amount_satang / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : f.amount,
+        // Slip OCR fills payment date (date), NOT document_date (invoice date)
         date: data.date || f.date,
         transfer_time: data.time || f.transfer_time,
         recipient_name: data.recipient || f.recipient_name,
@@ -227,6 +229,7 @@ export default function ExpensesPage() {
       const paymentMethod = isBank ? 'โอนเงิน' : form.bank_account_id === '__card__' ? 'บัตรเครดิต' : 'เงินสด'
 
       const body = {
+        document_date: form.document_date,
         date: form.date,
         category: form.category,
         amount_satang: amountSatang,
@@ -273,6 +276,7 @@ export default function ExpensesPage() {
   function openEdit(exp: Expense) {
     setEditingId(exp.id)
     setForm({
+      document_date: exp.document_date || exp.date,
       date: exp.date,
       transfer_time: exp.transfer_time || '',
       amount: String(exp.amount_satang / 100),
@@ -317,11 +321,12 @@ export default function ExpensesPage() {
 
   const totalMonth = expenses.reduce((s, e) => s + e.total_satang, 0)
 
-  // Group expenses by date descending
+  // Group expenses by document_date (P&L date) descending
   const grouped: Record<string, Expense[]> = {}
   for (const exp of expenses) {
-    if (!grouped[exp.date]) grouped[exp.date] = []
-    grouped[exp.date].push(exp)
+    const key = exp.document_date || exp.date
+    if (!grouped[key]) grouped[key] = []
+    grouped[key].push(exp)
   }
   const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a))
 
@@ -377,6 +382,11 @@ export default function ExpensesPage() {
                       )}
                       {exp.note && <p className="text-sm truncate" style={{ color: 'var(--muted-foreground)' }}>{exp.note}</p>}
                       <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        {exp.date !== (exp.document_date || exp.date) && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                            ชำระ {formatDate(exp.date)}
+                          </span>
+                        )}
                         {exp.transfer_time && (
                           <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{exp.transfer_time}</span>
                         )}
@@ -456,7 +466,10 @@ export default function ExpensesPage() {
             </div>
             <div className="px-6 py-4 space-y-3">
               {/* Info rows */}
-              <DetailRow label="วันที่" value={formatDate(selectedExpense.date)} />
+              <DetailRow label="วันที่เอกสาร (P&L)" value={formatDate(selectedExpense.document_date || selectedExpense.date)} />
+              {selectedExpense.date !== (selectedExpense.document_date || selectedExpense.date) && (
+                <DetailRow label="วันที่ชำระ" value={formatDate(selectedExpense.date)} />
+              )}
               {selectedExpense.transfer_time && <DetailRow label="เวลาโอน" value={selectedExpense.transfer_time} />}
               <DetailRow label="หมวดหมู่" value={selectedExpense.category} />
               <DetailRow label="ยอดเงิน" value={formatBaht(selectedExpense.total_satang)} bold />
@@ -552,16 +565,33 @@ export default function ExpensesPage() {
 
             <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
 
-              {/* Date + Time */}
+              {/* Document Date (P&L) */}
+              <div>
+                <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--charcoal)' }}>
+                  วันที่เอกสาร <span className="font-normal text-xs">(ใช้คำนวณ P&L)</span> *
+                </label>
+                <input type="date" required value={form.document_date}
+                  onChange={e => setForm(f => ({ ...f, document_date: e.target.value }))}
+                  className="w-full border-2 rounded-xl px-3 py-2.5 text-sm"
+                  style={{ borderColor: 'var(--flame-red)' }} />
+                {form.document_date && (
+                  <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                    {new Date(form.document_date + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    {' '}· วันที่บิล/ใบแจ้งหนี้ — ค่าใช้จ่ายจะตกเดือนนี้
+                  </p>
+                )}
+              </div>
+
+              {/* Payment Date + Time */}
               <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>วันที่ *</label>
-                  <input type="date" required value={form.date}
+                  <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>วันที่ชำระ</label>
+                  <input type="date" value={form.date}
                     onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
                     className="w-full border rounded-xl px-3 py-2.5 text-sm" style={{ borderColor: 'var(--border)' }} />
-                  {form.date && (
-                    <p className="text-xs mt-1 text-center" style={{ color: 'var(--muted-foreground)' }}>
-                      {new Date(form.date + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  {form.date && form.date !== form.document_date && (
+                    <p className="text-xs mt-1 text-amber-600">
+                      ชำระคนละวันกับเอกสาร
                     </p>
                   )}
                 </div>

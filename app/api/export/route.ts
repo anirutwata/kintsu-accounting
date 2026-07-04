@@ -49,11 +49,11 @@ export async function GET(req: Request) {
   const [{ data: expenses }, { data: sales }, { data: catRows }, { data: assetRows }, { data: transferRows }, { data: bankRows }] = await Promise.all([
     supabase
       .from('expenses')
-      .select('date, transfer_time, category, amount_satang, payment_method, sender_bank, sender_account, recipient_name, note, created_by_name, created_at')
+      .select('document_date, date, transfer_time, category, amount_satang, payment_method, sender_bank, sender_account, recipient_name, note, created_by_name, created_at')
       .eq('is_deleted', false)
-      .gte('date', startDate)
-      .lte('date', endDate)
-      .order('date')
+      .gte('document_date', startDate)
+      .lte('document_date', endDate)
+      .order('document_date')
       .order('created_at'),
     supabase
       .from('daily_sales')
@@ -88,7 +88,8 @@ export async function GET(req: Request) {
   const expenseRows = (expenses || []).map(e => {
     const bkk = new Date(new Date(e.created_at).getTime() + 7 * 60 * 60 * 1000)
     return {
-      date: e.date,
+      date: e.document_date || e.date,
+      payment_date: e.date,
       time: e.transfer_time || '',
       category: e.category,
       amount: e.amount_satang / 100,

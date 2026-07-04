@@ -57,26 +57,28 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
   // Telegram notification
   if (data) {
-    sendTelegram(`🗑️ <b>ลบรายจ่าย</b>\n📁 ${data.category}${data.note ? ` — ${data.note}` : ''}\n💰 ฿${(data.amount_satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2 })}\n📅 ${data.date}`)
+    const docDate = data.document_date || data.date
+    sendTelegram(`🗑️ <b>ลบรายจ่าย</b>\n📁 ${data.category}${data.note ? ` — ${data.note}` : ''}\n💰 ฿${(data.amount_satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2 })}\n📅 ${docDate}`)
   }
 
-  // Trigger GAS re-sync (non-blocking)
+  // Trigger GAS re-sync (non-blocking) — use document_date for P&L month
   const gasUrl = process.env.GAS_WEBHOOK_URL
-  if (gasUrl && data?.date) {
+  const docDateForSync = data?.document_date || data?.date
+  if (gasUrl && docDateForSync) {
     fetch(gasUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'delete', month: data.date.slice(0, 7) }),
+      body: JSON.stringify({ action: 'delete', month: docDateForSync.slice(0, 7) }),
     }).catch(() => {})
   }
 
   // Sync Ledger (non-blocking)
   const ledgerUrl = process.env.LEDGER_WEBHOOK_URL
-  if (ledgerUrl && data?.date) {
+  if (ledgerUrl && docDateForSync) {
     fetch(ledgerUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ month: data.date.slice(0, 7) }),
+      body: JSON.stringify({ month: docDateForSync.slice(0, 7) }),
     }).catch(() => {})
   }
 

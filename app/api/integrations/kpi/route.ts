@@ -25,12 +25,12 @@ export async function GET(req: Request) {
   const totalVat = (sales || []).reduce((s, r) => s + r.total_vat_satang, 0)
   const grabGpCost = (sales || []).reduce((s, r) => s + r.grabfood_gp_fee_satang, 0)
 
-  // Fetch expenses for month
+  // Fetch expenses for month — filter by document_date (invoice date, not payment date)
   const { data: expenses } = await supabase
     .from('expenses')
     .select('category, total_satang, vat_satang')
-    .gte('date', `${month}-01`)
-    .lt('date', `${nextMonth}-01`)
+    .gte('document_date', `${month}-01`)
+    .lt('document_date', `${nextMonth}-01`)
     .eq('is_deleted', false)
 
   const FOOD_COST_CATS = ['วัตถุดิบทางตรง-เนื้อวัว', 'วัตถุดิบทางตรง-เนื้อหมู', 'วัตถุดิบทางตรง-อื่นๆ']

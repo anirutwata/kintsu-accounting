@@ -110,14 +110,14 @@ export async function GET(req: Request) {
   const ppCreditCard     = resolveBankId(settingsRow?.pp_credit_card_bank_id)
   const grabBankAccount  = resolveBankId(settingsRow?.grab_bank_account_id) ?? defaultGrab
 
-  // 1. Expenses
+  // 1. Expenses — filter by document_date (P&L date, not payment date)
   const { data: expenses } = await supabase
     .from('expenses')
-    .select('id, date, category, amount_satang, payment_method, sender_bank, recipient_name, note')
+    .select('id, document_date, date, category, amount_satang, payment_method, sender_bank, recipient_name, note')
     .eq('is_deleted', false)
-    .gte('date', startDate)
-    .lt('date', nextMonth)
-    .order('date')
+    .gte('document_date', startDate)
+    .lt('document_date', nextMonth)
+    .order('document_date')
 
   for (const e of expenses || []) {
     const debit = categoryAccount(e.category)
@@ -125,7 +125,7 @@ export async function GET(req: Request) {
     const desc = e.category + (e.recipient_name ? ` — ${e.recipient_name}` : '')
     entries.push({
       id: e.id,
-      date: e.date,
+      date: e.document_date || e.date,
       type: 'expense',
       description: desc,
       ref: e.note || '',

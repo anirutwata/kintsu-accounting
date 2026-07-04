@@ -70,7 +70,8 @@ export type PaymentMethod = 'เงินสด' | 'โอนเงิน' | '�
 
 export interface Expense {
   id: string
-  date: string
+  document_date: string   // วันที่เอกสาร/ใบแจ้งหนี้ — ใช้คำนวณ P&L
+  date: string            // วันที่ชำระเงินจริง — ใช้กระทบยอดธนาคาร
   category: ExpenseCategory
   amount_satang: number
   total_satang: number

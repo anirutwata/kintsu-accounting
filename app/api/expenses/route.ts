@@ -19,11 +19,11 @@ export async function GET(req: Request) {
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
 
-  if (date) query = query.eq('date', date)
+  if (date) query = query.eq('document_date', date)
   if (month) {
     const [y, m] = month.split('-').map(Number)
     const nextM = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
-    query = query.gte('date', `${month}-01`).lt('date', nextM)
+    query = query.gte('document_date', `${month}-01`).lt('document_date', nextM)
   }
 
   const { data, error, count } = await query
@@ -41,16 +41,21 @@ export async function POST(req: Request) {
   const { category, amount_satang, payment_method, bank_account_id,
           transfer_time, sender_name, sender_bank, sender_account,
           recipient_name, slip_image_url, slip_hash, ocr_data,
-          receipt_image_urls, note, date } = body
+          receipt_image_urls, note, date, document_date } = body
 
   if (!category || !amount_satang) {
     return NextResponse.json({ error: 'กรุณากรอกหมวดหมู่และจำนวนเงิน' }, { status: 400 })
   }
 
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+  const paymentDate = date || today
+  const invoiceDate = document_date || paymentDate
+
   const { data, error } = await supabase
     .from('expenses')
     .insert({
-      date: date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }),
+      document_date: invoiceDate,
+      date: paymentDate,
       category,
       amount_satang,
       vat_satang: 0,
@@ -93,7 +98,8 @@ export async function POST(req: Request) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: data.id,
-        date: data.date,
+        date: data.document_date,
+        payment_date: data.date,
         time: data.transfer_time || '',
         category: data.category,
         amount: data.amount_satang / 100,
@@ -107,13 +113,14 @@ export async function POST(req: Request) {
     }).catch(() => {})
   }
 
-  // Sync Ledger (non-blocking)
+  // Sync Ledger (non-blocking) — use document_date for P&L month
   const ledgerUrl = process.env.LEDGER_WEBHOOK_URL
   if (ledgerUrl) {
+    const docMonth = ((data.document_date || data.date) as string).substring(0, 7)
     fetch(ledgerUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ month: (data.date as string).substring(0, 7) }),
+      body: JSON.stringify({ month: docMonth }),
     }).catch(() => {})
   }
 
