@@ -1,8 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import type { BankAccount } from '@/types'
-
-const BANKS = ['กสิกรไทย', 'ไทยพาณิชย์', 'กรุงเทพ', 'กรุงไทย', 'ทหารไทยธนชาต', 'กรุงศรีอยุธยา', 'ออมสิน', 'อาคารสงเคราะห์', 'ยูโอบี', 'อื่นๆ']
+import { BANKS } from '@/lib/banks'
 
 interface FormState { bank_name: string; account_number: string; account_name: string }
 const emptyForm = (): FormState => ({ bank_name: BANKS[0], account_number: '', account_name: '' })

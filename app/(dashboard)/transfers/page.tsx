@@ -171,11 +171,11 @@ export default function TransfersPage() {
         return {
           ...f,
           date: data.date || f.date,
-          amount: data.amount_satang && !f.amount ? fmtInput(data.amount_satang) : f.amount,
-          from_bank: fromMatch ? fromMatch.bank_name : (data.from_bank && !f.from_bank ? data.from_bank : f.from_bank),
-          from_account: fromMatch ? fromMatch.account_number : (data.from_account && !f.from_account ? data.from_account : f.from_account),
-          to_bank: toMatch ? toMatch.bank_name : (data.to_bank && !f.to_bank ? data.to_bank : f.to_bank),
-          to_account: toMatch ? toMatch.account_number : (data.to_account && !f.to_account ? data.to_account : f.to_account),
+          amount: data.amount_satang ? fmtInput(data.amount_satang) : f.amount,
+          from_bank: fromMatch ? fromMatch.bank_name : (data.from_bank || f.from_bank),
+          from_account: fromMatch ? fromMatch.account_number : (data.from_account || f.from_account),
+          to_bank: toMatch ? toMatch.bank_name : (data.to_bank || f.to_bank),
+          to_account: toMatch ? toMatch.account_number : (data.to_account || f.to_account),
         }
       })
     } catch { /* ignore */ }
