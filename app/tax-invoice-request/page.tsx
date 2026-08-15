@@ -29,10 +29,31 @@ export default function TaxInvoiceRequestPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [lookingUpTaxId, setLookingUpTaxId] = useState(false)
+  const [taxIdLookupError, setTaxIdLookupError] = useState('')
 
   function set<K extends keyof ReturnType<typeof emptyForm>>(key: K, value: string) {
     setForm(f => ({ ...f, [key]: value }))
     setConfirmed(false)
+  }
+
+  async function handleTaxIdChange(value: string) {
+    const digits = value.replace(/[^0-9]/g, '').slice(0, 13)
+    set('contact_tax_id', digits)
+    setTaxIdLookupError('')
+    if (digits.length !== 13) return
+
+    setLookingUpTaxId(true)
+    try {
+      const res = await fetch(`/api/tax-lookup?tin=${digits}`)
+      const json = await res.json()
+      if (!res.ok) { setTaxIdLookupError(json.error || 'ค้นหาไม่พบ กรุณากรอกชื่อ/ที่อยู่เอง'); return }
+      setForm(f => ({ ...f, contact_name: json.name, contact_address: json.address }))
+    } catch {
+      setTaxIdLookupError('เชื่อมต่อไม่สำเร็จ กรุณากรอกชื่อ/ที่อยู่เอง')
+    } finally {
+      setLookingUpTaxId(false)
+    }
   }
 
   async function handleBillUpload(file: File) {
@@ -119,13 +140,15 @@ export default function TaxInvoiceRequestPage() {
             {uploadError && <p className="text-xs text-red-500">❌ {uploadError}</p>}
           </Field>
 
+          <Field label="เลขผู้เสียภาษี 13 หลัก">
+            <input value={form.contact_tax_id} onChange={e => handleTaxIdChange(e.target.value)}
+              className="w-full border rounded-xl px-3 py-2 text-sm" placeholder="1234567890123" inputMode="numeric" maxLength={13} />
+            {lookingUpTaxId && <p className="text-xs text-gray-400 mt-1">🔍 กำลังค้นหาชื่อ/ที่อยู่...</p>}
+            {taxIdLookupError && <p className="text-xs text-amber-600 mt-1">⚠️ {taxIdLookupError}</p>}
+          </Field>
           <Field label="ชื่อลูกค้า / บริษัท *">
             <input required value={form.contact_name} onChange={e => set('contact_name', e.target.value)}
               className="w-full border rounded-xl px-3 py-2 text-sm" placeholder="บริษัท ตัวอย่าง จำกัด" />
-          </Field>
-          <Field label="เลขผู้เสียภาษี 13 หลัก">
-            <input value={form.contact_tax_id} onChange={e => set('contact_tax_id', e.target.value)}
-              className="w-full border rounded-xl px-3 py-2 text-sm" placeholder="1234567890123" inputMode="numeric" maxLength={13} />
           </Field>
           <Field label="ที่อยู่">
             <textarea value={form.contact_address} onChange={e => set('contact_address', e.target.value)}
