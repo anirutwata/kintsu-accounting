@@ -7,7 +7,6 @@ const emptyForm = () => ({
   contact_address: '',
   contact_branch: '',
   contact_email: '',
-  description: '',
   total_baht: '',
   payment_method: '',
   bill_image_url: '',
@@ -175,10 +174,6 @@ export default function TaxInvoiceRequestPage() {
           <Field label="อีเมลรับใบกำกับภาษี *">
             <input required type="email" value={form.contact_email} onChange={e => set('contact_email', e.target.value)}
               className="w-full border rounded-xl px-3 py-2 text-sm" placeholder="you@company.com" />
-          </Field>
-          <Field label="รายการ *">
-            <input required value={form.description} onChange={e => set('description', e.target.value)}
-              className="w-full border rounded-xl px-3 py-2 text-sm" placeholder="ค่าอาหารและเครื่องดื่ม" />
           </Field>
           <Field label="ยอดเงินรวมที่ชำระจริง (บาท, รวม VAT) *">
             <input required type="number" min="0" step="0.01" value={form.total_baht}

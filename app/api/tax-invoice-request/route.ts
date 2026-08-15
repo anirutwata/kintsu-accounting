@@ -5,6 +5,8 @@ import { sendTelegramPhoto, sendTelegram, escapeHtml } from '@/lib/telegram'
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PAYMENT_METHODS = ['cash', 'transfer', 'credit_card'] as const
 const PAYMENT_LABELS: Record<string, string> = { cash: 'เงินสด', transfer: 'โอนเงิน', credit_card: 'บัตรเครดิต (EDC)' }
+// Fixed line-item description — not customer-editable, so every invoice reads the same way.
+const FIXED_DESCRIPTION = 'ค่าอาหาร และเครื่องดื่ม'
 
 export async function POST(req: Request) {
   const body = await req.json()
@@ -13,7 +15,7 @@ export async function POST(req: Request) {
   const contactAddress = String(body.contact_address || '').trim()
   const contactBranch = String(body.contact_branch || '').trim()
   const contactEmail = String(body.contact_email || '').trim()
-  const description = String(body.description || '').trim()
+  const description = FIXED_DESCRIPTION
   const totalBaht = Number(body.total_baht)
   const paymentMethod = PAYMENT_METHODS.includes(body.payment_method) ? body.payment_method : null
   const billImageUrl = String(body.bill_image_url || '').trim()
@@ -21,7 +23,6 @@ export async function POST(req: Request) {
   if (!contactName) return NextResponse.json({ error: 'กรุณากรอกชื่อลูกค้า/บริษัท' }, { status: 400 })
   if (!contactEmail || !EMAIL_RE.test(contactEmail)) return NextResponse.json({ error: 'กรุณากรอกอีเมลให้ถูกต้อง' }, { status: 400 })
   if (contactTaxId && contactTaxId.length !== 13) return NextResponse.json({ error: 'เลขผู้เสียภาษีต้องมี 13 หลัก' }, { status: 400 })
-  if (!description) return NextResponse.json({ error: 'กรุณากรอกรายละเอียดรายการ' }, { status: 400 })
   if (!totalBaht || totalBaht <= 0) return NextResponse.json({ error: 'กรุณากรอกยอดเงินให้ถูกต้อง' }, { status: 400 })
   if (!paymentMethod) return NextResponse.json({ error: 'กรุณาเลือกช่องทางชำระเงิน' }, { status: 400 })
   if (!billImageUrl) return NextResponse.json({ error: 'กรุณาแนบรูปถ่ายบิล/ใบเสร็จ' }, { status: 400 })
