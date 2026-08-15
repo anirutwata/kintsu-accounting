@@ -31,7 +31,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       isUpdate: true,
       paymentMethod: data.payment_method,
       paymentBank: data.payment_bank,
-    }))
+    }), 'assets')
   }
   return NextResponse.json(data)
 }
@@ -44,6 +44,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { error } = await supabase.from('assets').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   triggerGasSync()
-  if (asset?.name) sendTelegram(buildAssetDeleteMessage(asset.name))
+  if (asset?.name) sendTelegram(buildAssetDeleteMessage(asset.name), 'assets')
   return NextResponse.json({ ok: true })
 }

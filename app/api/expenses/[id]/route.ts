@@ -58,7 +58,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   // Telegram notification
   if (data) {
     const docDate = data.document_date || data.date
-    sendTelegram(`🗑️ <b>ลบรายจ่าย</b>\n📁 ${data.category}${data.note ? ` — ${data.note}` : ''}\n💰 ฿${(data.amount_satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2 })}\n📅 ${docDate}`)
+    sendTelegram(`🗑️ <b>ลบรายจ่าย</b>\n📁 ${data.category}${data.note ? ` — ${data.note}` : ''}\n💰 ฿${(data.amount_satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2 })}\n📅 ${docDate}`, 'expenses')
   }
 
   // Trigger GAS re-sync (non-blocking) — use document_date for P&L month

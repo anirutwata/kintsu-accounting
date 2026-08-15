@@ -12,6 +12,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ date
 
   const { error } = await supabase.from('daily_sales').delete().eq('id', date)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  sendTelegram(buildSalesDeleteMessage(date))
+  sendTelegram(buildSalesDeleteMessage(date), 'sales')
   return NextResponse.json({ ok: true })
 }

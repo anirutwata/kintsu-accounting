@@ -1,16 +1,111 @@
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID
 
-export async function sendTelegram(message: string) {
+// Telegram's HTML parse_mode only needs these three escaped — escape any
+// user-supplied text before interpolating it into an HTML-parsed message,
+// or a stray '&'/'<'/'>' can make Telegram reject the whole message.
+export function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// Forum topic thread ids for the KINTSU Accounting Telegram group (created 2026-08-14)
+export const TELEGRAM_TOPICS = {
+  expenses: 3,    // 💸 ค่าใช้จ่าย
+  sales: 4,       // 💰 ยอดขาย
+  assets: 5,      // 🏗️ สินทรัพย์
+  transfers: 6,   // 🏦 โอนเงิน
+  taxInvoice: 7,  // 🧾 ใบกำกับภาษี
+} as const
+
+export async function sendTelegram(message: string, topic?: keyof typeof TELEGRAM_TOPICS) {
   if (!BOT_TOKEN || !CHAT_ID) return
   try {
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: CHAT_ID, text: message, parse_mode: 'HTML' }),
+      body: JSON.stringify({
+        chat_id: CHAT_ID,
+        text: message,
+        parse_mode: 'HTML',
+        ...(topic ? { message_thread_id: TELEGRAM_TOPICS[topic] } : {}),
+      }),
     })
   } catch (err) {
     console.error('Telegram failed:', err)
+  }
+}
+
+export interface InlineButton {
+  text: string
+  callback_data: string
+}
+
+// Returns the sent message_id (needed later to edit the caption after approve/reject), or null on failure.
+export async function sendTelegramPhoto(
+  photoUrl: string,
+  caption: string,
+  opts: { topic?: keyof typeof TELEGRAM_TOPICS; buttons?: InlineButton[][] } = {},
+): Promise<number | null> {
+  if (!BOT_TOKEN || !CHAT_ID) return null
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: CHAT_ID,
+        photo: photoUrl,
+        caption,
+        parse_mode: 'HTML',
+        ...(opts.topic ? { message_thread_id: TELEGRAM_TOPICS[opts.topic] } : {}),
+        ...(opts.buttons ? { reply_markup: { inline_keyboard: opts.buttons } } : {}),
+      }),
+    })
+    const json = await res.json()
+    if (!json.ok) {
+      console.error('sendTelegramPhoto failed:', json)
+      return null
+    }
+    return json.result.message_id
+  } catch (err) {
+    console.error('Telegram sendPhoto failed:', err)
+    return null
+  }
+}
+
+// Edits a photo message's caption (e.g. after Approve/Reject) and optionally clears/replaces the buttons.
+export async function editTelegramCaption(
+  messageId: number,
+  caption: string,
+  buttons?: InlineButton[][],
+) {
+  if (!BOT_TOKEN || !CHAT_ID) return
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageCaption`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: CHAT_ID,
+        message_id: messageId,
+        caption,
+        parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: buttons ?? [] },
+      }),
+    })
+  } catch (err) {
+    console.error('Telegram editMessageCaption failed:', err)
+  }
+}
+
+export async function answerCallbackQuery(callbackQueryId: string, text?: string) {
+  if (!BOT_TOKEN) return
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: callbackQueryId, text, show_alert: false }),
+    })
+  } catch (err) {
+    console.error('Telegram answerCallbackQuery failed:', err)
   }
 }
 

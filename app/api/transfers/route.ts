@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     toAccount: data.to_account,
     note: data.note,
     isDelete: false,
-  }))
+  }), 'transfers')
 
   return NextResponse.json(data)
 }

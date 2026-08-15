@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { sendTelegram, buildExpenseMessage } from '@/lib/telegram'
+import { syncExpenseToFlowAccount } from '@/lib/expenseSync'
 
 export async function GET(req: Request) {
   const supabase = await createClient()
@@ -81,6 +82,16 @@ export async function POST(req: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // Auto-sync to FlowAccount right away — falls back to the manual "ส่งเข้า FlowAccount"
+  // button on the expense detail page if this fails (e.g. category not mapped yet).
+  let responseData = data
+  const syncResult = await syncExpenseToFlowAccount(supabase, data.id)
+  if (syncResult.ok) {
+    responseData = syncResult.data
+  } else {
+    sendTelegram(`⚠️ บันทึกรายจ่ายสำเร็จ แต่ส่งเข้า FlowAccount อัตโนมัติไม่สำเร็จ: ${syncResult.error}\n📁 ${category}${note ? ` — ${note}` : ''}`, 'expenses')
+  }
+
   // Send Telegram notification (non-blocking)
   sendTelegram(buildExpenseMessage({
     category,
@@ -88,7 +99,7 @@ export async function POST(req: Request) {
     totalSatang: amount_satang,
     paymentMethod: body.payment_method || 'เงินสด',
     createdByName: userName,
-  }))
+  }), 'expenses')
 
   // Push to Google Sheets instantly (non-blocking)
   const gasUrl = process.env.GAS_WEBHOOK_URL
@@ -124,5 +135,5 @@ export async function POST(req: Request) {
     }).catch(() => {})
   }
 
-  return NextResponse.json(data)
+  return NextResponse.json(responseData)
 }

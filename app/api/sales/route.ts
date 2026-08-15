@@ -136,7 +136,7 @@ export async function POST(req: Request) {
     papayaRev,
     grabNetSatang: grabNet,
     takeawayRev,
-  }))
+  }), 'sales')
 
   return NextResponse.json(data)
 }

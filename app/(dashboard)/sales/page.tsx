@@ -40,6 +40,21 @@ export default function SalesPage() {
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [syncingFa, setSyncingFa] = useState(false)
+  const [syncFaError, setSyncFaError] = useState('')
+
+  async function handleSyncFlowAccount() {
+    setSyncingFa(true)
+    setSyncFaError('')
+    try {
+      const res = await fetch(`/api/sales/${date}/flowaccount-sync`, { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) { setSyncFaError(json.error || 'ส่งไม่สำเร็จ'); return }
+      setExisting(json)
+    } finally {
+      setSyncingFa(false)
+    }
+  }
 
   useEffect(() => { setRole(getClientRole()) }, [])
 
@@ -198,6 +213,28 @@ export default function SalesPage() {
         <div className="p-3 rounded-xl bg-red-50 text-red-700 text-sm flex justify-between">
           <span>❌ {deleteError}</span>
           <button onClick={() => setDeleteError('')} className="text-red-400 ml-2">✕</button>
+        </div>
+      )}
+
+      {syncFaError && (
+        <div className="p-3 rounded-xl bg-red-50 text-red-700 text-sm flex justify-between">
+          <span>❌ {syncFaError}</span>
+          <button onClick={() => setSyncFaError('')} className="text-red-400 ml-2">✕</button>
+        </div>
+      )}
+
+      {existing && (
+        <div className="flex justify-between items-center gap-2">
+          {existing.flowaccount_document_serial ? (
+            <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+              ✅ ส่งเข้า FlowAccount แล้ว ({existing.flowaccount_document_serial})
+            </span>
+          ) : <span />}
+          <button onClick={handleSyncFlowAccount} disabled={syncingFa}
+            className="px-3 py-1.5 rounded-xl text-xs font-semibold border-2 disabled:opacity-50"
+            style={{ borderColor: '#2563EB', color: '#2563EB' }}>
+            {syncingFa ? 'กำลังส่ง...' : existing.flowaccount_document_serial ? '🔁 ส่งอีกครั้ง' : '📤 ส่งเข้า FlowAccount'}
+          </button>
         </div>
       )}
 

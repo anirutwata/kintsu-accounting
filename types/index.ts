@@ -93,6 +93,9 @@ export interface Expense {
   updated_at: string | null
   updated_by_name: string | null
   is_deleted: boolean
+  flowaccount_record_id: number | null
+  flowaccount_document_serial: string | null
+  flowaccount_synced_at: string | null
 }
 
 export interface OcrData {
@@ -187,6 +190,9 @@ export interface DailySales {
   papaya_promptpay_satang: number
   papaya_company_transfer_satang: number
   papaya_credit_card_satang: number
+  flowaccount_record_id: number | null
+  flowaccount_document_serial: string | null
+  flowaccount_synced_at: string | null
 }
 
 export interface VoidRefund {

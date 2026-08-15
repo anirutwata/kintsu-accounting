@@ -56,7 +56,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       toAccount: transfer.to_account,
       note: transfer.note,
       isDelete: true,
-    }))
+    }), 'transfers')
   }
 
   return NextResponse.json({ ok: true })

@@ -55,6 +55,6 @@ export async function POST(req: Request) {
     isUpdate: false,
     paymentMethod: data.payment_method,
     paymentBank: data.payment_bank,
-  }))
+  }), 'assets')
   return NextResponse.json(data)
 }

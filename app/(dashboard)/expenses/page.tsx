@@ -95,6 +95,22 @@ export default function ExpensesPage() {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [bankMatchWarning, setBankMatchWarning] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [syncingFa, setSyncingFa] = useState(false)
+  const [syncFaError, setSyncFaError] = useState('')
+
+  async function handleSyncFlowAccount(id: string) {
+    setSyncingFa(true)
+    setSyncFaError('')
+    try {
+      const res = await fetch(`/api/expenses/${id}/flowaccount-sync`, { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) { setSyncFaError(json.error || 'ส่งไม่สำเร็จ'); return }
+      setSelectedExpense(json)
+      loadExpenses()
+    } finally {
+      setSyncingFa(false)
+    }
+  }
 
   const [bankForm, setBankForm] = useState({ bank_name: '', account_number: '', account_name: '' })
   const [savingBank, setSavingBank] = useState(false)
@@ -480,6 +496,9 @@ export default function ExpensesPage() {
               {selectedExpense.recipient_name && <DetailRow label="ผู้รับเงิน" value={selectedExpense.recipient_name} />}
               {selectedExpense.note && <DetailRow label="หมายเหตุ" value={selectedExpense.note} />}
               {selectedExpense.created_by_name && <DetailRow label="บันทึกโดย" value={selectedExpense.created_by_name} />}
+              {selectedExpense.flowaccount_document_serial && (
+                <DetailRow label="FlowAccount" value={`✅ ${selectedExpense.flowaccount_document_serial}`} />
+              )}
 
               {/* Slip image */}
               {selectedExpense.slip_image_url && (
@@ -508,6 +527,14 @@ export default function ExpensesPage() {
                   </div>
                 </div>
               )}
+
+              {syncFaError && <p className="text-xs text-red-500">❌ {syncFaError}</p>}
+              <button onClick={() => handleSyncFlowAccount(selectedExpense.id)}
+                disabled={syncingFa}
+                className="w-full py-2.5 rounded-xl text-sm font-semibold border-2 disabled:opacity-50"
+                style={{ borderColor: '#2563EB', color: '#2563EB' }}>
+                {syncingFa ? 'กำลังส่ง...' : selectedExpense.flowaccount_document_serial ? '🔁 ส่งเข้า FlowAccount อีกครั้ง' : '📤 ส่งเข้า FlowAccount'}
+              </button>
 
               {/* Action buttons */}
               <div className="flex gap-2 pt-2">

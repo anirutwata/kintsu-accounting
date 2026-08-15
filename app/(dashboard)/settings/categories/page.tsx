@@ -8,6 +8,19 @@ interface Category {
   category_type: 'expense' | 'asset'
   sort_order: number
   is_active: boolean
+  flowaccount_category_id: number | null
+  flowaccount_category_name: string | null
+}
+
+interface FlowAccountCategory {
+  categoryId: number
+  systemCode: number
+  nameLocal: string
+  nameForeign: string
+  creditId: number
+  creditCategory: number
+  debitId: number
+  debitCategory: number
 }
 
 function CategoriesContent() {
@@ -25,8 +38,18 @@ function CategoriesContent() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [faCategories, setFaCategories] = useState<FlowAccountCategory[]>([])
+  const [faLoadError, setFaLoadError] = useState('')
+  const [mappingId, setMappingId] = useState<string | null>(null)
 
   useEffect(() => { load() }, [type])
+  useEffect(() => {
+    if (type !== 'expense') return
+    fetch('/api/flowaccount/categories')
+      .then(res => res.json())
+      .then(data => Array.isArray(data) ? setFaCategories(data) : setFaLoadError(data.error || 'โหลดหมวดหมู่ FlowAccount ไม่สำเร็จ'))
+      .catch(() => setFaLoadError('เชื่อมต่อ FlowAccount ไม่สำเร็จ'))
+  }, [type])
 
   async function load() {
     setLoading(true)
@@ -34,6 +57,37 @@ function CategoriesContent() {
     const data = await res.json()
     setCategories(Array.isArray(data) ? data : [])
     setLoading(false)
+  }
+
+  async function handleMapFlowAccount(catId: string, faCategoryId: string) {
+    setMappingId(catId)
+    const fa = faCategories.find(c => c.categoryId === Number(faCategoryId))
+    const body = fa
+      ? {
+          flowaccount_category_id: fa.categoryId,
+          flowaccount_system_code: fa.systemCode,
+          flowaccount_credit_id: fa.creditId,
+          flowaccount_credit_category: fa.creditCategory,
+          flowaccount_debit_id: fa.debitId,
+          flowaccount_debit_category: fa.debitCategory,
+          flowaccount_category_name: fa.nameLocal,
+        }
+      : {
+          flowaccount_category_id: null,
+          flowaccount_system_code: null,
+          flowaccount_credit_id: null,
+          flowaccount_credit_category: null,
+          flowaccount_debit_id: null,
+          flowaccount_debit_category: null,
+          flowaccount_category_name: null,
+        }
+    const res = await fetch(`/api/categories/${catId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (res.ok) load()
+    setMappingId(null)
   }
 
   async function handleAdd(e: React.FormEvent) {
@@ -135,6 +189,12 @@ function CategoriesContent() {
         {addError && <p className="text-xs text-red-500">❌ {addError}</p>}
       </form>
 
+      {type === 'expense' && faLoadError && (
+        <div className="p-3 rounded-xl bg-amber-50 text-amber-700 text-xs">
+          ⚠️ {faLoadError} (ผูกหมวดหมู่กับ FlowAccount ไม่ได้ตอนนี้)
+        </div>
+      )}
+
       {deleteError && (
         <div className="p-3 rounded-xl bg-red-50 text-red-700 text-sm flex justify-between">
           <span>❌ {deleteError}</span>
@@ -163,32 +223,50 @@ function CategoriesContent() {
                   {editError && <p className="text-xs text-red-500">❌ {editError}</p>}
                 </div>
               ) : (
-                <div className="flex items-center justify-between px-3 py-2.5">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm truncate" style={{ color: 'var(--charcoal)' }}>{cat.name}</span>
-                    {!cat.is_active && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 shrink-0">ปิด</span>}
+                <div className="px-3 py-2.5 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm truncate" style={{ color: 'var(--charcoal)' }}>{cat.name}</span>
+                      {!cat.is_active && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 shrink-0">ปิด</span>}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0 ml-2">
+                      <button onClick={() => { setEditId(cat.id); setEditName(cat.name); setEditError('') }}
+                        className="text-xs px-2 py-1 rounded-lg border" style={{ borderColor: 'var(--border)', color: 'var(--charcoal)' }}>แก้ไข</button>
+                      <button onClick={() => toggleActive(cat)} className="text-xs px-2 py-1 rounded-lg"
+                        style={{ color: cat.is_active ? '#6B7280' : '#16A34A' }}>
+                        {cat.is_active ? 'ปิด' : 'เปิด'}
+                      </button>
+                      {deleteConfirm === cat.id ? (
+                        <>
+                          <button onClick={() => handleDelete(cat.id)} disabled={deleting}
+                            className="text-xs px-2 py-1 rounded-lg text-red-600 font-semibold disabled:opacity-50">
+                            {deleting ? '...' : 'ลบ?'}
+                          </button>
+                          <button onClick={() => { setDeleteConfirm(null); setDeleteError('') }}
+                            className="text-xs px-1 py-1 rounded-lg" style={{ color: 'var(--muted-foreground)' }}>✕</button>
+                        </>
+                      ) : (
+                        <button onClick={() => { setDeleteConfirm(cat.id); setDeleteError('') }}
+                          className="text-xs px-2 py-1 rounded-lg text-red-400">ลบ</button>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0 ml-2">
-                    <button onClick={() => { setEditId(cat.id); setEditName(cat.name); setEditError('') }}
-                      className="text-xs px-2 py-1 rounded-lg border" style={{ borderColor: 'var(--border)', color: 'var(--charcoal)' }}>แก้ไข</button>
-                    <button onClick={() => toggleActive(cat)} className="text-xs px-2 py-1 rounded-lg"
-                      style={{ color: cat.is_active ? '#6B7280' : '#16A34A' }}>
-                      {cat.is_active ? 'ปิด' : 'เปิด'}
-                    </button>
-                    {deleteConfirm === cat.id ? (
-                      <>
-                        <button onClick={() => handleDelete(cat.id)} disabled={deleting}
-                          className="text-xs px-2 py-1 rounded-lg text-red-600 font-semibold disabled:opacity-50">
-                          {deleting ? '...' : 'ลบ?'}
-                        </button>
-                        <button onClick={() => { setDeleteConfirm(null); setDeleteError('') }}
-                          className="text-xs px-1 py-1 rounded-lg" style={{ color: 'var(--muted-foreground)' }}>✕</button>
-                      </>
-                    ) : (
-                      <button onClick={() => { setDeleteConfirm(cat.id); setDeleteError('') }}
-                        className="text-xs px-2 py-1 rounded-lg text-red-400">ลบ</button>
-                    )}
-                  </div>
+                  {type === 'expense' && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] shrink-0" style={{ color: 'var(--muted-foreground)' }}>FlowAccount:</span>
+                      <select
+                        value={cat.flowaccount_category_id ?? ''}
+                        disabled={mappingId === cat.id || faCategories.length === 0}
+                        onChange={e => handleMapFlowAccount(cat.id, e.target.value)}
+                        className="flex-1 text-xs border rounded-lg px-2 py-1 disabled:opacity-50"
+                        style={{ borderColor: 'var(--border)', color: cat.flowaccount_category_id ? 'var(--charcoal)' : '#9CA3AF' }}>
+                        <option value="">— ยังไม่ผูก —</option>
+                        {faCategories.map(fa => (
+                          <option key={fa.categoryId} value={fa.categoryId}>{fa.nameLocal}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
