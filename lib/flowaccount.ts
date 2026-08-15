@@ -284,10 +284,15 @@ export async function createTaxInvoice(input: CreateTaxInvoiceInput) {
     body: JSON.stringify({
       ...document,
       ...paymentFields,
+      // documentDeductionType/Amount + useReceiptDeduction is what actually renders the
+      // "ปัดเศษลง"/"ยอดชำระ" lines on the PDF — this is the checkbox next to the
+      // ปัดเศษลง/ขึ้น dropdown in the FlowAccount web UI. paymentDeductionType/Amount
+      // (payment-level) is silently accepted but never displayed — verified by testing both.
+      useReceiptDeduction: rounding > 0,
+      documentDeductionType: rounding > 0 ? 7 : 0, // 7 = ปัดเศษ
+      documentDeductionAmount: rounding,
       paymentDate: payment.paymentDate,
       collected,
-      paymentDeductionType: rounding > 0 ? 7 : 0, // 7 = ปัดเศษ
-      paymentDeductionAmount: rounding,
     }),
   })
 }
