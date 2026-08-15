@@ -138,7 +138,7 @@ export default function TaxInvoiceRequestPage() {
           <Field label="รูปถ่ายบิล/ใบเสร็จ *">
             <label className="block border-2 border-dashed rounded-xl p-3 text-center cursor-pointer"
               style={{ borderColor: form.bill_image_url ? '#16A34A' : '#e5e7eb' }}>
-              <input type="file" accept="image/*" capture="environment" className="hidden"
+              <input type="file" accept="image/*" className="hidden"
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleBillUpload(f) }} />
               {billPreview ? (
                 // eslint-disable-next-line @next/next/no-img-element
