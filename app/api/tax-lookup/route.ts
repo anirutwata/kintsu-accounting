@@ -67,7 +67,7 @@ export async function GET(req: Request) {
     ].filter(Boolean)
 
     return NextResponse.json({
-      name: [titleName, name].filter(Boolean).join(''),
+      name: [titleName, name].filter(Boolean).join(' '),
       address: addressParts.join(' '),
     })
   } catch (err: any) {
