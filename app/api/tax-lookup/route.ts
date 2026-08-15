@@ -66,9 +66,13 @@ export async function GET(req: Request) {
       postCode,
     ].filter(Boolean)
 
+    const branchNumber = Array.isArray(result.BranchNumber) ? Number(result.BranchNumber[0]) : 0
+    const branch = branchNumber === 0 ? 'สำนักงานใหญ่' : `สาขาที่ ${branchNumber}`
+
     return NextResponse.json({
       name: [titleName, name].filter(Boolean).join(' '),
       address: addressParts.join(' '),
+      branch,
     })
   } catch (err: any) {
     return NextResponse.json({ error: 'เชื่อมต่อกรมสรรพากรไม่สำเร็จ กรุณากรอกเอง' }, { status: 502 })

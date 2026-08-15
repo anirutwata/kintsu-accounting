@@ -48,7 +48,7 @@ export default function TaxInvoiceRequestPage() {
       const res = await fetch(`/api/tax-lookup?tin=${digits}`)
       const json = await res.json()
       if (!res.ok) { setTaxIdLookupError(json.error || 'ค้นหาไม่พบ กรุณากรอกชื่อ/ที่อยู่เอง'); return }
-      setForm(f => ({ ...f, contact_name: json.name, contact_address: json.address }))
+      setForm(f => ({ ...f, contact_name: json.name, contact_address: json.address, contact_branch: json.branch }))
     } catch {
       setTaxIdLookupError('เชื่อมต่อไม่สำเร็จ กรุณากรอกชื่อ/ที่อยู่เอง')
     } finally {
