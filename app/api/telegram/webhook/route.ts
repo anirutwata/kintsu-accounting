@@ -67,7 +67,9 @@ export async function POST(req: Request) {
 
   const today = getTodayBKK()
   const totalBaht = claimed.total_satang / 100
-  const subTotal = Math.round((totalBaht / 1.07) * 100) / 100
+  // subTotal comes straight from what the customer read off the receipt — not
+  // back-calculated from the total — so it matches the receipt's own "ก่อน VAT" line exactly.
+  const subTotal = claimed.subtotal_satang / 100
   const vatAmount = Math.round(subTotal * 0.07 * 100) / 100
   const roundingAmount = Math.max(0, Math.round((subTotal + vatAmount - totalBaht) * 100) / 100)
 

@@ -7,6 +7,7 @@ const emptyForm = () => ({
   contact_address: '',
   contact_branch: '',
   contact_email: '',
+  subtotal_baht: '',
   total_baht: '',
   payment_method: '',
   bill_image_url: '',
@@ -175,10 +176,17 @@ export default function TaxInvoiceRequestPage() {
             <input required type="email" value={form.contact_email} onChange={e => set('contact_email', e.target.value)}
               className="w-full border rounded-xl px-3 py-2 text-sm" placeholder="you@company.com" />
           </Field>
+          <Field label="ยอดก่อน VAT (บาท) *">
+            <input required type="number" min="0" step="0.01" value={form.subtotal_baht}
+              onChange={e => set('subtotal_baht', e.target.value)}
+              className="w-full border rounded-xl px-3 py-2 text-sm" placeholder="0.00" />
+            <p className="text-[10px] text-gray-400 mt-1">ดูจากบรรทัด &quot;รวมเป็นเงิน&quot; หรือ &quot;Before VAT&quot; บนบิล (ก่อนบวก VAT 7%)</p>
+          </Field>
           <Field label="ยอดเงินรวมที่ชำระจริง (บาท, รวม VAT) *">
             <input required type="number" min="0" step="0.01" value={form.total_baht}
               onChange={e => set('total_baht', e.target.value)}
               className="w-full border rounded-xl px-3 py-2 text-sm" placeholder="0.00" />
+            <p className="text-[10px] text-gray-400 mt-1">ยอดที่จ่ายจริงท้ายบิล (หลังปัดเศษ ถ้ามี)</p>
           </Field>
           <Field label="ช่องทางชำระเงิน *">
             <div className="grid grid-cols-3 gap-2">

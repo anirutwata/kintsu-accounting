@@ -16,6 +16,7 @@ export async function POST(req: Request) {
   const contactBranch = String(body.contact_branch || '').trim()
   const contactEmail = String(body.contact_email || '').trim()
   const description = FIXED_DESCRIPTION
+  const subtotalBaht = Number(body.subtotal_baht)
   const totalBaht = Number(body.total_baht)
   const paymentMethod = PAYMENT_METHODS.includes(body.payment_method) ? body.payment_method : null
   const billImageUrl = String(body.bill_image_url || '').trim()
@@ -23,11 +24,14 @@ export async function POST(req: Request) {
   if (!contactName) return NextResponse.json({ error: 'กรุณากรอกชื่อลูกค้า/บริษัท' }, { status: 400 })
   if (!contactEmail || !EMAIL_RE.test(contactEmail)) return NextResponse.json({ error: 'กรุณากรอกอีเมลให้ถูกต้อง' }, { status: 400 })
   if (contactTaxId && contactTaxId.length !== 13) return NextResponse.json({ error: 'เลขผู้เสียภาษีต้องมี 13 หลัก' }, { status: 400 })
+  if (!subtotalBaht || subtotalBaht <= 0) return NextResponse.json({ error: 'กรุณากรอกยอดก่อน VAT ให้ถูกต้อง' }, { status: 400 })
   if (!totalBaht || totalBaht <= 0) return NextResponse.json({ error: 'กรุณากรอกยอดเงินให้ถูกต้อง' }, { status: 400 })
+  if (totalBaht < subtotalBaht) return NextResponse.json({ error: 'ยอดรวมต้องไม่น้อยกว่ายอดก่อน VAT' }, { status: 400 })
   if (!paymentMethod) return NextResponse.json({ error: 'กรุณาเลือกช่องทางชำระเงิน' }, { status: 400 })
   if (!billImageUrl) return NextResponse.json({ error: 'กรุณาแนบรูปถ่ายบิล/ใบเสร็จ' }, { status: 400 })
 
   const supabase = await createClient()
+  const subtotalSatang = Math.round(subtotalBaht * 100)
   const totalSatang = Math.round(totalBaht * 100)
 
   const { data: request, error: insertError } = await supabase
@@ -39,6 +43,7 @@ export async function POST(req: Request) {
       contact_branch: contactBranch || null,
       contact_email: contactEmail,
       description,
+      subtotal_satang: subtotalSatang,
       total_satang: totalSatang,
       payment_method: paymentMethod,
       bill_image_url: billImageUrl,
@@ -55,7 +60,7 @@ export async function POST(req: Request) {
 👤 ${escapeHtml(contactName)}${contactTaxId ? `\n🪪 ${contactTaxId}` : ''}${contactBranch ? `\n🏢 สาขา: ${escapeHtml(contactBranch)}` : ''}
 📧 ${escapeHtml(contactEmail)}
 📝 ${escapeHtml(description)}
-💰 ${totalBaht.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท (${PAYMENT_LABELS[paymentMethod]})
+💰 ก่อน VAT ${subtotalBaht.toLocaleString('th-TH', { minimumFractionDigits: 2 })} → รวม ${totalBaht.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท (${PAYMENT_LABELS[paymentMethod]})
 
 กรุณาตรวจสอบรูปบิลก่อนกดอนุมัติ`
 
