@@ -37,15 +37,11 @@ export default function TaxInvoiceRequestPage() {
     setConfirmed(false)
   }
 
-  async function handleTaxIdChange(value: string) {
-    const digits = value.replace(/[^0-9]/g, '').slice(0, 13)
-    set('contact_tax_id', digits)
-    setTaxIdLookupError('')
-    if (digits.length !== 13) return
-
+  async function lookupTaxId(digits: string, branchNumber: number) {
     setLookingUpTaxId(true)
+    setTaxIdLookupError('')
     try {
-      const res = await fetch(`/api/tax-lookup?tin=${digits}`)
+      const res = await fetch(`/api/tax-lookup?tin=${digits}&branch=${branchNumber}`)
       const json = await res.json()
       if (!res.ok) { setTaxIdLookupError(json.error || 'ค้นหาไม่พบ กรุณากรอกชื่อ/ที่อยู่เอง'); return }
       setForm(f => ({ ...f, contact_name: json.name, contact_address: json.address, contact_branch: json.branch }))
@@ -54,6 +50,22 @@ export default function TaxInvoiceRequestPage() {
     } finally {
       setLookingUpTaxId(false)
     }
+  }
+
+  async function handleTaxIdChange(value: string) {
+    const digits = value.replace(/[^0-9]/g, '').slice(0, 13)
+    set('contact_tax_id', digits)
+    setTaxIdLookupError('')
+    if (digits.length === 13) lookupTaxId(digits, 0)
+  }
+
+  // Head-office and each branch have DIFFERENT registered addresses — if the customer
+  // knows their branch number, re-look-up that branch's own name/address on blur.
+  function handleBranchBlur(value: string) {
+    if (form.contact_tax_id.length !== 13) return
+    const digits = value.replace(/[^0-9]/g, '')
+    if (!digits) return
+    lookupTaxId(form.contact_tax_id, parseInt(digits, 10))
   }
 
   async function handleBillUpload(file: File) {
@@ -156,7 +168,9 @@ export default function TaxInvoiceRequestPage() {
           </Field>
           <Field label="สาขา">
             <input value={form.contact_branch} onChange={e => set('contact_branch', e.target.value)}
+              onBlur={e => handleBranchBlur(e.target.value)}
               className="w-full border rounded-xl px-3 py-2 text-sm" placeholder="สำนักงานใหญ่ / สาขาที่ ..." />
+            <p className="text-[10px] text-gray-400 mt-1">ถ้าไม่ใช่สำนักงานใหญ่ กรอกเลขสาขา (เช่น 1) ระบบจะค้นหาที่อยู่สาขานั้นให้อัตโนมัติ</p>
           </Field>
           <Field label="อีเมลรับใบกำกับภาษี *">
             <input required type="email" value={form.contact_email} onChange={e => set('contact_email', e.target.value)}

@@ -11,7 +11,9 @@ function first(arr: unknown): string {
 }
 
 export async function GET(req: Request) {
-  const tin = new URL(req.url).searchParams.get('tin')?.replace(/[^0-9]/g, '') ?? ''
+  const params = new URL(req.url).searchParams
+  const tin = params.get('tin')?.replace(/[^0-9]/g, '') ?? ''
+  const branchNumberParam = Math.max(0, parseInt(params.get('branch') ?? '0', 10) || 0)
   if (tin.length !== 13) return NextResponse.json({ error: 'เลขผู้เสียภาษีต้องมี 13 หลัก' }, { status: 400 })
 
   const soapBody = `<?xml version="1.0" encoding="utf-8"?>
@@ -22,7 +24,7 @@ export async function GET(req: Request) {
       <password>anonymous</password>
       <TIN>${tin}</TIN>
       <ProvinceCode>0</ProvinceCode>
-      <BranchNumber>0</BranchNumber>
+      <BranchNumber>${branchNumberParam}</BranchNumber>
       <AmphurCode>0</AmphurCode>
     </Service>
   </soap:Body>
@@ -42,7 +44,12 @@ export async function GET(req: Request) {
     const decoded = match[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     const result = JSON.parse(decoded)
 
-    if (!first(result.Name)) return NextResponse.json({ error: 'ไม่พบข้อมูลนิติบุคคลนี้ในระบบกรมสรรพากร' }, { status: 404 })
+    if (!first(result.Name)) {
+      const error = branchNumberParam > 0
+        ? `ไม่พบข้อมูลสาขาที่ ${branchNumberParam} กรุณากรอกที่อยู่เอง`
+        : 'ไม่พบข้อมูลนิติบุคคลนี้ในระบบกรมสรรพากร'
+      return NextResponse.json({ error }, { status: 404 })
+    }
 
     const titleName = first(result.TitleName)
     const name = first(result.Name)
@@ -66,8 +73,7 @@ export async function GET(req: Request) {
       postCode,
     ].filter(Boolean)
 
-    const branchNumber = Array.isArray(result.BranchNumber) ? Number(result.BranchNumber[0]) : 0
-    const branch = branchNumber === 0 ? 'สำนักงานใหญ่' : `สาขาที่ ${branchNumber}`
+    const branch = branchNumberParam === 0 ? 'สำนักงานใหญ่' : `สาขาที่ ${branchNumberParam}`
 
     return NextResponse.json({
       name: [titleName, name].filter(Boolean).join(' '),
