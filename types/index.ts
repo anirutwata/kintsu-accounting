@@ -190,9 +190,15 @@ export interface DailySales {
   papaya_promptpay_satang: number
   papaya_company_transfer_satang: number
   papaya_credit_card_satang: number
-  flowaccount_record_id: number | null
-  flowaccount_document_serial: string | null
-  flowaccount_synced_at: string | null
+  flowaccount_cash_record_id: number | null
+  flowaccount_cash_document_serial: string | null
+  flowaccount_cash_synced_at: string | null
+  flowaccount_transfer_record_id: number | null
+  flowaccount_transfer_document_serial: string | null
+  flowaccount_transfer_synced_at: string | null
+  flowaccount_credit_card_record_id: number | null
+  flowaccount_credit_card_document_serial: string | null
+  flowaccount_credit_card_synced_at: string | null
 }
 
 export interface VoidRefund {

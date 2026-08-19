@@ -164,6 +164,7 @@ function buildSellDocument(input: {
   contactTaxId?: string
   contactAddress?: string
   contactBranch?: string
+  contactGroup?: 'individual' | 'juristic'
   publishedOn: string
   remarks?: string
   items: SellItemInput[]
@@ -187,6 +188,7 @@ function buildSellDocument(input: {
     contactTaxId: input.contactTaxId,
     contactAddress: input.contactAddress,
     contactBranch: input.contactBranch,
+    contactGroup: input.contactGroup,
     publishedOn: input.publishedOn,
     isVatInclusive: false,
     isVat: true,
@@ -247,10 +249,33 @@ export interface CreateTaxInvoiceInput {
   contactTaxId?: string
   contactAddress?: string
   contactBranch?: string
+  contactGroup?: 'individual' | 'juristic'
   publishedOn: string // YYYY-MM-DD
   remarks?: string
   items: SellItemInput[]
   payment?: TaxInvoicePayment
+}
+
+// Shared payment-block shape used by both tax-invoices/with-payment and
+// cash-invoices/with-payment — same underlying document engine.
+function buildPaymentFields(payment: TaxInvoicePayment) {
+  if (payment.method === 'cash') {
+    return { documentPaymentStructureType: 'SimpleDocumentWithPaymentReceivingCash', paymentMethod: 1 }
+  }
+  if (payment.method === 'transfer') {
+    return {
+      documentPaymentStructureType: 'SimpleDocumentWithPaymentReceivingTransfer',
+      paymentMethod: 5,
+      bankAccountId: payment.bankAccountId,
+    }
+  }
+  return {
+    documentPaymentStructureType: 'SimpleDocumentWithPaymentReceivingOtherChannel',
+    paymentMethod: 13,
+    otherChannelId: payment.otherChannelId,
+    otherChannelPaymentChannel: payment.otherChannelType,
+    otherChannelName: payment.otherChannelName,
+  }
 }
 
 export async function createTaxInvoice(input: CreateTaxInvoiceInput) {
@@ -262,22 +287,7 @@ export async function createTaxInvoice(input: CreateTaxInvoiceInput) {
   const { payment } = input
   const rounding = payment.roundingAmount ?? 0
   const collected = round2(document.grandTotal - rounding)
-  const paymentFields =
-    payment.method === 'cash'
-      ? { documentPaymentStructureType: 'SimpleDocumentWithPaymentReceivingCash', paymentMethod: 1 }
-      : payment.method === 'transfer'
-        ? {
-            documentPaymentStructureType: 'SimpleDocumentWithPaymentReceivingTransfer',
-            paymentMethod: 5,
-            bankAccountId: payment.bankAccountId,
-          }
-        : {
-            documentPaymentStructureType: 'SimpleDocumentWithPaymentReceivingOtherChannel',
-            paymentMethod: 13,
-            otherChannelId: payment.otherChannelId,
-            otherChannelPaymentChannel: payment.otherChannelType,
-            otherChannelName: payment.otherChannelName,
-          }
+  const paymentFields = buildPaymentFields(payment)
 
   return flowAccountFetch('/tax-invoices/with-payment', {
     method: 'POST',
@@ -314,13 +324,31 @@ export interface CreateCashInvoiceInput {
   publishedOn: string // YYYY-MM-DD
   remarks?: string
   items: SellItemInput[]
+  payment?: TaxInvoicePayment
 }
 
 // Cash invoice = ใบกำกับภาษี/ใบเสร็จรับเงินรวมกัน สำหรับยอดขายที่รับเงินทันที (ไม่ต้องมีเลขผู้เสียภาษีลูกค้า)
+// Passing `payment` marks it paid via that channel on create (cash-invoices/with-payment) —
+// omitting it silently defaults to "cash" on FlowAccount's side, which is why the daily-sales
+// sync always sets this now instead of leaving it unset.
 export async function createCashInvoice(input: CreateCashInvoiceInput) {
-  return flowAccountFetch('/cash-invoices', {
+  const document = buildSellDocument(input)
+  if (!input.payment) {
+    return flowAccountFetch('/cash-invoices', { method: 'POST', body: JSON.stringify(document) })
+  }
+
+  const { payment } = input
+  const collected = round2(document.grandTotal - (payment.roundingAmount ?? 0))
+  const paymentFields = buildPaymentFields(payment)
+
+  return flowAccountFetch('/cash-invoices/with-payment', {
     method: 'POST',
-    body: JSON.stringify(buildSellDocument(input)),
+    body: JSON.stringify({
+      ...document,
+      ...paymentFields,
+      paymentDate: payment.paymentDate,
+      collected,
+    }),
   })
 }
 

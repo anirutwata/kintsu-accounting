@@ -50,6 +50,9 @@ export default function SalesPage() {
       const res = await fetch(`/api/sales/${date}/flowaccount-sync`, { method: 'POST' })
       const json = await res.json()
       if (!res.ok) { setSyncFaError(json.error || 'ส่งไม่สำเร็จ'); return }
+      if (json.partialErrors) {
+        setSyncFaError('ส่งไม่สำเร็จบางช่องทาง: ' + Object.entries(json.partialErrors).map(([k, v]) => `${k} (${v})`).join(', '))
+      }
       setExisting(json)
     } finally {
       setSyncingFa(false)
@@ -225,15 +228,21 @@ export default function SalesPage() {
 
       {existing && (
         <div className="flex justify-between items-center gap-2">
-          {existing.flowaccount_document_serial ? (
-            <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-              ✅ ส่งเข้า FlowAccount แล้ว ({existing.flowaccount_document_serial})
-            </span>
-          ) : <span />}
+          <div className="flex flex-col gap-0.5 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+            {existing.flowaccount_cash_document_serial && (
+              <span>✅ เงินสด: {existing.flowaccount_cash_document_serial}</span>
+            )}
+            {existing.flowaccount_transfer_document_serial && (
+              <span>✅ โอน/พร้อมเพย์: {existing.flowaccount_transfer_document_serial}</span>
+            )}
+            {existing.flowaccount_credit_card_document_serial && (
+              <span>✅ บัตรเครดิต: {existing.flowaccount_credit_card_document_serial}</span>
+            )}
+          </div>
           <button onClick={handleSyncFlowAccount} disabled={syncingFa}
             className="px-3 py-1.5 rounded-xl text-xs font-semibold border-2 disabled:opacity-50"
             style={{ borderColor: '#2563EB', color: '#2563EB' }}>
-            {syncingFa ? 'กำลังส่ง...' : existing.flowaccount_document_serial ? '🔁 ส่งอีกครั้ง' : '📤 ส่งเข้า FlowAccount'}
+            {syncingFa ? 'กำลังส่ง...' : existing.flowaccount_cash_document_serial || existing.flowaccount_transfer_document_serial || existing.flowaccount_credit_card_document_serial ? '🔁 ส่งอีกครั้ง' : '📤 ส่งเข้า FlowAccount'}
           </button>
         </div>
       )}
