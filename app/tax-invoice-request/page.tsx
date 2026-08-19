@@ -2,6 +2,7 @@
 import { useState } from 'react'
 
 const emptyForm = () => ({
+  contact_group: 'juristic' as 'juristic' | 'individual',
   contact_name: '',
   contact_tax_id: '',
   contact_address: '',
@@ -32,7 +33,7 @@ export default function TaxInvoiceRequestPage() {
   const [lookingUpTaxId, setLookingUpTaxId] = useState(false)
   const [taxIdLookupError, setTaxIdLookupError] = useState('')
 
-  function set<K extends keyof ReturnType<typeof emptyForm>>(key: K, value: string) {
+  function set<K extends keyof ReturnType<typeof emptyForm>>(key: K, value: ReturnType<typeof emptyForm>[K]) {
     setForm(f => ({ ...f, [key]: value }))
     setConfirmed(false)
   }
@@ -152,6 +153,22 @@ export default function TaxInvoiceRequestPage() {
             {uploadError && <p className="text-xs text-red-500">❌ {uploadError}</p>}
           </Field>
 
+          <Field label="ประเภทผู้เสียภาษี *">
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { value: 'juristic' as const, label: 'นิติบุคคล' },
+                { value: 'individual' as const, label: 'บุคคลธรรมดา' },
+              ]).map(opt => (
+                <label key={opt.value}
+                  className="flex items-center gap-2 py-2 px-3 rounded-xl text-sm border cursor-pointer"
+                  style={{ borderColor: form.contact_group === opt.value ? '#D33F22' : '#e5e7eb' }}>
+                  <input type="radio" name="contact_group" checked={form.contact_group === opt.value}
+                    onChange={() => set('contact_group', opt.value)} className="w-4 h-4 shrink-0" />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+          </Field>
           <Field label="เลขผู้เสียภาษี 13 หลัก">
             <input value={form.contact_tax_id} onChange={e => handleTaxIdChange(e.target.value)}
               className="w-full border rounded-xl px-3 py-2 text-sm" placeholder="1234567890123" inputMode="numeric" maxLength={13} />

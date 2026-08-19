@@ -5,11 +5,14 @@ import { sendTelegramPhoto, sendTelegram, escapeHtml } from '@/lib/telegram'
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PAYMENT_METHODS = ['cash', 'transfer', 'credit_card'] as const
 const PAYMENT_LABELS: Record<string, string> = { cash: 'เงินสด', transfer: 'โอนเงิน', credit_card: 'บัตรเครดิต (EDC)' }
+const CONTACT_GROUPS = ['individual', 'juristic'] as const
+const CONTACT_GROUP_LABELS: Record<string, string> = { individual: 'บุคคลธรรมดา', juristic: 'นิติบุคคล' }
 // Fixed line-item description — not customer-editable, so every invoice reads the same way.
 const FIXED_DESCRIPTION = 'ค่าอาหาร และเครื่องดื่ม'
 
 export async function POST(req: Request) {
   const body = await req.json()
+  const contactGroup = CONTACT_GROUPS.includes(body.contact_group) ? body.contact_group : null
   const contactName = String(body.contact_name || '').trim()
   const contactTaxId = String(body.contact_tax_id || '').replace(/[^0-9]/g, '')
   const contactAddress = String(body.contact_address || '').trim()
@@ -21,6 +24,7 @@ export async function POST(req: Request) {
   const paymentMethod = PAYMENT_METHODS.includes(body.payment_method) ? body.payment_method : null
   const billImageUrl = String(body.bill_image_url || '').trim()
 
+  if (!contactGroup) return NextResponse.json({ error: 'กรุณาเลือกประเภทผู้เสียภาษี' }, { status: 400 })
   if (!contactName) return NextResponse.json({ error: 'กรุณากรอกชื่อลูกค้า/บริษัท' }, { status: 400 })
   if (!contactEmail || !EMAIL_RE.test(contactEmail)) return NextResponse.json({ error: 'กรุณากรอกอีเมลให้ถูกต้อง' }, { status: 400 })
   if (contactTaxId && contactTaxId.length !== 13) return NextResponse.json({ error: 'เลขผู้เสียภาษีต้องมี 13 หลัก' }, { status: 400 })
@@ -37,6 +41,7 @@ export async function POST(req: Request) {
   const { data: request, error: insertError } = await supabase
     .from('tax_invoice_requests')
     .insert({
+      contact_group: contactGroup,
       contact_name: contactName,
       contact_tax_id: contactTaxId || null,
       contact_address: contactAddress || null,
@@ -57,7 +62,7 @@ export async function POST(req: Request) {
 
   const caption = `🧾 <b>คำขอใบกำกับภาษีใหม่ — รอตรวจสอบ</b>
 
-👤 ${escapeHtml(contactName)}${contactTaxId ? `\n🪪 ${contactTaxId}` : ''}${contactBranch ? `\n🏢 สาขา: ${escapeHtml(contactBranch)}` : ''}
+👤 ${escapeHtml(contactName)} (${CONTACT_GROUP_LABELS[contactGroup]})${contactTaxId ? `\n🪪 ${contactTaxId}` : ''}${contactBranch ? `\n🏢 สาขา: ${escapeHtml(contactBranch)}` : ''}
 📧 ${escapeHtml(contactEmail)}
 📝 ${escapeHtml(description)}
 💰 ก่อน VAT ${subtotalBaht.toLocaleString('th-TH', { minimumFractionDigits: 2 })} → รวม ${totalBaht.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท (${PAYMENT_LABELS[paymentMethod]})

@@ -79,6 +79,7 @@ export async function POST(req: Request) {
       contactTaxId: claimed.contact_tax_id || undefined,
       contactAddress: claimed.contact_address || undefined,
       contactBranch: claimed.contact_branch || undefined,
+      contactGroup: claimed.contact_group || undefined,
       publishedOn: today,
       remarks: claimed.description,
       items: [{ name: claimed.description, quantity: 1, unitName: 'รายการ', pricePerUnit: subTotal }],
