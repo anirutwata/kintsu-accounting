@@ -105,7 +105,9 @@ export interface FlowAccountContact {
 function stripCompanyWords(name: string): string {
   return name
     .replace(/\(มหาชน\)/g, '')
-    .replace(/บมจ\.?|บจก\.?|หจก\.?/g, '')
+    // บจก. before บจ. — "บจ" is a prefix of "บจก", so the shorter alternative must not
+    // be tried first or it consumes "บจ" and strands a bare "ก." from "บจก." in the text.
+    .replace(/บมจ\.?|บจก\.?|บจ\.?|หจก\.?/g, '')
     .replace(/บริษัท|ห้างหุ้นส่วนจำกัด|ห้างหุ้นส่วนสามัญ|จำกัด/g, '')
     .replace(/\s+/g, ' ')
     .trim()
