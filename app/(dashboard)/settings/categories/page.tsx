@@ -9,14 +9,16 @@ interface Category {
   sort_order: number
   is_active: boolean
   flowaccount_category_id: number | null
+  flowaccount_debit_id: number | null
   flowaccount_category_name: string | null
 }
 
 interface FlowAccountCategory {
-  categoryId: number
-  systemCode: number
+  categoryId: number | null
+  systemCode: number | null
   nameLocal: string
   nameForeign: string
+  debitCode: string
   creditId: number
   creditCategory: number
   debitId: number
@@ -59,9 +61,9 @@ function CategoriesContent() {
     setLoading(false)
   }
 
-  async function handleMapFlowAccount(catId: string, faCategoryId: string) {
+  async function handleMapFlowAccount(catId: string, faDebitId: string) {
     setMappingId(catId)
-    const fa = faCategories.find(c => c.categoryId === Number(faCategoryId))
+    const fa = faCategories.find(c => c.debitId === Number(faDebitId))
     const body = fa
       ? {
           flowaccount_category_id: fa.categoryId,
@@ -255,14 +257,14 @@ function CategoriesContent() {
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] shrink-0" style={{ color: 'var(--muted-foreground)' }}>FlowAccount:</span>
                       <select
-                        value={cat.flowaccount_category_id ?? ''}
+                        value={cat.flowaccount_debit_id ?? ''}
                         disabled={mappingId === cat.id || faCategories.length === 0}
                         onChange={e => handleMapFlowAccount(cat.id, e.target.value)}
                         className="flex-1 text-xs border rounded-lg px-2 py-1 disabled:opacity-50"
-                        style={{ borderColor: 'var(--border)', color: cat.flowaccount_category_id ? 'var(--charcoal)' : '#9CA3AF' }}>
+                        style={{ borderColor: 'var(--border)', color: cat.flowaccount_debit_id ? 'var(--charcoal)' : '#9CA3AF' }}>
                         <option value="">— ยังไม่ผูก —</option>
                         {faCategories.map(fa => (
-                          <option key={fa.categoryId} value={fa.categoryId}>{fa.nameLocal}</option>
+                          <option key={fa.debitId} value={fa.debitId}>{fa.nameLocal} ({fa.debitCode})</option>
                         ))}
                       </select>
                     </div>

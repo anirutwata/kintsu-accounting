@@ -56,23 +56,31 @@ async function flowAccountFetch(path: string, init: RequestInit = {}) {
 }
 
 export interface ExpenseCategory {
-  systemCode: number
-  categoryId: number
+  // Only populated for the curated "business category" subset — most of the accounting
+  // chart of accounts has no systemCode/categoryId and posts via creditId/debitId alone.
+  systemCode: number | null
+  categoryId: number | null
   nameLocal: string
   nameForeign: string
+  debitCode?: string
   creditId: number
   creditCategory: number
   debitId: number
   debitCategory: number
 }
 
+// Uses the accounting-view endpoint (full chart of accounts, ~138 entries) instead of
+// /expenses/categories/business (~40 curated entries) — confirmed with FlowAccount support
+// (2026-08-20) and verified live against Production that account_code/creditId/debitId
+// posting works for entries outside the curated business list.
 export async function getExpenseCategories(): Promise<ExpenseCategory[]> {
-  const data = await flowAccountFetch('/expenses/categories/business')
+  const data = await flowAccountFetch('/expenses/categories/accounting')
   return (data ?? []).map((c: any) => ({
-    systemCode: Number(c.systemCode),
-    categoryId: Number(c.categoryId),
-    nameLocal: c.nameLocal,
-    nameForeign: c.nameForeign,
+    systemCode: c.systemCode ? Number(c.systemCode) : null,
+    categoryId: c.categoryId ? Number(c.categoryId) : null,
+    nameLocal: c.nameLocal || c.debitNameLocal,
+    nameForeign: c.nameForeign || c.debitNameForeign,
+    debitCode: c.debitCode,
     creditId: Number(c.creditId),
     creditCategory: Number(c.creditCategory),
     debitId: Number(c.debitId),
@@ -97,8 +105,11 @@ export async function createExpense(input: CreateExpenseInput) {
   const items = input.items.map((item) => {
     const total = round2(item.quantity * item.pricePerUnit)
     return {
-      systemCode: item.category.systemCode,
-      categoryId: item.category.categoryId,
+      // systemCode/categoryId only exist for the curated business-category subset —
+      // omitted (not sent as 0) for a plain chart-of-account category, since creditId/
+      // debitId alone are what the document actually posts against.
+      ...(item.category.systemCode != null ? { systemCode: item.category.systemCode } : {}),
+      ...(item.category.categoryId != null ? { categoryId: item.category.categoryId } : {}),
       description: item.description,
       creditId: item.category.creditId,
       creditCategory: item.category.creditCategory,

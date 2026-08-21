@@ -22,7 +22,10 @@ export async function syncExpenseToFlowAccount(supabase: any, expenseId: string)
     .eq('category_type', 'expense')
     .maybeSingle()
 
-  if (!category || category.flowaccount_category_id == null) {
+  // flowaccount_category_id is only set for the curated "business category" subset —
+  // most chart-of-account categories post via debit_id/credit_id alone, so that's the
+  // real gate (see lib/flowaccount.ts createExpense).
+  if (!category || category.flowaccount_debit_id == null) {
     return { ok: false as const, error: `หมวดหมู่ "${expense.category}" ยังไม่ได้ผูกกับ FlowAccount — ไปตั้งค่าที่หน้าหมวดหมู่ก่อน` }
   }
 
