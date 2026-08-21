@@ -1,4 +1,4 @@
-import { createExpense, attachExpenseFiles } from '@/lib/flowaccount'
+import { createExpense, attachExpenseFiles, findContact } from '@/lib/flowaccount'
 import { sendTelegram } from '@/lib/telegram'
 
 // Shared by the manual "ส่งเข้า FlowAccount" button and the automatic sync that
@@ -30,8 +30,14 @@ export async function syncExpenseToFlowAccount(supabase: any, expenseId: string)
   }
 
   try {
+    const contactName = expense.recipient_name || expense.sender_name || 'ไม่ระบุผู้รับเงิน'
+    // Best-effort — a lookup failure shouldn't block the sync, just fall back to
+    // creating a plain ad-hoc contact by name (the pre-existing behavior).
+    const contact = await findContact(contactName).catch(() => null)
+
     const result = await createExpense({
-      contactName: expense.recipient_name || expense.sender_name || 'ไม่ระบุผู้รับเงิน',
+      contactName,
+      contact,
       publishedOn: expense.document_date || expense.date,
       remarks: expense.note ?? '',
       items: [

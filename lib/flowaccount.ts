@@ -88,8 +88,55 @@ export async function getExpenseCategories(): Promise<ExpenseCategory[]> {
   }))
 }
 
+export interface FlowAccountContact {
+  id: number
+  name: string
+  address: string
+  taxId: string
+  branch: string
+}
+
+// Strips company-type prefixes/suffixes (บมจ., บริษัท...จำกัด (มหาชน), หจก., ฯลฯ) and
+// whitespace so "บมจ. ไทยน้ำทิพย์ คอร์ปอเรชั่น" and "บริษัท ไทยน้ำทิพย์ คอร์ปอเรชั่น จำกัด
+// (มหาชน)" normalize to the same core name — slip/OCR-derived names are rarely the exact
+// registered legal name FlowAccount's contact master has on file.
+function normalizeContactName(name: string): string {
+  return name
+    .replace(/\(มหาชน\)/g, '')
+    .replace(/บมจ\.?|บจก\.?|หจก\.?/g, '')
+    .replace(/บริษัท|ห้างหุ้นส่วนจำกัด|ห้างหุ้นส่วนสามัญ|จำกัด/g, '')
+    .replace(/\s+/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+// Looks up an existing FlowAccount contact by (fuzzy) name match, so expense sync can
+// link to it via contactId instead of always creating a new blank ad-hoc contact — see
+// notes/handoff.md 2026-08-21 for why this exists (duplicate-contact bug found via a
+// live test sync). Returns null on no match — caller falls back to contactName-only.
+export async function findContact(name: string): Promise<FlowAccountContact | null> {
+  const target = normalizeContactName(name)
+  if (!target) return null
+
+  const data = await flowAccountFetch(`/contacts?searchString=${encodeURIComponent(name)}&pageSize=20`)
+  const candidates = (data?.list ?? []).filter((c: any) => normalizeContactName(c.contactName ?? '') === target)
+  if (candidates.length === 0) return null
+
+  // Prefer the candidate with the most complete address on file (a prior sync of this
+  // same vendor may have already created a blank ad-hoc duplicate — don't reuse that one).
+  const best = candidates.slice().sort((a: any, b: any) => (b.contactAddress?.length ?? 0) - (a.contactAddress?.length ?? 0))[0]
+  return {
+    id: Number(best.id),
+    name: best.contactName,
+    address: best.contactAddress ?? '',
+    taxId: best.contactTaxId ?? '',
+    branch: best.contactBranch ?? '',
+  }
+}
+
 export interface CreateExpenseInput {
   contactName: string
+  contact?: FlowAccountContact | null // from findContact() — links to the existing contact instead of creating a duplicate
   publishedOn: string // YYYY-MM-DD
   remarks?: string
   items: {
@@ -128,7 +175,10 @@ export async function createExpense(input: CreateExpenseInput) {
     body: JSON.stringify({
       recordId: 0,
       expenseStructureType: 'ExpenseSimpleDocument',
-      contactName: input.contactName,
+      contactName: input.contact?.name ?? input.contactName,
+      ...(input.contact
+        ? { contactId: input.contact.id, contactAddress: input.contact.address, contactTaxId: input.contact.taxId, contactBranch: input.contact.branch }
+        : {}),
       publishedOn: input.publishedOn,
       isVatInclusive: false,
       isVat: false,
