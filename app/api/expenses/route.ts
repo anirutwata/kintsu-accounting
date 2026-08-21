@@ -84,12 +84,15 @@ export async function POST(req: Request) {
 
   // Auto-sync to FlowAccount right away — falls back to the manual "ส่งเข้า FlowAccount"
   // button on the expense detail page if this fails (e.g. category not mapped yet).
-  // Failure alert disabled until connected to the real FlowAccount account and category
-  // mapping is complete — re-enable once that's done, it was just noisy during Sandbox setup.
   let responseData = data
   const syncResult = await syncExpenseToFlowAccount(supabase, data.id)
   if (syncResult.ok) {
     responseData = syncResult.data
+  } else {
+    sendTelegram(
+      `⚠️ บันทึกรายจ่าย "${category}" แล้ว แต่ส่งเข้า FlowAccount ไม่สำเร็จ: ${syncResult.error}\nกดปุ่ม "ส่งเข้า FlowAccount" ที่หน้ารายละเอียดเพื่อลองใหม่`,
+      'expenses',
+    )
   }
 
   // Send Telegram notification (non-blocking)
