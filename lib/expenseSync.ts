@@ -18,7 +18,7 @@ export async function syncExpenseToFlowAccount(supabase: any, expenseId: string)
 
   const { data: category } = await supabase
     .from('expense_categories')
-    .select('flowaccount_system_code, flowaccount_category_id, flowaccount_credit_id, flowaccount_credit_category, flowaccount_debit_id, flowaccount_debit_category')
+    .select('flowaccount_system_code, flowaccount_category_id, flowaccount_credit_id, flowaccount_credit_category, flowaccount_debit_id, flowaccount_debit_category, flowaccount_category_name')
     .eq('name', expense.category)
     .eq('category_type', 'expense')
     .maybeSingle()
@@ -65,8 +65,10 @@ export async function syncExpenseToFlowAccount(supabase: any, expenseId: string)
           category: {
             systemCode: category.flowaccount_system_code,
             categoryId: category.flowaccount_category_id,
-            nameLocal: '',
-            nameForeign: '',
+            // No separate English name is stored — reuse the Thai display name for both,
+            // since FlowAccount only shows a blank "หมวดหมู่" column when nameLocal is empty.
+            nameLocal: category.flowaccount_category_name ?? '',
+            nameForeign: category.flowaccount_category_name ?? '',
             creditId: category.flowaccount_credit_id,
             creditCategory: category.flowaccount_credit_category,
             debitId: category.flowaccount_debit_id,
