@@ -62,6 +62,7 @@ const emptyForm = () => ({
   category: '',
   bank_account_id: '',
   recipient_name: '',
+  recipient_address: '',
   note: '',
   slip_image_url: '',
   slip_url_preview: '',
@@ -256,6 +257,7 @@ export default function ExpensesPage() {
         sender_bank: selectedBank ? selectedBank.bank_name : null,
         sender_account: selectedBank ? selectedBank.account_number : null,
         recipient_name: form.recipient_name || null,
+        recipient_address: form.recipient_address || null,
         slip_image_url: form.slip_image_url || null,
         slip_hash: form.slip_hash || null,
         ocr_data: form.ocr_data,
@@ -299,6 +301,7 @@ export default function ExpensesPage() {
       category: exp.category,
       bank_account_id: exp.bank_account_id || '',
       recipient_name: exp.recipient_name || '',
+      recipient_address: exp.recipient_address || '',
       note: exp.note || '',
       slip_image_url: exp.slip_image_url || '',
       slip_url_preview: exp.slip_image_url || '',
@@ -494,6 +497,7 @@ export default function ExpensesPage() {
                 <DetailRow label="บัญชีโอน" value={`${selectedExpense.sender_bank} ${selectedExpense.sender_account || ''} ${selectedExpense.sender_name || ''}`} />
               )}
               {selectedExpense.recipient_name && <DetailRow label="ผู้รับเงิน" value={selectedExpense.recipient_name} />}
+              {selectedExpense.recipient_address && <DetailRow label="ที่อยู่ผู้รับเงิน" value={selectedExpense.recipient_address} />}
               {selectedExpense.note && <DetailRow label="หมายเหตุ" value={selectedExpense.note} />}
               {selectedExpense.created_by_name && <DetailRow label="บันทึกโดย" value={selectedExpense.created_by_name} />}
               {selectedExpense.flowaccount_document_serial && (
@@ -714,6 +718,15 @@ export default function ExpensesPage() {
                   onChange={e => setForm(f => ({ ...f, recipient_name: e.target.value }))}
                   className="w-full border rounded-xl px-3 py-2.5" style={{ borderColor: 'var(--border)' }}
                   placeholder="เช่น ร้านค้า ชื่อบัญชีปลายทาง" />
+              </div>
+
+              {/* ที่อยู่ผู้รับเงิน — optional, only needed for a new vendor with no bill photo attached */}
+              <div>
+                <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>ที่อยู่ผู้รับเงิน (ถ้ามี)</label>
+                <input type="text" value={form.recipient_address}
+                  onChange={e => setForm(f => ({ ...f, recipient_address: e.target.value }))}
+                  className="w-full border rounded-xl px-3 py-2.5" style={{ borderColor: 'var(--border)' }}
+                  placeholder="กรอกเฉพาะกรณีผู้จำหน่ายรายใหม่และไม่มีรูปบิลแนบ" />
               </div>
 
               {/* หมายเหตุ */}

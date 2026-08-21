@@ -41,7 +41,7 @@ export async function POST(req: Request) {
   const body = await req.json()
   const { category, amount_satang, payment_method, bank_account_id,
           transfer_time, sender_name, sender_bank, sender_account,
-          recipient_name, slip_image_url, slip_hash, ocr_data,
+          recipient_name, recipient_address, slip_image_url, slip_hash, ocr_data,
           receipt_image_urls, note, date, document_date } = body
 
   if (!category || !amount_satang) {
@@ -68,6 +68,7 @@ export async function POST(req: Request) {
       sender_bank: sender_bank || null,
       sender_account: sender_account || null,
       recipient_name: recipient_name || null,
+      recipient_address: recipient_address || null,
       is_paid: payment_method !== 'เครดิต',
       slip_image_url: slip_image_url || null,
       slip_hash: slip_hash || null,

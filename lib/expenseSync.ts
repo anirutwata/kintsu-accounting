@@ -47,6 +47,13 @@ export async function syncExpenseToFlowAccount(supabase: any, expenseId: string)
       }
     }
 
+    // A manually-typed address on the form always wins over findContact/OCR — it's the
+    // one signal a human directly confirmed, so it can correct a stale contact-master
+    // address or fill in what OCR couldn't read.
+    if (expense.recipient_address) {
+      contact = { ...(contact ?? { name: contactName, taxId: '', branch: '' }), address: expense.recipient_address }
+    }
+
     const result = await createExpense({
       contactName,
       contact,

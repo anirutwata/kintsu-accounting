@@ -82,6 +82,7 @@ export interface Expense {
   sender_bank: string | null
   sender_account: string | null
   recipient_name: string | null
+  recipient_address: string | null
   is_paid: boolean
   slip_image_url: string | null
   ocr_data: OcrData | null
