@@ -168,11 +168,6 @@ export async function createExpense(input: CreateExpenseInput) {
       // debitId alone are what the document actually posts against.
       ...(item.category.systemCode != null ? { systemCode: item.category.systemCode } : {}),
       ...(item.category.categoryId != null ? { categoryId: item.category.categoryId } : {}),
-      // Separate from debitId/creditId — this is what FlowAccount's own UI reads for the
-      // line item's "หมวดหมู่" column (confirmed via a live round-trip: the field the API
-      // echoes back and persists is nameLocal/nameForeign, not a categoryName* variant).
-      nameLocal: item.category.nameLocal,
-      nameForeign: item.category.nameForeign,
       description: item.description,
       creditId: item.category.creditId,
       creditCategory: item.category.creditCategory,
