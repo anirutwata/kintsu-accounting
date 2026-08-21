@@ -1,4 +1,5 @@
-import { createExpense, attachExpenseFiles, findContact } from '@/lib/flowaccount'
+import { createExpense, attachExpenseFiles, findContact, type FlowAccountContact } from '@/lib/flowaccount'
+import { extractVendorInfoFromReceipt } from '@/lib/vendorOcr'
 import { sendTelegram } from '@/lib/telegram'
 
 // Shared by the manual "ส่งเข้า FlowAccount" button and the automatic sync that
@@ -33,7 +34,18 @@ export async function syncExpenseToFlowAccount(supabase: any, expenseId: string)
     const contactName = expense.recipient_name || expense.sender_name || 'ไม่ระบุผู้รับเงิน'
     // Best-effort — a lookup failure shouldn't block the sync, just fall back to
     // creating a plain ad-hoc contact by name (the pre-existing behavior).
-    const contact = await findContact(contactName).catch(() => null)
+    let contact: FlowAccountContact | null = await findContact(contactName).catch(() => null)
+
+    // No existing FlowAccount contact for this vendor — try reading its name/address off
+    // the attached bill/receipt photo (not the payment slip) so a brand-new vendor still
+    // gets a real address instead of FlowAccount's default blank ad-hoc contact.
+    const receiptUrl = expense.receipt_image_urls?.[0]
+    if (!contact && receiptUrl) {
+      const extracted = await extractVendorInfoFromReceipt(receiptUrl).catch(() => null)
+      if (extracted?.address) {
+        contact = { name: extracted.name || contactName, address: extracted.address, taxId: extracted.taxId, branch: extracted.branch }
+      }
+    }
 
     const result = await createExpense({
       contactName,

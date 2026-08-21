@@ -89,7 +89,7 @@ export async function getExpenseCategories(): Promise<ExpenseCategory[]> {
 }
 
 export interface FlowAccountContact {
-  id: number
+  id?: number // omitted when this came from OCR on a new vendor's bill, not an existing FlowAccount contact
   name: string
   address: string
   taxId: string
@@ -186,7 +186,12 @@ export async function createExpense(input: CreateExpenseInput) {
       expenseStructureType: 'ExpenseSimpleDocument',
       contactName: input.contact?.name ?? input.contactName,
       ...(input.contact
-        ? { contactId: input.contact.id, contactAddress: input.contact.address, contactTaxId: input.contact.taxId, contactBranch: input.contact.branch }
+        ? {
+            ...(input.contact.id != null ? { contactId: input.contact.id } : {}),
+            contactAddress: input.contact.address,
+            contactTaxId: input.contact.taxId,
+            contactBranch: input.contact.branch,
+          }
         : {}),
       publishedOn: input.publishedOn,
       isVatInclusive: false,
