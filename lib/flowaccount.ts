@@ -96,18 +96,23 @@ export interface FlowAccountContact {
   branch: string
 }
 
-// Strips company-type prefixes/suffixes (บมจ., บริษัท...จำกัด (มหาชน), หจก., ฯลฯ) and
-// whitespace so "บมจ. ไทยน้ำทิพย์ คอร์ปอเรชั่น" and "บริษัท ไทยน้ำทิพย์ คอร์ปอเรชั่น จำกัด
-// (มหาชน)" normalize to the same core name — slip/OCR-derived names are rarely the exact
-// registered legal name FlowAccount's contact master has on file.
-function normalizeContactName(name: string): string {
+// Strips company-type prefixes/suffixes (บมจ., บริษัท...จำกัด (มหาชน), หจก., ฯลฯ) so
+// "บมจ. ไทยน้ำทิพย์ คอร์ปอเรชั่น" and "บริษัท ไทยน้ำทิพย์ คอร์ปอเรชั่น จำกัด (มหาชน)" reduce
+// to the same core — slip/OCR-derived names are rarely the exact registered legal name
+// FlowAccount's contact master has on file. Keeps internal spacing (unlike the collapsed
+// form used for equality checks below) so the result is still usable as a substring
+// search term against FlowAccount's searchString param, which does a literal contains match.
+function stripCompanyWords(name: string): string {
   return name
     .replace(/\(มหาชน\)/g, '')
     .replace(/บมจ\.?|บจก\.?|หจก\.?/g, '')
     .replace(/บริษัท|ห้างหุ้นส่วนจำกัด|ห้างหุ้นส่วนสามัญ|จำกัด/g, '')
-    .replace(/\s+/g, '')
+    .replace(/\s+/g, ' ')
     .trim()
-    .toLowerCase()
+}
+
+function normalizeContactName(name: string): string {
+  return stripCompanyWords(name).replace(/\s+/g, '').toLowerCase()
 }
 
 // Looks up an existing FlowAccount contact by (fuzzy) name match, so expense sync can
@@ -118,7 +123,11 @@ export async function findContact(name: string): Promise<FlowAccountContact | nu
   const target = normalizeContactName(name)
   if (!target) return null
 
-  const data = await flowAccountFetch(`/contacts?searchString=${encodeURIComponent(name)}&pageSize=20`)
+  // Search with the company-word-stripped (but still spaced) core name — FlowAccount's
+  // searchString does a literal substring match, so the raw name (e.g. still carrying a
+  // "บมจ." prefix the real contact record doesn't have) can miss an exact-core match.
+  const searchTerm = stripCompanyWords(name) || name
+  const data = await flowAccountFetch(`/contacts?searchString=${encodeURIComponent(searchTerm)}&pageSize=20`)
   const candidates = (data?.list ?? []).filter((c: any) => normalizeContactName(c.contactName ?? '') === target)
   if (candidates.length === 0) return null
 
