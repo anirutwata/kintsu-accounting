@@ -11,21 +11,37 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const updaterName = cookieStore.get('kintsu_acc_name')?.value || null
 
   const body = await req.json()
-  const { amount_satang, vat_satang, ...rest } = body
+  const { amount_satang, vat_satang, items, ...rest } = body as {
+    amount_satang?: number
+    vat_satang?: number
+    items?: { category: string; description: string; quantity: number; unit: string; price_per_unit_satang: number }[]
+    [k: string]: any
+  }
+
+  // Same derivation as the POST route: when line items are given, they're the source
+  // of truth for the amount and (display-only) category.
+  const hasItems = Array.isArray(items) && items.length > 0
+  const computedAmountSatang = hasItems
+    ? items!.reduce((sum, i) => sum + Math.round(i.quantity * i.price_per_unit_satang), 0)
+    : amount_satang
+  const distinctCategories = hasItems ? [...new Set(items!.map((i) => i.category))] : []
 
   const updates: Record<string, unknown> = {
     ...rest,
     updated_at: new Date().toISOString(),
     updated_by_name: updaterName,
   }
+  if (hasItems) {
+    updates.category = distinctCategories.length === 1 ? distinctCategories[0] : `หลายหมวดหมู่ (${distinctCategories.length})`
+  }
 
-  if (amount_satang !== undefined) {
+  if (computedAmountSatang !== undefined) {
     // amount_satang is the total actually paid (matches the receipt's grand total);
     // vat_satang is how much of that total is VAT, not an add-on — total_satang
     // never changes based on VAT, only how it's later reported to FlowAccount.
-    updates.amount_satang = amount_satang
+    updates.amount_satang = computedAmountSatang
     updates.vat_satang = vat_satang || 0
-    updates.total_satang = amount_satang
+    updates.total_satang = computedAmountSatang
   }
 
   const { data, error } = await supabase
@@ -37,6 +53,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // items === undefined means the client didn't touch line items at all (a status-only
+  // edit, etc.) — leave existing rows alone. Any array (including []) means the client
+  // owns the full itemized set now, so replace what's stored.
+  if (items !== undefined) {
+    const { error: deleteItemsError } = await supabase.from('expense_items').delete().eq('expense_id', id)
+    if (deleteItemsError) return NextResponse.json({ error: deleteItemsError.message }, { status: 500 })
+    if (hasItems) {
+      const { error: itemsError } = await supabase.from('expense_items').insert(
+        items!.map((i, idx) => ({
+          expense_id: id,
+          category: i.category,
+          description: i.description,
+          quantity: i.quantity,
+          unit: i.unit || 'รายการ',
+          price_per_unit_satang: i.price_per_unit_satang,
+          total_satang: Math.round(i.quantity * i.price_per_unit_satang),
+          sort_order: idx,
+        })),
+      )
+      if (itemsError) return NextResponse.json({ error: itemsError.message }, { status: 500 })
+    }
+  }
 
   // Propagate the edit to FlowAccount too, if this expense was already synced —
   // otherwise the two would silently drift apart. A failure here doesn't fail the

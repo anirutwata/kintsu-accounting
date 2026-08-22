@@ -42,9 +42,23 @@ export async function POST(req: Request) {
   const { category, amount_satang, vat_satang, payment_method, bank_account_id,
           transfer_time, sender_name, sender_bank, sender_account,
           recipient_name, recipient_address, slip_image_url, slip_hash, ocr_data,
-          receipt_image_urls, note, date, document_date } = body
+          receipt_image_urls, note, date, document_date,
+          items } = body as { items?: { category: string; description: string; quantity: number; unit: string; price_per_unit_satang: number }[]; [k: string]: any }
 
-  if (!category || !amount_satang) {
+  // When line items are given, they're the source of truth for the amount and
+  // (display-only) category — one bill can span multiple categories, but
+  // expenses.category/amount_satang still need a single representative value for
+  // places that haven't been updated to read per-item data (list view, exports).
+  const hasItems = Array.isArray(items) && items.length > 0
+  const computedAmountSatang = hasItems
+    ? items!.reduce((sum, i) => sum + Math.round(i.quantity * i.price_per_unit_satang), 0)
+    : amount_satang
+  const distinctCategories = hasItems ? [...new Set(items!.map((i) => i.category))] : []
+  const computedCategory = hasItems
+    ? (distinctCategories.length === 1 ? distinctCategories[0] : `หลายหมวดหมู่ (${distinctCategories.length})`)
+    : category
+
+  if (!computedCategory || !computedAmountSatang) {
     return NextResponse.json({ error: 'กรุณากรอกหมวดหมู่และจำนวนเงิน' }, { status: 400 })
   }
 
@@ -57,10 +71,10 @@ export async function POST(req: Request) {
     .insert({
       document_date: invoiceDate,
       date: paymentDate,
-      category,
-      amount_satang,
+      category: computedCategory,
+      amount_satang: computedAmountSatang,
       vat_satang: vat_satang || 0,
-      total_satang: amount_satang,
+      total_satang: computedAmountSatang,
       payment_method: payment_method || 'เงินสด',
       bank_account_id: bank_account_id || null,
       transfer_time: transfer_time || null,
@@ -83,6 +97,22 @@ export async function POST(req: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  if (hasItems) {
+    const { error: itemsError } = await supabase.from('expense_items').insert(
+      items!.map((i, idx) => ({
+        expense_id: data.id,
+        category: i.category,
+        description: i.description,
+        quantity: i.quantity,
+        unit: i.unit || 'รายการ',
+        price_per_unit_satang: i.price_per_unit_satang,
+        total_satang: Math.round(i.quantity * i.price_per_unit_satang),
+        sort_order: idx,
+      })),
+    )
+    if (itemsError) return NextResponse.json({ error: itemsError.message }, { status: 500 })
+  }
+
   // Auto-sync to FlowAccount right away — falls back to the manual "ส่งเข้า FlowAccount"
   // button on the expense detail page if this fails (e.g. category not mapped yet).
   let responseData = data
@@ -91,16 +121,16 @@ export async function POST(req: Request) {
     responseData = syncResult.data
   } else {
     sendTelegram(
-      `⚠️ บันทึกรายจ่าย "${category}" แล้ว แต่ส่งเข้า FlowAccount ไม่สำเร็จ: ${syncResult.error}\nกดปุ่ม "ส่งเข้า FlowAccount" ที่หน้ารายละเอียดเพื่อลองใหม่`,
+      `⚠️ บันทึกรายจ่าย "${computedCategory}" แล้ว แต่ส่งเข้า FlowAccount ไม่สำเร็จ: ${syncResult.error}\nกดปุ่ม "ส่งเข้า FlowAccount" ที่หน้ารายละเอียดเพื่อลองใหม่`,
       'expenses',
     )
   }
 
   // Send Telegram notification (non-blocking)
   sendTelegram(buildExpenseMessage({
-    category,
+    category: computedCategory,
     note: body.note || '',
-    totalSatang: amount_satang,
+    totalSatang: computedAmountSatang,
     paymentMethod: body.payment_method || 'เงินสด',
     createdByName: userName,
   }), 'expenses')

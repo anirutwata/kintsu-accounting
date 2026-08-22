@@ -98,6 +98,22 @@ export interface Expense {
   flowaccount_record_id: number | null
   flowaccount_document_serial: string | null
   flowaccount_synced_at: string | null
+  items?: ExpenseItem[]
+}
+
+// Optional per-expense line items — when present, these (not expenses.category/
+// amount_satang) are the source of truth for P&L cost breakdown and what gets synced
+// to FlowAccount, letting one bill span multiple categories.
+export interface ExpenseItem {
+  id: string
+  expense_id: string
+  category: ExpenseCategory
+  description: string
+  quantity: number
+  unit: string | null
+  price_per_unit_satang: number
+  total_satang: number
+  sort_order: number
 }
 
 export interface OcrData {

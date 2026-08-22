@@ -54,6 +54,16 @@ function formatDate(dateStr: string) {
   return d.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit' })
 }
 
+interface ItemRow {
+  category: string
+  description: string
+  quantity: string
+  unit: string
+  price_per_unit: string
+}
+
+const emptyItemRow = (): ItemRow => ({ category: '', description: '', quantity: '1', unit: 'รายการ', price_per_unit: '' })
+
 const emptyForm = () => ({
   document_date: getTodayBKK(),  // วันที่เอกสาร/ใบแจ้งหนี้ — ใช้คำนวณ P&L
   date: getTodayBKK(),           // วันที่ชำระเงินจริง — ใช้กระทบยอดธนาคาร
@@ -62,6 +72,8 @@ const emptyForm = () => ({
   has_vat: false,
   vat: '',
   category: '',
+  use_items: false,
+  items: [] as ItemRow[],
   bank_account_id: '',
   recipient_name: '',
   recipient_address: '',
@@ -73,6 +85,12 @@ const emptyForm = () => ({
   receipt_image_urls: [] as string[],
   receipt_previews: [] as string[],
 })
+
+// Total across item rows (baht) — used for the read-only "ยอดรวม" display and as the
+// base for VAT auto-calc when itemized, same role form.amount plays in simple mode.
+function itemsTotal(items: ItemRow[]): number {
+  return items.reduce((sum, i) => sum + (parseFloat(i.quantity) || 0) * (parseFloat(i.price_per_unit) || 0), 0)
+}
 
 interface Category { id: string; name: string; sort_order: number; category_type: string }
 
@@ -90,6 +108,7 @@ export default function ExpensesPage() {
   const [ocring, setOcring] = useState(false)
   const [uploadingReceipt, setUploadingReceipt] = useState(false)
   const [vatOcring, setVatOcring] = useState(false)
+  const [itemsOcring, setItemsOcring] = useState(false)
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [form, setForm] = useState(emptyForm())
@@ -257,14 +276,45 @@ export default function ExpensesPage() {
       } catch { /* ignore — staff can still tick VAT manually */ }
       setVatOcring(false)
     }
+
+    // Same first-photo-only, don't-overwrite-manual-entry guard as the VAT detection
+    // above, but only fires when staff has already switched to itemized mode — there's
+    // no point extracting line items into a form that's not showing them.
+    if (form.use_items && form.items.length === 0 && newUrls[0]) {
+      setItemsOcring(true)
+      try {
+        const res = await fetch('/api/ocr/bill-items', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: newUrls[0] }),
+        })
+        const data = await res.json()
+        const extracted = Array.isArray(data.items) ? data.items : []
+        if (extracted.length > 0) {
+          setForm(f => (f.items.length > 0 ? f : {
+            ...f,
+            items: extracted.map((i: any) => ({
+              category: i.suggestedCategory || '',
+              description: i.description,
+              quantity: String(i.quantity),
+              unit: i.unit,
+              price_per_unit: String(i.pricePerUnit),
+            })),
+          }))
+        }
+      } catch { /* ignore — staff can still add rows manually */ }
+      setItemsOcring(false)
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.category) return
+    if (form.use_items ? form.items.length === 0 || form.items.some(i => !i.category) : !form.category) return
     setLoading(true)
     try {
-      const amountSatang = toSatang(parseFloat(form.amount.replace(/,/g, '')) || 0)
+      const amountSatang = form.use_items
+        ? toSatang(itemsTotal(form.items))
+        : toSatang(parseFloat(form.amount.replace(/,/g, '')) || 0)
       const vatSatang = form.has_vat ? toSatang(parseFloat(form.vat.replace(/,/g, '')) || 0) : 0
       const selectedBank = bankAccounts.find(b => b.id === form.bank_account_id)
       const isBank = form.bank_account_id && !form.bank_account_id.startsWith('__')
@@ -273,7 +323,17 @@ export default function ExpensesPage() {
       const body = {
         document_date: form.document_date,
         date: form.date,
-        category: form.category,
+        ...(form.use_items
+          ? {
+              items: form.items.map(i => ({
+                category: i.category,
+                description: i.description || i.category,
+                quantity: parseFloat(i.quantity) || 1,
+                unit: i.unit || 'รายการ',
+                price_per_unit_satang: toSatang(parseFloat(i.price_per_unit) || 0),
+              })),
+            }
+          : { category: form.category, items: editingId ? [] : undefined }),
         amount_satang: amountSatang,
         vat_satang: vatSatang,
         payment_method: paymentMethod,
@@ -317,7 +377,7 @@ export default function ExpensesPage() {
     loadExpenses()
   }
 
-  function openEdit(exp: Expense) {
+  async function openEdit(exp: Expense) {
     setEditingId(exp.id)
     setForm({
       document_date: exp.document_date || exp.date,
@@ -327,6 +387,8 @@ export default function ExpensesPage() {
       has_vat: !!exp.vat_satang,
       vat: exp.vat_satang ? String(exp.vat_satang / 100) : '',
       category: exp.category,
+      use_items: false,
+      items: [],
       bank_account_id: exp.bank_account_id || '',
       recipient_name: exp.recipient_name || '',
       recipient_address: exp.recipient_address || '',
@@ -340,6 +402,26 @@ export default function ExpensesPage() {
     })
     setSelectedExpense(null)
     setShowForm(true)
+
+    // Line items load separately (not included in the list query) — if this expense
+    // has any, switch the form into itemized mode and populate rows.
+    try {
+      const res = await fetch(`/api/expenses/${exp.id}/items`)
+      const rows = await res.json()
+      if (Array.isArray(rows) && rows.length > 0) {
+        setForm(f => ({
+          ...f,
+          use_items: true,
+          items: rows.map((r: any) => ({
+            category: r.category,
+            description: r.description,
+            quantity: String(r.quantity),
+            unit: r.unit || 'รายการ',
+            price_per_unit: String(r.price_per_unit_satang / 100),
+          })),
+        }))
+      }
+    } catch { /* fall back to simple mode — staff can still edit the plain amount/category */ }
   }
 
   async function handleAddBank(e: React.FormEvent) {
@@ -662,24 +744,120 @@ export default function ExpensesPage() {
                 </div>
               </div>
 
-              {/* Amount */}
+              {/* Itemize toggle — off by default (single amount+category, the common
+                  case); on splits one bill across multiple categories, each accounted
+                  for separately in P&L and synced to FlowAccount as its own line. */}
               <div>
-                <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>ยอดเงิน (บาท) *</label>
-                <input type="text" inputMode="decimal" required
-                  value={form.amount}
-                  onChange={e => {
-                    const raw = e.target.value.replace(/,/g, '').replace(/[^\d.]/g, '')
-                    if (/^\d*\.?\d{0,2}$/.test(raw)) setForm(f => ({ ...f, amount: raw }))
-                  }}
-                  onBlur={() => {
-                    const num = parseFloat(form.amount.replace(/,/g, ''))
-                    if (!isNaN(num) && num > 0)
-                      setForm(f => ({ ...f, amount: num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }))
-                  }}
-                  onFocus={() => setForm(f => ({ ...f, amount: f.amount.replace(/,/g, '') }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-right text-base"
-                  style={{ borderColor: 'var(--border)' }} placeholder="0.00" />
+                <label className="flex items-center gap-2 text-sm font-medium" style={{ color: 'var(--muted-foreground)' }}>
+                  <input type="checkbox" checked={form.use_items}
+                    onChange={e => setForm(f => ({ ...f, use_items: e.target.checked, items: e.target.checked && f.items.length === 0 ? [emptyItemRow()] : f.items }))} />
+                  แยกรายการสินค้า (บิลเดียวหลายหมวดหมู่)
+                </label>
               </div>
+
+              {!form.use_items ? (
+                <>
+                  {/* Amount */}
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>ยอดเงิน (บาท) *</label>
+                    <input type="text" inputMode="decimal" required
+                      value={form.amount}
+                      onChange={e => {
+                        const raw = e.target.value.replace(/,/g, '').replace(/[^\d.]/g, '')
+                        if (/^\d*\.?\d{0,2}$/.test(raw)) setForm(f => ({ ...f, amount: raw }))
+                      }}
+                      onBlur={() => {
+                        const num = parseFloat(form.amount.replace(/,/g, ''))
+                        if (!isNaN(num) && num > 0)
+                          setForm(f => ({ ...f, amount: num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }))
+                      }}
+                      onFocus={() => setForm(f => ({ ...f, amount: f.amount.replace(/,/g, '') }))}
+                      className="w-full border rounded-xl px-3 py-2.5 text-right text-base"
+                      style={{ borderColor: 'var(--border)' }} placeholder="0.00" />
+                  </div>
+
+                  {/* Category */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-sm font-medium" style={{ color: 'var(--muted-foreground)' }}>หมวดหมู่ *</label>
+                      <button type="button" onClick={() => setShowManageCat(true)}
+                        className="text-xs font-medium" style={{ color: 'var(--flame-red)' }}>
+                        ⚙️ จัดการหมวดหมู่
+                      </button>
+                    </div>
+                    <select required value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                      className="w-full border rounded-xl px-3 py-2.5" style={{ borderColor: 'var(--border)' }}>
+                      <option value="">-- เลือกหมวดหมู่ --</option>
+                      {(['asset', 'expense'] as const).map(type => {
+                        const group = categories.filter(c => c.category_type === type)
+                        if (group.length === 0) return null
+                        return (
+                          <optgroup key={type} label={type === 'asset' ? '🏗️ สินทรัพย์' : '💸 ค่าใช้จ่าย'}>
+                            {group.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                          </optgroup>
+                        )
+                      })}
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-sm font-medium" style={{ color: 'var(--muted-foreground)' }}>รายการสินค้า *</label>
+                    {itemsOcring && (
+                      <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>🔍 กำลังอ่านรายการจากบิล...</span>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    {form.items.map((item, idx) => (
+                      <div key={idx} className="border rounded-xl p-2.5 space-y-1.5" style={{ borderColor: 'var(--border)' }}>
+                        <div className="flex gap-1.5">
+                          <input required placeholder="ชื่อสินค้า" value={item.description}
+                            onChange={e => setForm(f => ({ ...f, items: f.items.map((it, i) => i === idx ? { ...it, description: e.target.value } : it) }))}
+                            className="flex-1 border rounded-lg px-2 py-1.5 text-sm" style={{ borderColor: 'var(--border)' }} />
+                          <button type="button" onClick={() => setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))}
+                            className="text-xs px-2 rounded-lg text-red-400 shrink-0">ลบ</button>
+                        </div>
+                        <select required value={item.category}
+                          onChange={e => setForm(f => ({ ...f, items: f.items.map((it, i) => i === idx ? { ...it, category: e.target.value } : it) }))}
+                          className="w-full border rounded-lg px-2 py-1.5 text-sm" style={{ borderColor: 'var(--border)' }}>
+                          <option value="">-- หมวดหมู่ --</option>
+                          {(['asset', 'expense'] as const).map(type => {
+                            const group = categories.filter(c => c.category_type === type)
+                            if (group.length === 0) return null
+                            return (
+                              <optgroup key={type} label={type === 'asset' ? '🏗️ สินทรัพย์' : '💸 ค่าใช้จ่าย'}>
+                                {group.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                              </optgroup>
+                            )
+                          })}
+                        </select>
+                        <div className="flex gap-1.5">
+                          <input required type="text" inputMode="decimal" placeholder="จำนวน" value={item.quantity}
+                            onChange={e => setForm(f => ({ ...f, items: f.items.map((it, i) => i === idx ? { ...it, quantity: e.target.value } : it) }))}
+                            className="w-16 border rounded-lg px-2 py-1.5 text-sm text-right" style={{ borderColor: 'var(--border)' }} />
+                          <input placeholder="หน่วย" value={item.unit}
+                            onChange={e => setForm(f => ({ ...f, items: f.items.map((it, i) => i === idx ? { ...it, unit: e.target.value } : it) }))}
+                            className="w-20 border rounded-lg px-2 py-1.5 text-sm" style={{ borderColor: 'var(--border)' }} />
+                          <input required type="text" inputMode="decimal" placeholder="ราคา/หน่วย" value={item.price_per_unit}
+                            onChange={e => setForm(f => ({ ...f, items: f.items.map((it, i) => i === idx ? { ...it, price_per_unit: e.target.value } : it) }))}
+                            className="flex-1 border rounded-lg px-2 py-1.5 text-sm text-right" style={{ borderColor: 'var(--border)' }} />
+                        </div>
+                        <p className="text-right text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                          รวม {((parseFloat(item.quantity) || 0) * (parseFloat(item.price_per_unit) || 0)).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" onClick={() => setForm(f => ({ ...f, items: [...f.items, emptyItemRow()] }))}
+                    className="text-xs font-medium mt-1.5" style={{ color: 'var(--flame-red)' }}>
+                    + เพิ่มรายการ
+                  </button>
+                  <p className="text-right text-sm font-semibold mt-1.5" style={{ color: 'var(--charcoal)' }}>
+                    ยอดรวมทั้งหมด {itemsTotal(form.items).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท
+                  </p>
+                </div>
+              )}
 
               {/* VAT — how much of the amount above is VAT, not an add-on (matches how
                   a retail receipt already shows one VAT-inclusive grand total) */}
@@ -690,7 +868,7 @@ export default function ExpensesPage() {
                       const checked = e.target.checked
                       setForm(f => {
                         if (!checked) return { ...f, has_vat: false, vat: '' }
-                        const amt = parseFloat(f.amount.replace(/,/g, '')) || 0
+                        const amt = f.use_items ? itemsTotal(f.items) : (parseFloat(f.amount.replace(/,/g, '')) || 0)
                         const autoVat = amt > 0 ? (amt - amt / 1.07).toFixed(2) : ''
                         return { ...f, has_vat: true, vat: f.vat || autoVat }
                       })
@@ -710,30 +888,6 @@ export default function ExpensesPage() {
                     className="w-full border rounded-xl px-3 py-2.5 text-right text-base"
                     style={{ borderColor: 'var(--border)' }} placeholder="VAT (บาท) — คำนวณ 7% ให้อัตโนมัติ แก้ไขได้" />
                 )}
-              </div>
-
-              {/* Category */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-sm font-medium" style={{ color: 'var(--muted-foreground)' }}>หมวดหมู่ *</label>
-                  <button type="button" onClick={() => setShowManageCat(true)}
-                    className="text-xs font-medium" style={{ color: 'var(--flame-red)' }}>
-                    ⚙️ จัดการหมวดหมู่
-                  </button>
-                </div>
-                <select required value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2.5" style={{ borderColor: 'var(--border)' }}>
-                  <option value="">-- เลือกหมวดหมู่ --</option>
-                  {(['asset', 'expense'] as const).map(type => {
-                    const group = categories.filter(c => c.category_type === type)
-                    if (group.length === 0) return null
-                    return (
-                      <optgroup key={type} label={type === 'asset' ? '🏗️ สินทรัพย์' : '💸 ค่าใช้จ่าย'}>
-                        {group.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                      </optgroup>
-                    )
-                  })}
-                </select>
               </div>
 
               {/* ชำระด้วย */}

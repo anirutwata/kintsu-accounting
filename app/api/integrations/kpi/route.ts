@@ -28,24 +28,58 @@ export async function GET(req: Request) {
   // Fetch expenses for month — filter by document_date (invoice date, not payment date)
   const { data: expenses } = await supabase
     .from('expenses')
-    .select('category, total_satang, vat_satang')
+    .select('id, category, total_satang, vat_satang')
     .gte('document_date', `${month}-01`)
     .lt('document_date', `${nextMonth}-01`)
     .eq('is_deleted', false)
+
+  // Line items (when an expense has them) are the source of truth for cost-bucket
+  // classification, since one bill can span several categories — an expense with no
+  // items (saved before line items existed, or a simple one-line entry) falls back to
+  // its own category/total_satang below.
+  const expenseIds = (expenses || []).map((e) => e.id)
+  const { data: itemRows } = expenseIds.length
+    ? await supabase.from('expense_items').select('expense_id, category, total_satang').in('expense_id', expenseIds)
+    : { data: [] as { expense_id: string; category: string; total_satang: number }[] }
+  const itemsByExpenseId = new Map<string, { category: string; total_satang: number }[]>()
+  for (const row of itemRows || []) {
+    const list = itemsByExpenseId.get(row.expense_id) ?? []
+    list.push(row)
+    itemsByExpenseId.set(row.expense_id, list)
+  }
 
   const FOOD_COST_CATS = ['วัตถุดิบทางตรง-เนื้อวัว', 'วัตถุดิบทางตรง-เนื้อหมู', 'วัตถุดิบทางตรง-อื่นๆ']
   const LABOR_COST_CATS = ['เงินเดือนพนักงานประจำและสวัสดิการ', 'เงินเดือน- part time']
   const ASSET_CATS = ['ส่วนต่อเติมอาคาร', 'ระบบ', 'อุปกรณ์ครัว', 'อุปกรณ์ทั่วไปในร้านอาหาร', 'สินทรัพย์อื่นๆ']
 
-  const manualFoodCost = (expenses || [])
-    .filter(e => FOOD_COST_CATS.includes(e.category))
-    .reduce((s, e) => s + e.total_satang, 0)
-  const manualLaborCost = (expenses || [])
-    .filter(e => LABOR_COST_CATS.includes(e.category))
-    .reduce((s, e) => s + e.total_satang, 0)
-  const otherExpenses = (expenses || [])
-    .filter(e => ![...FOOD_COST_CATS, ...LABOR_COST_CATS, ...ASSET_CATS].includes(e.category))
-    .reduce((s, e) => s + e.total_satang, 0)
+  function costFor(catList: string[]) {
+    let sum = 0
+    for (const e of expenses || []) {
+      const items = itemsByExpenseId.get(e.id)
+      if (items) {
+        sum += items.filter((i) => catList.includes(i.category)).reduce((s, i) => s + i.total_satang, 0)
+      } else if (catList.includes(e.category)) {
+        sum += e.total_satang
+      }
+    }
+    return sum
+  }
+
+  const manualFoodCost = costFor(FOOD_COST_CATS)
+  const manualLaborCost = costFor(LABOR_COST_CATS)
+  const otherExpenses = (() => {
+    const excluded = [...FOOD_COST_CATS, ...LABOR_COST_CATS, ...ASSET_CATS]
+    let sum = 0
+    for (const e of expenses || []) {
+      const items = itemsByExpenseId.get(e.id)
+      if (items) {
+        sum += items.filter((i) => !excluded.includes(i.category)).reduce((s, i) => s + i.total_satang, 0)
+      } else if (!excluded.includes(e.category)) {
+        sum += e.total_satang
+      }
+    }
+    return sum
+  })()
   const totalVatPaid = (expenses || []).reduce((s, e) => s + (e.vat_satang || 0), 0)
 
   // Pull from integrations (may override manual values)
