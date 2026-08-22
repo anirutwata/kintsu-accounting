@@ -110,7 +110,13 @@ export async function POST(req: Request) {
         sort_order: idx,
       })),
     )
-    if (itemsError) return NextResponse.json({ error: itemsError.message }, { status: 500 })
+    if (itemsError) {
+      // Supabase's REST client can't span a transaction across two .insert() calls —
+      // compensate manually so a failed items insert doesn't leave an orphaned expense
+      // row with no items behind it (found live: an RLS error here left exactly that).
+      await supabase.from('expenses').delete().eq('id', data.id)
+      return NextResponse.json({ error: itemsError.message }, { status: 500 })
+    }
   }
 
   // Auto-sync to FlowAccount right away — falls back to the manual "ส่งเข้า FlowAccount"
