@@ -59,6 +59,7 @@ export async function syncExpenseToFlowAccount(supabase: any, expenseId: string)
       contact,
       publishedOn: expense.document_date || expense.date,
       remarks: expense.note ?? '',
+      vatAmount: expense.vat_satang ? expense.vat_satang / 100 : undefined,
       items: [
         {
           description: expense.note || expense.category,

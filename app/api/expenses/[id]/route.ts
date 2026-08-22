@@ -19,9 +19,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   if (amount_satang !== undefined) {
+    // amount_satang is the total actually paid (matches the receipt's grand total);
+    // vat_satang is how much of that total is VAT, not an add-on — total_satang
+    // never changes based on VAT, only how it's later reported to FlowAccount.
     updates.amount_satang = amount_satang
     updates.vat_satang = vat_satang || 0
-    updates.total_satang = amount_satang + (vat_satang || 0)
+    updates.total_satang = amount_satang
   }
 
   const { data, error } = await supabase

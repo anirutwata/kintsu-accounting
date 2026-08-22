@@ -74,6 +74,7 @@ export interface Expense {
   date: string            // วันที่ชำระเงินจริง — ใช้กระทบยอดธนาคาร
   category: ExpenseCategory
   amount_satang: number
+  vat_satang: number
   total_satang: number
   payment_method: PaymentMethod
   bank_account_id: string | null

@@ -168,6 +168,10 @@ export interface CreateExpenseInput {
   contact?: FlowAccountContact | null // from findContact() — links to the existing contact instead of creating a duplicate
   publishedOn: string // YYYY-MM-DD
   remarks?: string
+  // VAT already included in the item prices below (baht) — e.g. a retail receipt
+  // where the shelf/line price is VAT-inclusive. FlowAccount backs the 7% taxable
+  // base out of the total itself; subTotal/grandTotal stay the same figure either way.
+  vatAmount?: number
   items: {
     description: string
     category: ExpenseCategory // from getExpenseCategories()
@@ -214,12 +218,12 @@ export async function createExpense(input: CreateExpenseInput) {
           }
         : {}),
       publishedOn: input.publishedOn,
-      isVatInclusive: false,
-      isVat: false,
+      isVatInclusive: !!input.vatAmount,
+      isVat: !!input.vatAmount,
       subTotal,
       discountAmount: 0,
       totalAfterDiscount: subTotal,
-      vatAmount: 0,
+      vatAmount: input.vatAmount ?? 0,
       grandTotal: subTotal,
       remarks: input.remarks ?? '',
       items,

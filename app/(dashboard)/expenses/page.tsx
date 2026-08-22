@@ -59,6 +59,8 @@ const emptyForm = () => ({
   date: getTodayBKK(),           // วันที่ชำระเงินจริง — ใช้กระทบยอดธนาคาร
   transfer_time: '',
   amount: '',
+  has_vat: false,
+  vat: '',
   category: '',
   bank_account_id: '',
   recipient_name: '',
@@ -241,6 +243,7 @@ export default function ExpensesPage() {
     setLoading(true)
     try {
       const amountSatang = toSatang(parseFloat(form.amount.replace(/,/g, '')) || 0)
+      const vatSatang = form.has_vat ? toSatang(parseFloat(form.vat.replace(/,/g, '')) || 0) : 0
       const selectedBank = bankAccounts.find(b => b.id === form.bank_account_id)
       const isBank = form.bank_account_id && !form.bank_account_id.startsWith('__')
       const paymentMethod = isBank ? 'โอนเงิน' : form.bank_account_id === '__card__' ? 'บัตรเครดิต' : 'เงินสด'
@@ -250,6 +253,7 @@ export default function ExpensesPage() {
         date: form.date,
         category: form.category,
         amount_satang: amountSatang,
+        vat_satang: vatSatang,
         payment_method: paymentMethod,
         bank_account_id: isBank ? form.bank_account_id : null,
         transfer_time: form.transfer_time || null,
@@ -298,6 +302,8 @@ export default function ExpensesPage() {
       date: exp.date,
       transfer_time: exp.transfer_time || '',
       amount: String(exp.amount_satang / 100),
+      has_vat: !!exp.vat_satang,
+      vat: exp.vat_satang ? String(exp.vat_satang / 100) : '',
       category: exp.category,
       bank_account_id: exp.bank_account_id || '',
       recipient_name: exp.recipient_name || '',
@@ -651,6 +657,34 @@ export default function ExpensesPage() {
                   onFocus={() => setForm(f => ({ ...f, amount: f.amount.replace(/,/g, '') }))}
                   className="w-full border rounded-xl px-3 py-2.5 text-right text-base"
                   style={{ borderColor: 'var(--border)' }} placeholder="0.00" />
+              </div>
+
+              {/* VAT — how much of the amount above is VAT, not an add-on (matches how
+                  a retail receipt already shows one VAT-inclusive grand total) */}
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>
+                  <input type="checkbox" checked={form.has_vat}
+                    onChange={e => {
+                      const checked = e.target.checked
+                      setForm(f => {
+                        if (!checked) return { ...f, has_vat: false, vat: '' }
+                        const amt = parseFloat(f.amount.replace(/,/g, '')) || 0
+                        const autoVat = amt > 0 ? (amt - amt / 1.07).toFixed(2) : ''
+                        return { ...f, has_vat: true, vat: f.vat || autoVat }
+                      })
+                    }} />
+                  มี VAT (รวมอยู่ในยอดเงินด้านบนแล้ว)
+                </label>
+                {form.has_vat && (
+                  <input type="text" inputMode="decimal"
+                    value={form.vat}
+                    onChange={e => {
+                      const raw = e.target.value.replace(/,/g, '').replace(/[^\d.]/g, '')
+                      if (/^\d*\.?\d{0,2}$/.test(raw)) setForm(f => ({ ...f, vat: raw }))
+                    }}
+                    className="w-full border rounded-xl px-3 py-2.5 text-right text-base"
+                    style={{ borderColor: 'var(--border)' }} placeholder="VAT (บาท) — คำนวณ 7% ให้อัตโนมัติ แก้ไขได้" />
+                )}
               </div>
 
               {/* Category */}
