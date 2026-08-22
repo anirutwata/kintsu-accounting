@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { formatBaht, toSatang } from '@/lib/money'
 import { getTodayBKK, getMonthKey, formatThaiMonth } from '@/lib/utils'
-import type { Expense, BankAccount, OcrData } from '@/types'
+import type { Expense, BankAccount, OcrData, ExpenseItem } from '@/types'
 
 const BANK_OPTIONS = ['KBANK','SCB','KTB','BBL','TTB','GSB','BAY','BAAC','GHB','CIMB','UOB','KKP','LH BANK']
 
@@ -115,6 +115,15 @@ export default function ExpensesPage() {
   const [userName, setUserName] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null)
+  const [selectedExpenseItems, setSelectedExpenseItems] = useState<ExpenseItem[]>([])
+
+  useEffect(() => {
+    if (!selectedExpense) { setSelectedExpenseItems([]); return }
+    fetch(`/api/expenses/${selectedExpense.id}/items`)
+      .then(res => res.json())
+      .then(rows => setSelectedExpenseItems(Array.isArray(rows) ? rows : []))
+      .catch(() => setSelectedExpenseItems([]))
+  }, [selectedExpense])
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [bankMatchWarning, setBankMatchWarning] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -601,6 +610,23 @@ export default function ExpensesPage() {
               )}
               {selectedExpense.transfer_time && <DetailRow label="เวลาโอน" value={selectedExpense.transfer_time} />}
               <DetailRow label="หมวดหมู่" value={selectedExpense.category} />
+              {selectedExpenseItems.length > 0 && (
+                <div className="space-y-1.5 py-1">
+                  {selectedExpenseItems.map(item => (
+                    <div key={item.id} className="flex items-center justify-between text-sm border-b pb-1.5" style={{ borderColor: 'var(--border)' }}>
+                      <div className="min-w-0">
+                        <p className="truncate" style={{ color: 'var(--charcoal)' }}>{item.description}</p>
+                        <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                          {item.category} · {item.quantity} {item.unit || 'รายการ'} × {(item.price_per_unit_satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      <span className="shrink-0 ml-2" style={{ color: 'var(--charcoal)' }}>
+                        {(item.total_satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <DetailRow label="ยอดเงิน" value={formatBaht(selectedExpense.total_satang)} bold />
               <DetailRow label="วิธีชำระ" value={selectedExpense.payment_method} />
               {selectedExpense.sender_bank && (
