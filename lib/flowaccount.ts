@@ -10,8 +10,8 @@ const SCOPE = process.env.FLOWACCOUNT_SCOPE!
 
 let cachedToken: { accessToken: string; expiresAt: number } | null = null
 
-async function getAccessToken(): Promise<string> {
-  if (cachedToken && cachedToken.expiresAt > Date.now() + 30_000) {
+async function getAccessToken(forceRefresh = false): Promise<string> {
+  if (!forceRefresh && cachedToken && cachedToken.expiresAt > Date.now() + 30_000) {
     return cachedToken.accessToken
   }
 
@@ -39,18 +39,36 @@ async function getAccessToken(): Promise<string> {
 }
 
 async function flowAccountFetch(path: string, init: RequestInit = {}) {
-  const accessToken = await getAccessToken()
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-      ...init.headers,
-    },
-  })
-  const json = await res.json()
+  const attempt = async (forceRefresh: boolean) => {
+    const accessToken = await getAccessToken(forceRefresh)
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+        ...init.headers,
+      },
+    })
+    const json = await res.json()
+    return { res, json }
+  }
+
+  let { res, json } = await attempt(false)
+  // A long-lived warm serverless instance can hold a cached token past its
+  // real server-side lifetime (FlowAccount's actual validity has been
+  // observed to run shorter than the expires_in it reports) — every request
+  // then fails with the same opaque error until the instance restarts. One
+  // forced-refresh retry recovers from that without waiting for a redeploy.
   if (!res.ok || json.status === false) {
-    throw new Error(`FlowAccount API error (${res.status}): ${JSON.stringify(json.data ?? json.message)}`)
+    ;({ res, json } = await attempt(true))
+  }
+  if (!res.ok || json.status === false) {
+    // json.data holds real validation detail (e.g. an array of field errors)
+    // when present, but FlowAccount also returns json.data === false (a
+    // literal boolean, not null/undefined) on some rejections — `??` doesn't
+    // fall through to json.message for that, so it must be checked explicitly.
+    const detail = json.data == null || json.data === false ? json.message : json.data
+    throw new Error(`FlowAccount API error (${res.status}): ${JSON.stringify(detail)}`)
   }
   return json.data
 }
