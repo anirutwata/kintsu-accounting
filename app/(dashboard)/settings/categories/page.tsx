@@ -9,6 +9,7 @@ interface Category {
   sort_order: number
   is_active: boolean
   flowaccount_category_id: number | null
+  flowaccount_system_code: number | null
   flowaccount_debit_id: number | null
   flowaccount_category_name: string | null
 }
@@ -42,6 +43,8 @@ function CategoriesContent() {
   const [deleting, setDeleting] = useState(false)
   const [faCategories, setFaCategories] = useState<FlowAccountCategory[]>([])
   const [faLoadError, setFaLoadError] = useState('')
+  const [bizCategories, setBizCategories] = useState<FlowAccountCategory[]>([])
+  const [bizLoadError, setBizLoadError] = useState('')
   const [mappingId, setMappingId] = useState<string | null>(null)
 
   useEffect(() => { load() }, [type])
@@ -51,6 +54,10 @@ function CategoriesContent() {
       .then(res => res.json())
       .then(data => Array.isArray(data) ? setFaCategories(data) : setFaLoadError(data.error || 'โหลดหมวดหมู่ FlowAccount ไม่สำเร็จ'))
       .catch(() => setFaLoadError('เชื่อมต่อ FlowAccount ไม่สำเร็จ'))
+    fetch('/api/flowaccount/categories/business')
+      .then(res => res.json())
+      .then(data => Array.isArray(data) ? setBizCategories(data) : setBizLoadError(data.error || 'โหลดหมวดหมู่นักธุรกิจไม่สำเร็จ'))
+      .catch(() => setBizLoadError('เชื่อมต่อ FlowAccount ไม่สำเร็จ'))
   }, [type])
 
   async function load() {
@@ -64,6 +71,40 @@ function CategoriesContent() {
   async function handleMapFlowAccount(catId: string, faDebitId: string) {
     setMappingId(catId)
     const fa = faCategories.find(c => c.debitId === Number(faDebitId))
+    const body = fa
+      ? {
+          flowaccount_category_id: fa.categoryId,
+          flowaccount_system_code: fa.systemCode,
+          flowaccount_credit_id: fa.creditId,
+          flowaccount_credit_category: fa.creditCategory,
+          flowaccount_debit_id: fa.debitId,
+          flowaccount_debit_category: fa.debitCategory,
+          flowaccount_category_name: fa.nameLocal,
+        }
+      : {
+          flowaccount_category_id: null,
+          flowaccount_system_code: null,
+          flowaccount_credit_id: null,
+          flowaccount_credit_category: null,
+          flowaccount_debit_id: null,
+          flowaccount_debit_category: null,
+          flowaccount_category_name: null,
+        }
+    const res = await fetch(`/api/categories/${catId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (res.ok) load()
+    setMappingId(null)
+  }
+
+  // Same mapping shape as handleMapFlowAccount above, keyed by categoryId (unique
+  // within the business list) instead of debitId — every entry here always carries a
+  // non-null systemCode/categoryId, so a category mapped this way is guaranteed to sync.
+  async function handleMapBusiness(catId: string, faCategoryId: string) {
+    setMappingId(catId)
+    const fa = bizCategories.find(c => c.categoryId === Number(faCategoryId))
     const body = fa
       ? {
           flowaccount_category_id: fa.categoryId,
@@ -196,6 +237,11 @@ function CategoriesContent() {
           ⚠️ {faLoadError} (ผูกหมวดหมู่กับ FlowAccount ไม่ได้ตอนนี้)
         </div>
       )}
+      {type === 'expense' && bizLoadError && (
+        <div className="p-3 rounded-xl bg-amber-50 text-amber-700 text-xs">
+          ⚠️ {bizLoadError} (ผูกหมวดหมู่นักธุรกิจไม่ได้ตอนนี้)
+        </div>
+      )}
 
       {deleteError && (
         <div className="p-3 rounded-xl bg-red-50 text-red-700 text-sm flex justify-between">
@@ -254,19 +300,42 @@ function CategoriesContent() {
                     </div>
                   </div>
                   {type === 'expense' && (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] shrink-0" style={{ color: 'var(--muted-foreground)' }}>FlowAccount:</span>
-                      <select
-                        value={cat.flowaccount_debit_id ?? ''}
-                        disabled={mappingId === cat.id || faCategories.length === 0}
-                        onChange={e => handleMapFlowAccount(cat.id, e.target.value)}
-                        className="flex-1 text-xs border rounded-lg px-2 py-1 disabled:opacity-50"
-                        style={{ borderColor: 'var(--border)', color: cat.flowaccount_debit_id ? 'var(--charcoal)' : '#9CA3AF' }}>
-                        <option value="">— ยังไม่ผูก —</option>
-                        {faCategories.map(fa => (
-                          <option key={fa.debitId} value={fa.debitId}>{fa.nameLocal} ({fa.debitCode})</option>
-                        ))}
-                      </select>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] shrink-0" style={{ color: cat.flowaccount_category_id ? '#16A34A' : 'var(--muted-foreground)' }}>
+                          หมวดหมู่นักธุรกิจ{cat.flowaccount_category_id ? ' ✓' : ''}:
+                        </span>
+                        <select
+                          value={cat.flowaccount_category_id ?? ''}
+                          disabled={mappingId === cat.id || bizCategories.length === 0}
+                          onChange={e => handleMapBusiness(cat.id, e.target.value)}
+                          className="flex-1 text-xs border rounded-lg px-2 py-1 disabled:opacity-50"
+                          style={{ borderColor: 'var(--border)', color: cat.flowaccount_category_id ? 'var(--charcoal)' : '#9CA3AF' }}>
+                          <option value="">— ยังไม่ผูก (แนะนำ) —</option>
+                          {bizCategories.map(fa => (
+                            <option key={fa.categoryId} value={fa.categoryId ?? ''}>{fa.nameLocal}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] shrink-0" style={{ color: 'var(--muted-foreground)' }}>ผังบัญชีทั่วไป:</span>
+                        <select
+                          value={cat.flowaccount_debit_id ?? ''}
+                          disabled={mappingId === cat.id || faCategories.length === 0}
+                          onChange={e => handleMapFlowAccount(cat.id, e.target.value)}
+                          className="flex-1 text-xs border rounded-lg px-2 py-1 disabled:opacity-50"
+                          style={{ borderColor: 'var(--border)', color: cat.flowaccount_debit_id ? 'var(--charcoal)' : '#9CA3AF' }}>
+                          <option value="">— ยังไม่ผูก —</option>
+                          {faCategories.map(fa => (
+                            <option key={fa.debitId} value={fa.debitId}>{fa.nameLocal} ({fa.debitCode})</option>
+                          ))}
+                        </select>
+                      </div>
+                      {!cat.flowaccount_category_id && cat.flowaccount_debit_id != null && (
+                        <p className="text-[10px]" style={{ color: '#D97706' }}>
+                          ⚠️ ผูกผ่านผังบัญชีทั่วไป (ไม่มี systemCode/categoryId) — จะ sync ไม่ได้จนกว่าจะเลือกหมวดหมู่นักธุรกิจด้านบนด้วย
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

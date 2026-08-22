@@ -87,10 +87,14 @@ export interface ExpenseCategory {
   debitCategory: number
 }
 
-// Uses the accounting-view endpoint (full chart of accounts, ~138 entries) instead of
-// /expenses/categories/business (~40 curated entries) — confirmed with FlowAccount support
-// (2026-08-20) and verified live against Production that account_code/creditId/debitId
-// posting works for entries outside the curated business list.
+// Full chart of accounts (~138 entries) — broader coverage than the curated business
+// list (~40 entries) since some of this business's real categories don't have a
+// matching business category at all. A subset of these entries happen to carry a
+// systemCode/categoryId (when FlowAccount can match them to a business category
+// itself); most don't — FlowAccount's schema marks both required on every line item,
+// so a category mapped to a null-systemCode entry here fails sync (gated in
+// expenseSync.ts). Prefer getBusinessCategories() below when it covers the category;
+// fall back to this only for categories it doesn't.
 export async function getExpenseCategories(): Promise<ExpenseCategory[]> {
   const data = await flowAccountFetch('/expenses/categories/accounting')
   return (data ?? []).map((c: any) => ({
@@ -104,6 +108,29 @@ export async function getExpenseCategories(): Promise<ExpenseCategory[]> {
     debitId: Number(c.debitId),
     debitCategory: Number(c.debitCategory),
   }))
+}
+
+// The curated "business category" list (~40 top-level entries, some with sub-
+// categories) — every entry here always carries a non-null systemCode/categoryId,
+// so anything mapped from this list is guaranteed to sync. Prefer this over
+// getExpenseCategories() above whenever it has a matching entry.
+export async function getBusinessCategories(): Promise<ExpenseCategory[]> {
+  const data = (await flowAccountFetch('/expenses/categories/business')) ?? []
+  const toEntry = (c: any, prefixLocal?: string, prefixForeign?: string): ExpenseCategory => ({
+    systemCode: Number(c.systemCode),
+    categoryId: Number(c.categoryId),
+    nameLocal: prefixLocal ? `${prefixLocal} > ${c.nameLocal}` : c.nameLocal,
+    nameForeign: prefixForeign ? `${prefixForeign} > ${c.nameForeign}` : c.nameForeign,
+    debitCode: c.debitCode,
+    creditId: Number(c.creditId),
+    creditCategory: Number(c.creditCategory),
+    debitId: Number(c.debitId),
+    debitCategory: Number(c.debitCategory),
+  })
+  return data.flatMap((c: any) => [
+    toEntry(c),
+    ...(c.subCategories ?? []).map((sub: any) => toEntry(sub, c.nameLocal, c.nameForeign)),
+  ])
 }
 
 export interface FlowAccountContact {
@@ -185,9 +212,10 @@ export async function createExpense(input: CreateExpenseInput) {
   const items = input.items.map((item) => {
     const total = round2(item.quantity * item.pricePerUnit)
     return {
-      // systemCode/categoryId only exist for the curated business-category subset —
-      // omitted (not sent as 0) for a plain chart-of-account category, since creditId/
-      // debitId alone are what the document actually posts against.
+      // FlowAccount's schema marks both required on every item — expenseSync.ts's gate
+      // check blocks a sync before it reaches here if either is null, so this is never
+      // actually omitted in practice; kept as optional spread only to match the
+      // category's DB-nullable type without a redundant non-null assertion.
       ...(item.category.systemCode != null ? { systemCode: item.category.systemCode } : {}),
       ...(item.category.categoryId != null ? { categoryId: item.category.categoryId } : {}),
       description: item.description,

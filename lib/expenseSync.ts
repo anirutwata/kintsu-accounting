@@ -23,11 +23,18 @@ export async function syncExpenseToFlowAccount(supabase: any, expenseId: string)
     .eq('category_type', 'expense')
     .maybeSingle()
 
-  // flowaccount_category_id is only set for the curated "business category" subset —
-  // most chart-of-account categories post via debit_id/credit_id alone, so that's the
-  // real gate (see lib/flowaccount.ts createExpense).
-  if (!category || category.flowaccount_debit_id == null) {
-    return { ok: false as const, error: `หมวดหมู่ "${expense.category}" ยังไม่ได้ผูกกับ FlowAccount — ไปตั้งค่าที่หน้าหมวดหมู่ก่อน` }
+  // FlowAccount's ExpenseProductItem schema (flowaccount-openapi.json) marks systemCode
+  // and categoryId as required on every line item, not just debit_id/credit_id — a
+  // category mapped only to a plain chart-of-account entry (no matching business
+  // category) fails sync with an opaque error at FlowAccount's end. Gate on all four
+  // so that failure surfaces here instead, with a message that says what to fix.
+  if (
+    !category ||
+    category.flowaccount_debit_id == null ||
+    category.flowaccount_system_code == null ||
+    category.flowaccount_category_id == null
+  ) {
+    return { ok: false as const, error: `หมวดหมู่ "${expense.category}" ยังไม่ได้ผูกกับ FlowAccount (ต้องเลือกจาก "หมวดหมู่นักธุรกิจ") — ไปตั้งค่าที่หน้าหมวดหมู่ก่อน` }
   }
 
   try {
