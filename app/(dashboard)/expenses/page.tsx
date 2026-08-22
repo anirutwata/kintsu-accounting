@@ -89,6 +89,7 @@ export default function ExpensesPage() {
   const [loading, setLoading] = useState(false)
   const [ocring, setOcring] = useState(false)
   const [uploadingReceipt, setUploadingReceipt] = useState(false)
+  const [vatOcring, setVatOcring] = useState(false)
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [form, setForm] = useState(emptyForm())
@@ -216,6 +217,10 @@ export default function ExpensesPage() {
 
   async function handleReceiptUpload(files: FileList) {
     setUploadingReceipt(true)
+    // Only auto-detect VAT off the first bill photo attached to this entry, and only
+    // when the staff member hasn't already ticked/typed VAT themselves — never
+    // overwrite a manual entry.
+    const shouldDetectVat = form.receipt_image_urls.length === 0 && !form.has_vat && !form.vat
     const newUrls: string[] = []
     const newPreviews: string[] = []
     for (const file of Array.from(files)) {
@@ -235,6 +240,23 @@ export default function ExpensesPage() {
       receipt_previews: [...f.receipt_previews, ...newPreviews],
     }))
     setUploadingReceipt(false)
+
+    if (shouldDetectVat && newUrls[0]) {
+      setVatOcring(true)
+      try {
+        const res = await fetch('/api/ocr/bill-vat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: newUrls[0] }),
+        })
+        const data = await res.json()
+        if (data.hasVat && data.vatSatang > 0) {
+          // Guard again at write time — staff may have ticked VAT manually while OCR was in flight.
+          setForm(f => (f.has_vat || f.vat ? f : { ...f, has_vat: true, vat: (data.vatSatang / 100).toFixed(2) }))
+        }
+      } catch { /* ignore — staff can still tick VAT manually */ }
+      setVatOcring(false)
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -675,6 +697,9 @@ export default function ExpensesPage() {
                     }} />
                   มี VAT (รวมอยู่ในยอดเงินด้านบนแล้ว)
                 </label>
+                {vatOcring && (
+                  <p className="text-xs mb-1.5" style={{ color: 'var(--muted-foreground)' }}>🔍 กำลังตรวจสอบ VAT จากรูปบิล...</p>
+                )}
                 {form.has_vat && (
                   <input type="text" inputMode="decimal"
                     value={form.vat}
@@ -875,7 +900,7 @@ export default function ExpensesPage() {
                   className="flex-1 py-3 border rounded-xl font-medium" style={{ borderColor: 'var(--border)' }}>
                   ยกเลิก
                 </button>
-                <button type="submit" disabled={loading || ocring || uploadingReceipt}
+                <button type="submit" disabled={loading || ocring || uploadingReceipt || vatOcring}
                   className="flex-1 py-3 rounded-xl font-semibold text-white disabled:opacity-60"
                   style={{ background: 'var(--flame-red)' }}>
                   {loading ? 'กำลังบันทึก...' : editingId ? 'บันทึกการแก้ไข' : 'บันทึก'}
