@@ -208,7 +208,7 @@ export interface CreateExpenseInput {
   }[]
 }
 
-export async function createExpense(input: CreateExpenseInput) {
+function buildExpensePayload(input: CreateExpenseInput) {
   const items = input.items.map((item) => {
     const total = round2(item.quantity * item.pricePerUnit)
     return {
@@ -231,32 +231,63 @@ export async function createExpense(input: CreateExpenseInput) {
   })
   const subTotal = round2(items.reduce((sum, i) => sum + i.total, 0))
 
+  return {
+    contactName: input.contact?.name ?? input.contactName,
+    ...(input.contact
+      ? {
+          ...(input.contact.id != null ? { contactId: input.contact.id } : {}),
+          contactAddress: input.contact.address,
+          contactTaxId: input.contact.taxId,
+          contactBranch: input.contact.branch,
+        }
+      : {}),
+    publishedOn: input.publishedOn,
+    isVatInclusive: !!input.vatAmount,
+    isVat: !!input.vatAmount,
+    subTotal,
+    discountAmount: 0,
+    totalAfterDiscount: subTotal,
+    vatAmount: input.vatAmount ?? 0,
+    grandTotal: subTotal,
+    remarks: input.remarks ?? '',
+    items,
+  }
+}
+
+export async function createExpense(input: CreateExpenseInput) {
   return flowAccountFetch('/expenses', {
     method: 'POST',
     body: JSON.stringify({
       recordId: 0,
       expenseStructureType: 'ExpenseSimpleDocument',
-      contactName: input.contact?.name ?? input.contactName,
-      ...(input.contact
-        ? {
-            ...(input.contact.id != null ? { contactId: input.contact.id } : {}),
-            contactAddress: input.contact.address,
-            contactTaxId: input.contact.taxId,
-            contactBranch: input.contact.branch,
-          }
-        : {}),
-      publishedOn: input.publishedOn,
-      isVatInclusive: !!input.vatAmount,
-      isVat: !!input.vatAmount,
-      subTotal,
-      discountAmount: 0,
-      totalAfterDiscount: subTotal,
-      vatAmount: input.vatAmount ?? 0,
-      grandTotal: subTotal,
-      remarks: input.remarks ?? '',
-      items,
+      ...buildExpensePayload(input),
     }),
   })
+}
+
+// Only works while the document is still "รอดำเนินการ (Awaiting)" — true for every
+// expense this app creates, since createExpense() never posts via /expenses/with-payment.
+// companyName/companyAddress/companyBranch aren't part of CreateExpenseInput (create
+// doesn't need them) but PUT requires them — fetched fresh from the existing document
+// rather than hardcoded, so this stays correct if company details ever change.
+export async function updateExpense(recordId: number, input: CreateExpenseInput) {
+  const existing = await flowAccountFetch(`/expenses/${recordId}`)
+  return flowAccountFetch(`/expenses/${recordId}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      recordId,
+      expenseStructureType: 'UpdateExpenseSimpleDocument',
+      companyName: existing.companyName,
+      companyAddress: existing.companyAddress,
+      companyBranch: existing.branch,
+      ...buildExpensePayload(input),
+    }),
+  })
+}
+
+// Same "must be awaiting" constraint as updateExpense above.
+export async function deleteExpenseDocument(recordId: number) {
+  return flowAccountFetch(`/expenses/${recordId}`, { method: 'DELETE' })
 }
 
 // Downloads an image from a public URL (e.g. Supabase storage) and attaches it to an

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { sendTelegram } from '@/lib/telegram'
+import { updateFlowAccountSync, deleteFlowAccountSync } from '@/lib/expenseSync'
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -36,6 +37,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Propagate the edit to FlowAccount too, if this expense was already synced —
+  // otherwise the two would silently drift apart. A failure here doesn't fail the
+  // local edit (already saved above); staff are alerted to reconcile manually.
+  if (data.flowaccount_record_id) {
+    const syncResult = await updateFlowAccountSync(supabase, id)
+    if (syncResult.ok) {
+      data.flowaccount_synced_at = new Date().toISOString()
+    } else {
+      sendTelegram(
+        `⚠️ แก้ไขรายจ่าย "${data.category}" แล้ว แต่อัปเดต FlowAccount (${data.flowaccount_document_serial}) ไม่สำเร็จ: ${syncResult.error}\nต้องแก้ไขในระบบ FlowAccount ด้วยตัวเองให้ตรงกัน`,
+        'expenses',
+      )
+    }
+  }
+
   return NextResponse.json(data)
 }
 
@@ -62,6 +79,20 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (data) {
     const docDate = data.document_date || data.date
     sendTelegram(`🗑️ <b>ลบรายจ่าย</b>\n📁 ${data.category}${data.note ? ` — ${data.note}` : ''}\n💰 ฿${(data.amount_satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2 })}\n📅 ${docDate}`, 'expenses')
+  }
+
+  // Delete the FlowAccount document too, if this expense was already synced — otherwise
+  // it would keep showing up in FlowAccount forever with no trace it was ever removed
+  // here. A failure doesn't undo the local delete (already soft-deleted above); staff
+  // are alerted to void/delete it manually in FlowAccount instead.
+  if (data?.flowaccount_record_id) {
+    const delResult = await deleteFlowAccountSync(data.flowaccount_record_id)
+    if (!delResult.ok) {
+      sendTelegram(
+        `⚠️ ลบรายจ่าย "${data.category}" แล้ว แต่ลบเอกสาร FlowAccount (${data.flowaccount_document_serial}) ไม่สำเร็จ: ${delResult.error}\nต้องลบ/void ในระบบ FlowAccount ด้วยตัวเอง`,
+        'expenses',
+      )
+    }
   }
 
   // Trigger GAS re-sync (non-blocking) — use document_date for P&L month
