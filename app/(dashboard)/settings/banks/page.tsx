@@ -3,11 +3,13 @@ import { useState, useEffect } from 'react'
 import type { BankAccount } from '@/types'
 import { BANKS } from '@/lib/banks'
 
-interface FormState { bank_name: string; account_number: string; account_name: string }
-const emptyForm = (): FormState => ({ bank_name: BANKS[0], account_number: '', account_name: '' })
+interface FlowAccountBank { id: number; accountNumber: string; accountName: string; bankName: string; branch: string }
+interface FormState { bank_name: string; account_number: string; account_name: string; flowaccount_bank_account_id: string }
+const emptyForm = (): FormState => ({ bank_name: BANKS[0], account_number: '', account_name: '', flowaccount_bank_account_id: '' })
 
 export default function BanksPage() {
   const [banks, setBanks] = useState<BankAccount[]>([])
+  const [flowBanks, setFlowBanks] = useState<FlowAccountBank[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editBank, setEditBank] = useState<BankAccount | null>(null)
@@ -22,9 +24,14 @@ export default function BanksPage() {
 
   async function load() {
     setLoading(true)
-    const res = await fetch('/api/bank-accounts?all=true')
+    const [res, flowRes] = await Promise.all([
+      fetch('/api/bank-accounts?all=true'),
+      fetch('/api/flowaccount/bank-accounts'),
+    ])
     const data = await res.json()
     setBanks(Array.isArray(data) ? data : [])
+    const flowData = await flowRes.json()
+    setFlowBanks(Array.isArray(flowData) ? flowData : [])
     setLoading(false)
   }
 
@@ -37,7 +44,12 @@ export default function BanksPage() {
 
   function openEdit(bank: BankAccount) {
     setEditBank(bank)
-    setForm({ bank_name: bank.bank_name, account_number: bank.account_number, account_name: bank.account_name })
+    setForm({
+      bank_name: bank.bank_name,
+      account_number: bank.account_number,
+      account_name: bank.account_name,
+      flowaccount_bank_account_id: bank.flowaccount_bank_account_id ? String(bank.flowaccount_bank_account_id) : '',
+    })
     setSaveError('')
     setShowForm(true)
   }
@@ -48,7 +60,13 @@ export default function BanksPage() {
     setSaveError('')
     const url = editBank ? `/api/bank-accounts/${editBank.id}` : '/api/bank-accounts'
     const method = editBank ? 'PUT' : 'POST'
-    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+    const payload = {
+      bank_name: form.bank_name,
+      account_number: form.account_number,
+      account_name: form.account_name,
+      flowaccount_bank_account_id: form.flowaccount_bank_account_id ? Number(form.flowaccount_bank_account_id) : null,
+    }
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     if (res.ok) {
       setShowForm(false)
       load()
@@ -121,6 +139,11 @@ export default function BanksPage() {
                     {!bank.is_active && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">ปิดใช้งาน</span>
                     )}
+                    {bank.flowaccount_bank_account_id ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-50 text-green-700">ผูก FlowAccount แล้ว</span>
+                    ) : (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700">ยังไม่ผูก FlowAccount</span>
+                    )}
                   </div>
                   <p className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>{bank.account_number}</p>
                   <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{bank.account_name}</p>
@@ -183,6 +206,19 @@ export default function BanksPage() {
                 <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>ชื่อบัญชี</label>
                 <input value={form.account_name} onChange={set('account_name')} required
                   className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }} placeholder="ชื่อเจ้าของบัญชี" />
+              </div>
+              <div>
+                <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>บัญชีนี้ตรงกับบัญชีใน FlowAccount</label>
+                <select value={form.flowaccount_bank_account_id} onChange={set('flowaccount_bank_account_id')}
+                  className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)', background: 'white' }}>
+                  <option value="">— ยังไม่ผูก (จะโอนเงินอัตโนมัติเข้า FlowAccount ไม่ได้) —</option>
+                  {flowBanks.map(b => (
+                    <option key={b.id} value={b.id}>{b.bankName} {b.accountNumber} · {b.accountName}</option>
+                  ))}
+                </select>
+                <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                  ใช้สำหรับรายจ่ายที่ชำระด้วยการโอนเงิน — ระบบจะลงชำระให้ FlowAccount อัตโนมัติผ่านบัญชีนี้
+                </p>
               </div>
               <button type="submit" disabled={saving}
                 className="w-full py-3 rounded-2xl font-semibold text-white disabled:opacity-60"

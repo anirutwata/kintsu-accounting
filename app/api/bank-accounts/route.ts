@@ -21,13 +21,13 @@ function formatAccountNumber(raw: string): string {
 
 export async function POST(req: Request) {
   const supabase = await createClient()
-  const { bank_name, account_number, account_name } = await req.json()
+  const { bank_name, account_number, account_name, flowaccount_bank_account_id } = await req.json()
   if (!bank_name || !account_number || !account_name) {
     return NextResponse.json({ error: 'กรุณากรอกข้อมูลให้ครบ' }, { status: 400 })
   }
   const { data, error } = await supabase
     .from('bank_accounts')
-    .insert({ bank_name, account_number: formatAccountNumber(account_number), account_name })
+    .insert({ bank_name, account_number: formatAccountNumber(account_number), account_name, flowaccount_bank_account_id: flowaccount_bank_account_id || null })
     .select()
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

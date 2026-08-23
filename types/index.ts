@@ -137,6 +137,7 @@ export interface BankAccount {
   is_active: boolean
   sort_order: number
   created_at: string
+  flowaccount_bank_account_id: number | null
 }
 
 export interface PettyCash {

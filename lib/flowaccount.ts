@@ -254,6 +254,54 @@ function buildExpensePayload(input: CreateExpenseInput) {
   }
 }
 
+export interface FlowAccountBankAccount {
+  id: number
+  accountNumber: string
+  accountName: string
+  bankName: string
+  branch: string
+}
+
+// This company's registered banking channels (MyCompany > Banking Channel > Bank
+// Account in the FlowAccount web UI) — used to map a local bank_accounts row to
+// the FlowAccount bankAccountId that payExpense()'s transfer method requires.
+export async function getBankAccounts(): Promise<FlowAccountBankAccount[]> {
+  const data = await flowAccountFetch('/bank-channel/bank-accounts')
+  return (data ?? []).map((b: any) => ({
+    id: Number(b.bankAccountId),
+    accountNumber: b.bankAccountNumber,
+    accountName: b.bankAccountName,
+    bankName: b.bankName,
+    branch: b.bankBranch,
+  }))
+}
+
+export type ExpensePaymentChannel =
+  | { method: 'cash' }
+  | { method: 'transfer'; bankAccountId: number }
+  | { method: 'other'; otherChannelId: number } // EDC card swipe, or any other configured "Other" channel
+
+// Marks an already-created (awaiting) expense document as paid via the given
+// channel — POST /expenses/{id}/payment. Verified live against the real Qsola
+// company (test docs created + paid + voided during development, cash +
+// transfer + other/EDC all confirmed): the payload is just {paymentMethod,
+// paymentDate, collected, ...channel fields} — no "structure type" wrapper is
+// required despite the spec's ExpenseSimpleDocumentWithPaymentPaid* schemas
+// suggesting one (those are for the combined create+pay endpoint,
+// /expenses/with-payment, which this app doesn't use — it always creates via
+// plain /expenses first, matching the "must be awaiting" PUT/DELETE
+// constraint the rest of this file already relies on).
+export async function payExpense(recordId: number, paymentDate: string, collected: number, channel: ExpensePaymentChannel) {
+  const channelFields =
+    channel.method === 'cash' ? { paymentMethod: 1 }
+    : channel.method === 'transfer' ? { paymentMethod: 5, bankAccountId: channel.bankAccountId }
+    : { paymentMethod: 13, otherChannelId: channel.otherChannelId }
+  return flowAccountFetch(`/expenses/${recordId}/payment`, {
+    method: 'POST',
+    body: JSON.stringify({ ...channelFields, paymentDate, collected: round2(collected) }),
+  })
+}
+
 export async function createExpense(input: CreateExpenseInput) {
   return flowAccountFetch('/expenses', {
     method: 'POST',

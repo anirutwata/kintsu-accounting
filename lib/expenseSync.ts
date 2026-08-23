@@ -1,6 +1,47 @@
-import { createExpense, updateExpense, deleteExpenseDocument, attachExpenseFiles, findContact, type FlowAccountContact } from '@/lib/flowaccount'
+import { createExpense, updateExpense, deleteExpenseDocument, attachExpenseFiles, findContact, payExpense, type FlowAccountContact, type ExpensePaymentChannel } from '@/lib/flowaccount'
 import { extractVendorInfoFromReceipt } from '@/lib/vendorOcr'
 import { sendTelegram } from '@/lib/telegram'
+
+// Resolves this expense's local payment_method to a FlowAccount payment channel.
+// Only applies to expenses entered directly in this app (paid on the spot by
+// staff) — expenses the accountant enters straight into FlowAccount and pays
+// once via ใบเตรียมจ่าย/ใบสำคัญจ่าย (Payment Voucher) never come through here,
+// so there's no double-payment risk between the two flows.
+//   - 'เงินสด' — Cash (method 1), no extra fields.
+//   - 'โอนเงิน' — Transfer (method 5) from the expense's own bank_account_id,
+//     via that row's flowaccount_bank_account_id mapping (Settings > บัญชี
+//     ธนาคาร). Not yet mapped → leave awaiting with an error, not a guess.
+//   - 'บัตรเครดิต' — paid by swiping the company card through the EDC terminal,
+//     which FlowAccount models as an "Other" channel (method 13), same
+//     FLOWACCOUNT_EDC_CHANNEL_ID this app's sell-side card payments already
+//     use — not FlowAccount's separate "CreditCard" method, which has no
+//     channel configured at all (verified via company_settings__list_
+//     payment_channels: zero channels).
+//   - 'เครดิต' — bought on credit, genuinely not paid yet — leave awaiting.
+async function resolvePaymentChannel(supabase: any, expense: any): Promise<{ ok: true; channel: ExpensePaymentChannel } | { ok: false; error?: string }> {
+  if (expense.payment_method === 'เงินสด') return { ok: true, channel: { method: 'cash' } }
+
+  if (expense.payment_method === 'บัตรเครดิต') {
+    const otherChannelId = Number(process.env.FLOWACCOUNT_EDC_CHANNEL_ID)
+    if (!otherChannelId) return { ok: false, error: 'ยังไม่ได้ตั้งค่าเครื่องรูดบัตร EDC (FLOWACCOUNT_EDC_CHANNEL_ID)' }
+    return { ok: true, channel: { method: 'other', otherChannelId } }
+  }
+
+  if (expense.payment_method === 'โอนเงิน') {
+    if (!expense.bank_account_id) return { ok: false, error: 'ไม่ได้ระบุบัญชีธนาคารที่โอน' }
+    const { data: bank } = await supabase
+      .from('bank_accounts')
+      .select('flowaccount_bank_account_id, bank_name, account_number')
+      .eq('id', expense.bank_account_id)
+      .maybeSingle()
+    if (!bank?.flowaccount_bank_account_id) {
+      return { ok: false, error: `บัญชี ${bank?.bank_name ?? ''} ${bank?.account_number ?? ''} ยังไม่ได้ผูกกับ FlowAccount (ไปตั้งค่าที่หน้าบัญชีธนาคารก่อน)` }
+    }
+    return { ok: true, channel: { method: 'transfer', bankAccountId: bank.flowaccount_bank_account_id } }
+  }
+
+  return { ok: false } // 'เครดิต' / unrecognized — leave awaiting, no error to surface
+}
 
 // Looks up one category's FlowAccount mapping. FlowAccount's ExpenseProductItem schema
 // (flowaccount-openapi.json) marks systemCode/categoryId required on every line item,
@@ -141,6 +182,28 @@ export async function syncExpenseToFlowAccount(supabase: any, expenseId: string)
       }
     }
 
+    // Mark the document paid when the local record already says it was paid on
+    // the spot (see resolvePaymentChannel). Same best-effort treatment as the
+    // attachment step above: the document itself is already created either
+    // way, a failure here just leaves it "awaiting" in FlowAccount instead of
+    // blocking the sync.
+    const paymentChannel = await resolvePaymentChannel(supabase, expense)
+    if (paymentChannel.ok) {
+      try {
+        await payExpense(result.recordId, expense.document_date || expense.date, Number(result.grandTotal), paymentChannel.channel)
+      } catch (payErr: any) {
+        sendTelegram(
+          `⚠️ ส่ง ${result.documentSerial} เข้า FlowAccount สำเร็จ แต่บันทึกชำระเงินไม่สำเร็จ: ${payErr.message}\nต้องลงชำระเองใน FlowAccount`,
+          'expenses',
+        )
+      }
+    } else if (paymentChannel.error) {
+      sendTelegram(
+        `⚠️ ส่ง ${result.documentSerial} เข้า FlowAccount สำเร็จ แต่ลงชำระเงินไม่ได้: ${paymentChannel.error}`,
+        'expenses',
+      )
+    }
+
     const { data: updated, error: updateError } = await supabase
       .from('expenses')
       .update({
@@ -161,10 +224,11 @@ export async function syncExpenseToFlowAccount(supabase: any, expenseId: string)
 
 // Called from the expense PATCH route right after a local edit — only does anything if
 // the expense was already synced (flowaccount_record_id set). FlowAccount's PUT only
-// works while the document is still "รอดำเนินการ (Awaiting)", which every expense this
-// app creates always is (createExpense() never posts via with-payment), so this should
-// always succeed for a previously-synced expense — but treat failure as a soft error
-// (Telegram alert), not something that blocks the local edit from saving.
+// works while the document is still "รอดำเนินการ (Awaiting)" — true for every expense
+// except 'เงินสด' ones, which syncExpenseToFlowAccount marks paid right after creating
+// (see resolvePaymentChannel). Editing a paid one now fails here as expected; treated
+// as a soft error (Telegram alert telling staff to fix it directly in FlowAccount),
+// not something that blocks the local edit from saving.
 export async function updateFlowAccountSync(supabase: any, expenseId: string) {
   const { data: expense, error: expenseError } = await supabase
     .from('expenses')
