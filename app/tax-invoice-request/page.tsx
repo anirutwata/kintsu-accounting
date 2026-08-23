@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { getTodayBKK } from '@/lib/utils'
+import { compressImageFile } from '@/lib/compressImage'
 
 // Everything on this page is Thai — a native <input type="date"> renders in whatever
 // language the customer's device happens to be set to (e.g. "24 Aug 2026"), which the
@@ -112,8 +113,9 @@ export default function TaxInvoiceRequestPage() {
     setUploadError('')
     setBillPreview(URL.createObjectURL(file))
     try {
+      const compressed = await compressImageFile(file)
       const fd = new FormData()
-      fd.append('file', file)
+      fd.append('file', compressed)
       const res = await fetch('/api/upload/receipt', { method: 'POST', body: fd })
       const json = await res.json().catch(() => null)
       if (!res.ok || !json?.url) {

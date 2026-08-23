@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { formatBaht, toSatang } from '@/lib/money'
 import { getTodayBKK, getMonthKey, formatThaiMonth } from '@/lib/utils'
+import { compressImageFile } from '@/lib/compressImage'
 import type { Expense, BankAccount, OcrData, ExpenseItem } from '@/types'
 
 const BANK_OPTIONS = ['KBANK','SCB','KTB','BBL','TTB','GSB','BAY','BAAC','GHB','CIMB','UOB','KKP','LH BANK']
@@ -266,9 +267,10 @@ export default function ExpensesPage() {
     for (const file of Array.from(files)) {
       const preview = URL.createObjectURL(file)
       newPreviews.push(preview)
-      const fd = new FormData()
-      fd.append('file', file)
       try {
+        const compressed = await compressImageFile(file)
+        const fd = new FormData()
+        fd.append('file', compressed)
         const res = await fetch('/api/upload/receipt', { method: 'POST', body: fd })
         const data = await res.json()
         if (data.url) newUrls.push(data.url)
