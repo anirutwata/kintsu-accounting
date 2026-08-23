@@ -391,6 +391,11 @@ interface SellItemInput {
   pricePerUnit: number
 }
 
+// FlowAccount's contactGroup is an integer, not the string this app uses internally:
+// 1 = บุคคลธรรมดา (individual), 3 = นิติบุคคล (juristic) — sending the raw string fails
+// with "Could not convert string to integer".
+const CONTACT_GROUP_CODE: Record<'individual' | 'juristic', number> = { individual: 1, juristic: 3 }
+
 function buildSellDocument(input: {
   contactName: string
   contactTaxId?: string
@@ -420,7 +425,7 @@ function buildSellDocument(input: {
     contactTaxId: input.contactTaxId,
     contactAddress: input.contactAddress,
     contactBranch: input.contactBranch,
-    contactGroup: input.contactGroup,
+    contactGroup: input.contactGroup ? CONTACT_GROUP_CODE[input.contactGroup] : undefined,
     publishedOn: input.publishedOn,
     isVatInclusive: false,
     isVat: true,
