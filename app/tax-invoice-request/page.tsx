@@ -1,7 +1,9 @@
 'use client'
 import { useState } from 'react'
+import { getTodayBKK } from '@/lib/utils'
 
 const emptyForm = () => ({
+  document_date: getTodayBKK(), // วันที่ในบิล/ใบเสร็จ — ใช้เป็นวันที่บนใบกำกับภาษี ไม่ใช่วันที่อนุมัติ
   contact_group: 'juristic' as 'juristic' | 'individual',
   contact_name: '',
   contact_tax_id: '',
@@ -151,6 +153,14 @@ export default function TaxInvoiceRequestPage() {
               {form.bill_image_url && !uploadingBill && <p className="text-xs text-green-600 mt-1">✓ แนบรูปแล้ว (แตะเพื่อเปลี่ยนรูป)</p>}
             </label>
             {uploadError && <p className="text-xs text-red-500">❌ {uploadError}</p>}
+          </Field>
+
+          <Field label="วันที่ในบิล/ใบเสร็จ *">
+            <input required type="date" value={form.document_date}
+              onChange={e => set('document_date', e.target.value)}
+              max={getTodayBKK()}
+              className="w-full border rounded-xl px-3 py-2 text-sm" />
+            <p className="text-[10px] text-gray-400 mt-1">วันที่ตามที่ระบุบนบิล — จะใช้เป็นวันที่บนใบกำกับภาษี</p>
           </Field>
 
           <Field label="ประเภทผู้เสียภาษี *">
