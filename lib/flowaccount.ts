@@ -284,6 +284,24 @@ export async function getBankAccounts(): Promise<FlowAccountBankAccount[]> {
   }))
 }
 
+export interface FlowAccountOtherChannel {
+  id: number
+  name: string
+  type: number // 1=EDC, 3=POS, 5=Online Payment Gateway, 7=Online shop/E-commerce
+}
+
+// This company's "Other" payment channels (MyCompany > Banking Channel > Other Channel in
+// the FlowAccount web UI) — covers EDC card machines, POS, and online payment gateways.
+// Lets Settings offer a live dropdown instead of a raw FlowAccount channel ID typed by hand.
+export async function getOtherPaymentChannels(): Promise<FlowAccountOtherChannel[]> {
+  const data = await flowAccountFetch('/bank-channel/other-channels')
+  return (data ?? []).map((c: any) => ({
+    id: Number(c.otherChannelsId),
+    name: c.otherChannelsName,
+    type: Number(c.otherChannelsType),
+  }))
+}
+
 export type ExpensePaymentChannel =
   | { method: 'cash' }
   | { method: 'transfer'; bankAccountId: number }
@@ -435,25 +453,33 @@ export interface TaxInvoicePayment {
 // channel ids configured in env (must be pre-configured in FlowAccount's own
 // MyCompany > Bank Channel settings first). Throws a user-facing error if the
 // chosen channel isn't configured yet.
+export interface TaxInvoicePaymentConfig {
+  bankAccountId?: number // FlowAccount bank account, resolved from settings.tax_invoice_bank_account_id
+  edcChannelId?: number // FlowAccount "other channel" id, from settings.tax_invoice_edc_channel_id
+  edcChannelName?: string
+}
+
+// bankAccountId/edcChannelId come from Settings (ตั้งค่า > ระบบ), not env vars — staff pick
+// them from a live FlowAccount dropdown there, so this stays a pure function of what the
+// caller resolved rather than reaching into process.env itself.
 export function resolveTaxInvoicePayment(
   method: 'cash' | 'transfer' | 'credit_card',
   paymentDate: string,
   roundingAmount: number,
+  config: TaxInvoicePaymentConfig,
 ): TaxInvoicePayment {
   if (method === 'cash') return { paymentDate, method: 'cash', roundingAmount }
   if (method === 'transfer') {
-    const bankAccountId = Number(process.env.FLOWACCOUNT_BANK_ACCOUNT_ID)
-    if (!bankAccountId) throw new Error('ยังไม่ได้ตั้งค่าบัญชีธนาคารสำหรับรับโอนเงินใน FlowAccount (FLOWACCOUNT_BANK_ACCOUNT_ID)')
-    return { paymentDate, method: 'transfer', bankAccountId, roundingAmount }
+    if (!config.bankAccountId) throw new Error('ยังไม่ได้ตั้งค่าบัญชีธนาคารสำหรับรับโอนเงินใบกำกับภาษี — ไปตั้งค่าที่หน้าตั้งค่าระบบก่อน')
+    return { paymentDate, method: 'transfer', bankAccountId: config.bankAccountId, roundingAmount }
   }
-  const otherChannelId = Number(process.env.FLOWACCOUNT_EDC_CHANNEL_ID)
-  if (!otherChannelId) throw new Error('ยังไม่ได้ตั้งค่าเครื่องรูดบัตร EDC ใน FlowAccount (FLOWACCOUNT_EDC_CHANNEL_ID)')
+  if (!config.edcChannelId) throw new Error('ยังไม่ได้ตั้งค่าช่องทางเครื่องรูดบัตร EDC สำหรับใบกำกับภาษี — ไปตั้งค่าที่หน้าตั้งค่าระบบก่อน')
   return {
     paymentDate,
     method: 'otherChannel',
-    otherChannelId,
+    otherChannelId: config.edcChannelId,
     otherChannelType: 5, // EDC
-    otherChannelName: process.env.FLOWACCOUNT_EDC_CHANNEL_NAME || 'เครื่องรูดบัตรเครดิต',
+    otherChannelName: config.edcChannelName || 'เครื่องรูดบัตรเครดิต',
     roundingAmount,
   }
 }

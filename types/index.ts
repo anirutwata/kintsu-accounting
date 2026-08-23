@@ -24,6 +24,11 @@ export interface Settings {
   pp_promptpay_bank_id?: string | null
   pp_company_transfer_bank_id?: string | null
   pp_credit_card_bank_id?: string | null
+  // Shared by tax-invoice-request approvals and the daily-sales FlowAccount sync — both
+  // record incoming transfer/card payments through the same bank account and EDC channel.
+  default_transfer_bank_account_id?: string | null
+  default_edc_channel_id?: number | null
+  default_edc_channel_name?: string | null
   updated_at: string
 }
 
