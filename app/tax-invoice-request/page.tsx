@@ -2,6 +2,29 @@
 import { useState } from 'react'
 import { getTodayBKK } from '@/lib/utils'
 
+// Everything on this page is Thai — a native <input type="date"> renders in whatever
+// language the customer's device happens to be set to (e.g. "24 Aug 2026"), which the
+// page can't override. Three plain <select>s sidestep that entirely: day / เดือน (Thai
+// name) / ปี (พ.ศ.), a layout Thai government and bank forms already use.
+const THAI_MONTHS = [
+  'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
+]
+const BUDDHIST_ERA_OFFSET = 543
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate() // month is 1-12; day 0 of next month = last day of this one
+}
+
+function parseIsoDate(iso: string) {
+  const [year, month, day] = iso.split('-').map(Number)
+  return { year, month, day }
+}
+
+function toIsoDate(year: number, month: number, day: number): string {
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
 const emptyForm = () => ({
   document_date: getTodayBKK(), // วันที่ในบิล/ใบเสร็จ — ใช้เป็นวันที่บนใบกำกับภาษี ไม่ใช่วันที่อนุมัติ
   contact_group: 'juristic' as 'juristic' | 'individual',
@@ -38,6 +61,19 @@ export default function TaxInvoiceRequestPage() {
   function set<K extends keyof ReturnType<typeof emptyForm>>(key: K, value: ReturnType<typeof emptyForm>[K]) {
     setForm(f => ({ ...f, [key]: value }))
     setConfirmed(false)
+  }
+
+  // Merges a change from one of the three date <select>s into form.document_date, clamping
+  // the day if the new month/year has fewer days (e.g. 31 มกราคม → กุมภาพันธ์ clamps to 28/29),
+  // and never letting the combination land in the future (the month/year options are also
+  // capped for the current year so this is a backstop, not the primary guard).
+  function updateDate(change: { day?: number; month?: number; year?: number }) {
+    const current = parseIsoDate(form.document_date)
+    const next = { ...current, ...change }
+    const maxDay = daysInMonth(next.year, next.month)
+    const iso = toIsoDate(next.year, next.month, Math.min(next.day, maxDay))
+    const todayIso = getTodayBKK()
+    set('document_date', iso > todayIso ? todayIso : iso)
   }
 
   async function lookupTaxId(digits: string, branchNumber: number) {
@@ -156,19 +192,39 @@ export default function TaxInvoiceRequestPage() {
           </Field>
 
           <Field label="วันที่ในบิล/ใบเสร็จ *">
-            <input required type="date" value={form.document_date}
-              onChange={e => set('document_date', e.target.value)}
-              max={getTodayBKK()}
-              className="w-full border rounded-xl px-3 py-2 text-sm" />
-            {/* Native date pickers render in whatever language the device/browser is set
-                to (e.g. "24 Aug 2026" on an English-locale phone) — the page can't force
-                that. Show the Thai reading alongside it so the customer can confirm the
-                date is right regardless of their device's language. */}
-            {form.document_date && (
-              <p className="text-xs text-gray-500 mt-1">
-                {new Date(form.document_date + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
-              </p>
-            )}
+            {(() => {
+              const today = parseIsoDate(getTodayBKK())
+              const dateParts = parseIsoDate(form.document_date)
+              const isCurrentYear = dateParts.year === today.year
+              const isCurrentYearMonth = isCurrentYear && dateParts.month === today.month
+              const maxDay = Math.min(daysInMonth(dateParts.year, dateParts.month), isCurrentYearMonth ? today.day : 31)
+              return (
+                <div className="grid grid-cols-3 gap-2">
+                  <select required value={dateParts.day}
+                    onChange={e => updateDate({ day: Number(e.target.value) })}
+                    className="border rounded-xl px-1 py-2 text-sm text-center">
+                    {Array.from({ length: maxDay }, (_, i) => i + 1).map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                  <select required value={dateParts.month}
+                    onChange={e => updateDate({ month: Number(e.target.value) })}
+                    className="border rounded-xl px-1 py-2 text-sm">
+                    {THAI_MONTHS.map((name, i) => (
+                      (!isCurrentYear || i + 1 <= today.month) &&
+                      <option key={i} value={i + 1}>{name}</option>
+                    ))}
+                  </select>
+                  <select required value={dateParts.year}
+                    onChange={e => updateDate({ year: Number(e.target.value) })}
+                    className="border rounded-xl px-1 py-2 text-sm">
+                    {Array.from({ length: 6 }, (_, i) => today.year - i).map(y => (
+                      <option key={y} value={y}>{y + BUDDHIST_ERA_OFFSET}</option>
+                    ))}
+                  </select>
+                </div>
+              )
+            })()}
             <p className="text-[10px] text-gray-400 mt-1">วันที่ตามที่ระบุบนบิล — จะใช้เป็นวันที่บนใบกำกับภาษี</p>
           </Field>
 
