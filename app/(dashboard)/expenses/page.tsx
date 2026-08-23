@@ -72,8 +72,10 @@ const emptyForm = () => ({
   document_date: getTodayBKK(),  // วันที่เอกสาร/ใบแจ้งหนี้ — ใช้คำนวณ P&L
   date: getTodayBKK(),           // วันที่ชำระเงินจริง — ใช้กระทบยอดธนาคาร
   transfer_time: '',
+  discount: '',
   has_vat: false,
   vat: '',
+  vat_inclusive: false, // default: ราคาไม่รวมภาษี (ตรงกับใบกำกับภาษี/ใบวางบิลทั่วไป) — เปลี่ยนเป็นราคารวมภาษีเองถ้าบิลเป็นแบบนั้น
   has_wht: false,
   wht: '',
   items: [emptyItemRow()] as ItemRow[],
@@ -93,6 +95,14 @@ const emptyForm = () => ({
 // base for VAT auto-calc, and as the expense's amount_satang on submit.
 function itemsTotal(items: ItemRow[]): number {
   return items.reduce((sum, i) => sum + (parseFloat(i.quantity) || 0) * (parseFloat(i.price_per_unit) || 0), 0)
+}
+
+// จำนวนเงินรวมทั้งสิ้น (ยอดที่ต้องชำระจริง ก่อนหัก ณ ที่จ่าย) — หักส่วนลดจากยอดสินค้าก่อน
+// แล้วบวก VAT เข้าไปถ้า VAT เป็นแบบบวกเพิ่ม (ไม่ได้รวมอยู่ในราคาต่อหน่วยแล้ว)
+function grandTotal(items: ItemRow[], discount: string, hasVat: boolean, vatInclusive: boolean, vat: string): number {
+  const afterDiscount = itemsTotal(items) - (parseFloat(discount) || 0)
+  const vatAmount = hasVat ? (parseFloat(vat) || 0) : 0
+  return afterDiscount + (hasVat && !vatInclusive ? vatAmount : 0)
 }
 
 interface Category { id: string; name: string; sort_order: number; category_type: string }
@@ -282,10 +292,13 @@ export default function ExpensesPage() {
         const data = await res.json()
         if (data.hasVat && data.vatSatang > 0) {
           // Guard again at write time — staff may have ticked VAT manually while OCR was in flight.
-          setForm(f => (f.has_vat || f.vat ? f : { ...f, has_vat: true, vat: (data.vatSatang / 100).toFixed(2) }))
+          setForm(f => (f.has_vat || f.vat ? f : { ...f, has_vat: true, vat: (data.vatSatang / 100).toFixed(2), vat_inclusive: !!data.vatInclusive }))
         }
         if (data.hasWht && data.whtSatang > 0) {
           setForm(f => (f.has_wht || f.wht ? f : { ...f, has_wht: true, wht: (data.whtSatang / 100).toFixed(2) }))
+        }
+        if (data.hasDiscount && data.discountSatang > 0) {
+          setForm(f => (f.discount ? f : { ...f, discount: (data.discountSatang / 100).toFixed(2) }))
         }
       } catch { /* ignore — staff can still tick VAT/WHT manually */ }
       setVatOcring(false)
@@ -325,6 +338,7 @@ export default function ExpensesPage() {
     setLoading(true)
     try {
       const amountSatang = toSatang(itemsTotal(form.items))
+      const discountSatang = toSatang(parseFloat(form.discount.replace(/,/g, '')) || 0)
       const vatSatang = form.has_vat ? toSatang(parseFloat(form.vat.replace(/,/g, '')) || 0) : 0
       const whtSatang = form.has_wht ? toSatang(parseFloat(form.wht.replace(/,/g, '')) || 0) : 0
       const selectedBank = bankAccounts.find(b => b.id === form.bank_account_id)
@@ -342,7 +356,9 @@ export default function ExpensesPage() {
           price_per_unit_satang: toSatang(parseFloat(i.price_per_unit) || 0),
         })),
         amount_satang: amountSatang,
+        discount_satang: discountSatang,
         vat_satang: vatSatang,
+        vat_inclusive: form.vat_inclusive,
         wht_satang: whtSatang,
         payment_method: paymentMethod,
         bank_account_id: isBank ? form.bank_account_id : null,
@@ -391,8 +407,10 @@ export default function ExpensesPage() {
       document_date: exp.document_date || exp.date,
       date: exp.date,
       transfer_time: exp.transfer_time || '',
+      discount: exp.discount_satang ? String(exp.discount_satang / 100) : '',
       has_vat: !!exp.vat_satang,
       vat: exp.vat_satang ? String(exp.vat_satang / 100) : '',
+      vat_inclusive: exp.vat_inclusive ?? false,
       has_wht: !!exp.wht_satang,
       wht: exp.wht_satang ? String(exp.wht_satang / 100) : '',
       // Placeholder single row for an expense saved before line items existed —
@@ -626,11 +644,18 @@ export default function ExpensesPage() {
                   ))}
                 </div>
               )}
-              <DetailRow label="ยอดเงิน" value={formatBaht(selectedExpense.total_satang)} bold />
+              {(!!selectedExpense.discount_satang || (!!selectedExpense.vat_satang && !selectedExpense.vat_inclusive)) && (
+                <>
+                  <DetailRow label="ยอดสินค้า" value={formatBaht(selectedExpense.amount_satang)} />
+                  {!!selectedExpense.discount_satang && <DetailRow label="ส่วนลด" value={`-${formatBaht(selectedExpense.discount_satang)}`} />}
+                  {!!selectedExpense.vat_satang && !selectedExpense.vat_inclusive && <DetailRow label="VAT" value={`+${formatBaht(selectedExpense.vat_satang)}`} />}
+                </>
+              )}
+              <DetailRow label="จำนวนเงินรวมทั้งสิ้น" value={formatBaht(selectedExpense.total_satang)} bold />
               {!!selectedExpense.wht_satang && (
                 <>
                   <DetailRow label="หัก ณ ที่จ่าย" value={`-${formatBaht(selectedExpense.wht_satang)}`} />
-                  <DetailRow label="ยอดจ่ายสุทธิ" value={formatBaht(selectedExpense.total_satang - selectedExpense.wht_satang)} bold />
+                  <DetailRow label="ยอดชำระ" value={formatBaht(selectedExpense.total_satang - selectedExpense.wht_satang)} bold />
                 </>
               )}
               <DetailRow label="วิธีชำระ" value={selectedExpense.payment_method} />
@@ -931,8 +956,21 @@ export default function ExpensesPage() {
                 </p>
               </div>
 
-              {/* VAT — how much of the amount above is VAT, not an add-on (matches how
-                  a retail receipt already shows one VAT-inclusive grand total) */}
+              {/* ส่วนลด — หักออกจากยอดสินค้าก่อนคำนวณ VAT/จำนวนเงินรวมทั้งสิ้น */}
+              <div>
+                <label className="text-sm font-medium block mb-1.5" style={{ color: 'var(--muted-foreground)' }}>ส่วนลด (ถ้ามี)</label>
+                <input type="text" inputMode="decimal"
+                  value={form.discount}
+                  onChange={e => {
+                    const raw = e.target.value.replace(/,/g, '').replace(/[^\d.]/g, '')
+                    if (/^\d*\.?\d{0,2}$/.test(raw)) setForm(f => ({ ...f, discount: raw }))
+                  }}
+                  className="w-full border rounded-xl px-3 py-2.5 text-right text-base"
+                  style={{ borderColor: 'var(--border)' }} placeholder="ส่วนลด (บาท)" />
+              </div>
+
+              {/* VAT — ราคาสินค้าด้านบนรวม VAT อยู่แล้วหรือยัง (default: ยังไม่รวม —
+                  ตรงกับใบกำกับภาษี/ใบวางบิลทั่วไปที่ตั้งราคาก่อน VAT แล้วบวก VAT แยกบรรทัด) */}
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>
                   <input type="checkbox" checked={form.has_vat}
@@ -940,30 +978,49 @@ export default function ExpensesPage() {
                       const checked = e.target.checked
                       setForm(f => {
                         if (!checked) return { ...f, has_vat: false, vat: '' }
-                        const amt = itemsTotal(f.items)
-                        const autoVat = amt > 0 ? (amt - amt / 1.07).toFixed(2) : ''
+                        const net = itemsTotal(f.items) - (parseFloat(f.discount) || 0)
+                        const autoVat = net > 0 ? (f.vat_inclusive ? net - net / 1.07 : net * 0.07).toFixed(2) : ''
                         return { ...f, has_vat: true, vat: f.vat || autoVat }
                       })
                     }} />
-                  มี VAT (รวมอยู่ในยอดเงินด้านบนแล้ว)
+                  มี VAT
                 </label>
                 {vatOcring && (
-                  <p className="text-xs mb-1.5" style={{ color: 'var(--muted-foreground)' }}>🔍 กำลังตรวจสอบ VAT/หัก ณ ที่จ่ายจากรูปบิล...</p>
+                  <p className="text-xs mb-1.5" style={{ color: 'var(--muted-foreground)' }}>🔍 กำลังตรวจสอบ VAT/ส่วนลด/หัก ณ ที่จ่ายจากรูปบิล...</p>
                 )}
                 {form.has_vat && (
-                  <input type="text" inputMode="decimal"
-                    value={form.vat}
-                    onChange={e => {
-                      const raw = e.target.value.replace(/,/g, '').replace(/[^\d.]/g, '')
-                      if (/^\d*\.?\d{0,2}$/.test(raw)) setForm(f => ({ ...f, vat: raw }))
-                    }}
-                    className="w-full border rounded-xl px-3 py-2.5 text-right text-base"
-                    style={{ borderColor: 'var(--border)' }} placeholder="VAT (บาท) — คำนวณ 7% ให้อัตโนมัติ แก้ไขได้" />
+                  <div className="space-y-1.5">
+                    <select value={form.vat_inclusive ? '1' : '0'}
+                      onChange={e => {
+                        const inclusive = e.target.value === '1'
+                        setForm(f => {
+                          const net = itemsTotal(f.items) - (parseFloat(f.discount) || 0)
+                          const autoVat = net > 0 ? (inclusive ? net - net / 1.07 : net * 0.07).toFixed(2) : ''
+                          return { ...f, vat_inclusive: inclusive, vat: autoVat }
+                        })
+                      }}
+                      className="w-full border rounded-xl px-3 py-2.5 text-sm" style={{ borderColor: 'var(--border)', background: 'white' }}>
+                      <option value="0">ราคาไม่รวมภาษี</option>
+                      <option value="1">ราคารวมภาษี</option>
+                    </select>
+                    <input type="text" inputMode="decimal"
+                      value={form.vat}
+                      onChange={e => {
+                        const raw = e.target.value.replace(/,/g, '').replace(/[^\d.]/g, '')
+                        if (/^\d*\.?\d{0,2}$/.test(raw)) setForm(f => ({ ...f, vat: raw }))
+                      }}
+                      className="w-full border rounded-xl px-3 py-2.5 text-right text-base"
+                      style={{ borderColor: 'var(--border)' }} placeholder="VAT (บาท) — คำนวณ 7% ให้อัตโนมัติ แก้ไขได้" />
+                  </div>
                 )}
               </div>
 
+              <p className="text-right text-sm font-semibold" style={{ color: 'var(--charcoal)' }}>
+                จำนวนเงินรวมทั้งสิ้น {grandTotal(form.items, form.discount, form.has_vat, form.vat_inclusive, form.vat).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท
+              </p>
+
               {/* หัก ณ ที่จ่าย — บิลของผู้จำหน่ายบางเจ้าหักไว้แล้วก่อนคำนวณ "ยอดชำระ"
-                  ยอดเงินด้านบนยังเป็นยอดเต็มตามบิล (ยอดที่รับรู้เป็นค่าใช้จ่าย) ส่วนนี้แค่บันทึกว่า
+                  จำนวนเงินรวมทั้งสิ้นด้านบนยังเป็นยอดเต็มตามบิล ส่วนนี้แค่บันทึกว่า
                   ส่วนหนึ่งของยอดนั้นไม่ได้จ่ายให้ผู้จำหน่ายจริง (นำส่งกรมสรรพากรแทน) — ยังไม่สร้าง
                   เอกสารหัก ณ ที่จ่ายใน FlowAccount ให้อัตโนมัติ (รอออกแบบขั้นตอนแยกต่างหาก) */}
               <div>
@@ -986,6 +1043,12 @@ export default function ExpensesPage() {
                     style={{ borderColor: 'var(--border)' }} placeholder="ยอดหัก ณ ที่จ่าย (บาท) — ตามตัวเลขบนบิล" />
                 )}
               </div>
+
+              {form.has_wht && (
+                <p className="text-right text-sm font-bold" style={{ color: 'var(--flame-red)' }}>
+                  ยอดชำระ {(grandTotal(form.items, form.discount, form.has_vat, form.vat_inclusive, form.vat) - (parseFloat(form.wht) || 0)).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท
+                </p>
+              )}
 
               {/* ชำระด้วย */}
               <div>

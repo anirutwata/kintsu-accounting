@@ -39,7 +39,7 @@ export async function POST(req: Request) {
   const userName = cookieStore.get('kintsu_acc_name')?.value || 'ไม่ระบุ'
 
   const body = await req.json()
-  const { category, amount_satang, vat_satang, wht_satang, payment_method, bank_account_id,
+  const { category, amount_satang, vat_satang, vat_inclusive, wht_satang, discount_satang, payment_method, bank_account_id,
           transfer_time, sender_name, sender_bank, sender_account,
           recipient_name, recipient_address, slip_image_url, slip_hash, ocr_data,
           receipt_image_urls, note, date, document_date,
@@ -62,6 +62,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'กรุณากรอกหมวดหมู่และจำนวนเงิน' }, { status: 400 })
   }
 
+  // จำนวนเงินรวมทั้งสิ้น (ยอดที่ต้องชำระจริง) — หักส่วนลดออกจากยอดสินค้าก่อน แล้วค่อยบวก VAT
+  // เข้าไปถ้า VAT เป็นแบบบวกเพิ่ม (ไม่ได้รวมอยู่ในราคาต่อหน่วยแล้ว). amount_satang ไม่เปลี่ยน —
+  // ยังเป็นฐานต้นทุนต่อรายการสำหรับ P&L เหมือนเดิม
+  const isVatInclusive = vat_inclusive ?? true
+  const totalAfterDiscount = computedAmountSatang - (discount_satang || 0)
+  const computedTotalSatang = totalAfterDiscount + (isVatInclusive ? 0 : (vat_satang || 0))
+
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
   const paymentDate = date || today
   const invoiceDate = document_date || paymentDate
@@ -74,8 +81,10 @@ export async function POST(req: Request) {
       category: computedCategory,
       amount_satang: computedAmountSatang,
       vat_satang: vat_satang || 0,
+      vat_inclusive: isVatInclusive,
       wht_satang: wht_satang || 0,
-      total_satang: computedAmountSatang,
+      discount_satang: discount_satang || 0,
+      total_satang: computedTotalSatang,
       payment_method: payment_method || 'เงินสด',
       bank_account_id: bank_account_id || null,
       transfer_time: transfer_time || null,

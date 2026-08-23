@@ -10,8 +10,11 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 export interface ExtractedBillVat {
   hasVat: boolean
   vatSatang: number
+  vatInclusive: boolean
   hasWht: boolean
   whtSatang: number
+  hasDiscount: boolean
+  discountSatang: number
   totalSatang: number | null
   confidence: number
 }
@@ -34,13 +37,16 @@ export async function extractVatFromReceipt(imageUrl: string): Promise<Extracted
         { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
         {
           type: 'text',
-          text: `อ่านบิล/ใบเสร็จ/ใบกำกับภาษีนี้ เพื่อตรวจสอบว่ามีภาษีมูลค่าเพิ่ม (VAT) และ/หรือภาษีหัก ณ ที่จ่าย แสดงอยู่หรือไม่ ตอบเป็น JSON เท่านั้น ไม่ต้องมีคำอธิบาย:
+          text: `อ่านบิล/ใบเสร็จ/ใบกำกับภาษีนี้ เพื่อตรวจสอบภาษีมูลค่าเพิ่ม (VAT), ส่วนลด, และภาษีหัก ณ ที่จ่าย ตอบเป็น JSON เท่านั้น ไม่ต้องมีคำอธิบาย:
 {
   "has_vat": <true เฉพาะเมื่อเห็นคำว่า "ภาษีมูลค่าเพิ่ม"/"VAT"/"มูลค่าเพิ่ม 7%" พร้อมยอดตัวเลขบนบิลจริงๆ เท่านั้น ห้ามเดา ถ้าไม่แน่ใจให้ false>,
   "vat_baht": <ยอด VAT เป็นบาท ตามตัวเลขที่ระบุตรงๆ บนบิล ถ้า has_vat เป็น false ให้ใส่ 0>,
+  "vat_inclusive": <true เฉพาะเมื่อราคาต่อหน่วย/ยอดรวมสินค้าที่พิมพ์บนบิล "รวม VAT อยู่แล้ว" ไม่มีการบวก VAT แยกเพิ่มอีกทีตอนคำนวณยอดรวมทั้งสิ้น (เช่น ใบเสร็จร้านค้าปลีกที่ราคาโชว์รวมภาษีบนป้าย) — false เมื่อบิลแสดงยอดก่อน VAT (เช่น "รวมเป็นเงิน") แล้วบวก VAT แยกเป็นอีกบรรทัดต่างหากเพื่อได้ "จำนวนเงินรวมทั้งสิ้น" (แบบใบกำกับภาษี/ใบวางบิลทั่วไปส่วนใหญ่) ถ้า has_vat เป็น false ใส่ false>,
+  "has_discount": <true เฉพาะเมื่อเห็นคำว่า "ส่วนลด"/"Discount" พร้อมยอดตัวเลขบนบิลจริงๆ เท่านั้น ห้ามเดา>,
+  "discount_baht": <ยอดส่วนลดเป็นบาท ตามตัวเลขที่ระบุตรงๆ บนบิล ถ้า has_discount เป็น false ให้ใส่ 0>,
   "has_wht": <true เฉพาะเมื่อเห็นคำว่า "หัก ณ ที่จ่าย"/"ภาษีหัก ณ ที่จ่าย"/"Withholding Tax" พร้อมยอดตัวเลขบนบิลจริงๆ เท่านั้น (มักอยู่แถวเดียวกับ "ยอดชำระ" ที่เป็นยอดสุทธิหลังหัก) ห้ามเดา ถ้าไม่แน่ใจให้ false>,
   "wht_baht": <ยอดภาษีหัก ณ ที่จ่ายเป็นบาท ตามตัวเลขที่ระบุตรงๆ บนบิล ถ้า has_wht เป็น false ให้ใส่ 0>,
-  "total_baht": <ยอดรวม/จำนวนเงินรวมทั้งสิ้นตามบิล (ก่อนหักภาษี ณ ที่จ่าย ถ้ามี) สำหรับใช้ตรวจสอบไขว้ ถ้าอ่านไม่ได้ให้ใส่ 0>,
+  "total_baht": <ยอดรวม/จำนวนเงินรวมทั้งสิ้นตามบิล (หลังหักส่วนลด รวม VAT แล้ว แต่ก่อนหักภาษี ณ ที่จ่าย ถ้ามี) สำหรับใช้ตรวจสอบไขว้ ถ้าอ่านไม่ได้ให้ใส่ 0>,
   "confidence": <0.0-1.0 ความมั่นใจโดยรวม>
 }`,
         },
@@ -56,8 +62,11 @@ export async function extractVatFromReceipt(imageUrl: string): Promise<Extracted
     return {
       hasVat: !!parsed.has_vat,
       vatSatang: Math.round((parsed.vat_baht ?? 0) * 100),
+      vatInclusive: !!parsed.vat_inclusive,
       hasWht: !!parsed.has_wht,
       whtSatang: Math.round((parsed.wht_baht ?? 0) * 100),
+      hasDiscount: !!parsed.has_discount,
+      discountSatang: Math.round((parsed.discount_baht ?? 0) * 100),
       totalSatang: parsed.total_baht ? Math.round(parsed.total_baht * 100) : null,
       confidence: parsed.confidence ?? 0,
     }

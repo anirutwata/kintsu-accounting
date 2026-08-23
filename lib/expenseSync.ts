@@ -146,6 +146,8 @@ function buildExpenseInput(expense: any, items: any[], contactName: string, cont
     publishedOn: expense.document_date || expense.date,
     remarks: expense.note ?? '',
     vatAmount: expense.vat_satang ? expense.vat_satang / 100 : undefined,
+    vatInclusive: expense.vat_inclusive ?? true,
+    discountAmount: expense.discount_satang ? expense.discount_satang / 100 : 0,
     items,
   }
 }

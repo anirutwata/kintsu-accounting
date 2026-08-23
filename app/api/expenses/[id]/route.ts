@@ -11,10 +11,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const updaterName = cookieStore.get('kintsu_acc_name')?.value || null
 
   const body = await req.json()
-  const { amount_satang, vat_satang, wht_satang, items, ...rest } = body as {
+  const { amount_satang, vat_satang, vat_inclusive, wht_satang, discount_satang, items, ...rest } = body as {
     amount_satang?: number
     vat_satang?: number
+    vat_inclusive?: boolean
     wht_satang?: number
+    discount_satang?: number
     items?: { category: string; description: string; quantity: number; unit: string; price_per_unit_satang: number }[]
     [k: string]: any
   }
@@ -37,13 +39,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   if (computedAmountSatang !== undefined) {
-    // amount_satang is the total actually paid (matches the receipt's grand total);
-    // vat_satang is how much of that total is VAT, not an add-on — total_satang
-    // never changes based on VAT, only how it's later reported to FlowAccount.
+    // total_satang (จำนวนเงินรวมทั้งสิ้น) = amount_satang - discount, plus VAT on top
+    // when vat_inclusive is false (VAT not already baked into the item prices).
+    // amount_satang itself stays the raw item-line sum — unaffected, still the P&L cost basis.
+    const isVatInclusive = vat_inclusive ?? true
+    const totalAfterDiscount = computedAmountSatang - (discount_satang || 0)
     updates.amount_satang = computedAmountSatang
     updates.vat_satang = vat_satang || 0
+    updates.vat_inclusive = isVatInclusive
     updates.wht_satang = wht_satang || 0
-    updates.total_satang = computedAmountSatang
+    updates.discount_satang = discount_satang || 0
+    updates.total_satang = totalAfterDiscount + (isVatInclusive ? 0 : (vat_satang || 0))
   }
 
   const { data, error } = await supabase

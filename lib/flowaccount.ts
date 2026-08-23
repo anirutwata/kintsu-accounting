@@ -195,10 +195,14 @@ export interface CreateExpenseInput {
   contact?: FlowAccountContact | null // from findContact() — links to the existing contact instead of creating a duplicate
   publishedOn: string // YYYY-MM-DD
   remarks?: string
-  // VAT already included in the item prices below (baht) — e.g. a retail receipt
-  // where the shelf/line price is VAT-inclusive. FlowAccount backs the 7% taxable
-  // base out of the total itself; subTotal/grandTotal stay the same figure either way.
+  // VAT amount in baht, and whether it's already included in the item prices below.
+  // vatInclusive true (retail-receipt style, shelf/line price already incl. VAT):
+  // FlowAccount backs the 7% taxable base out of the total; grandTotal == subTotal.
+  // vatInclusive false (formal tax-invoice style, e.g. ใบวางบิล/ใบแจ้งหนี้ — items
+  // priced ex-VAT, VAT 7% a separate line): grandTotal = subTotal + vatAmount.
   vatAmount?: number
+  vatInclusive?: boolean // ignored when vatAmount is unset; defaults true
+  discountAmount?: number // baht, deducted from subTotal before VAT — matches FlowAccount's own discountAmount/totalAfterDiscount fields
   items: {
     description: string
     category: ExpenseCategory // from getExpenseCategories()
@@ -230,6 +234,10 @@ function buildExpensePayload(input: CreateExpenseInput) {
     }
   })
   const subTotal = round2(items.reduce((sum, i) => sum + i.total, 0))
+  const vatInclusive = input.vatInclusive ?? true
+  const discountAmount = round2(input.discountAmount ?? 0)
+  const totalAfterDiscount = round2(subTotal - discountAmount)
+  const grandTotal = !input.vatAmount || vatInclusive ? totalAfterDiscount : round2(totalAfterDiscount + input.vatAmount)
 
   return {
     contactName: input.contact?.name ?? input.contactName,
@@ -242,13 +250,13 @@ function buildExpensePayload(input: CreateExpenseInput) {
         }
       : {}),
     publishedOn: input.publishedOn,
-    isVatInclusive: !!input.vatAmount,
+    isVatInclusive: vatInclusive,
     isVat: !!input.vatAmount,
     subTotal,
-    discountAmount: 0,
-    totalAfterDiscount: subTotal,
+    discountAmount,
+    totalAfterDiscount,
     vatAmount: input.vatAmount ?? 0,
-    grandTotal: subTotal,
+    grandTotal,
     remarks: input.remarks ?? '',
     items,
   }
