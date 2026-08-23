@@ -737,6 +737,96 @@ export default function ExpensesPage() {
 
             <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
 
+              {/* ── ใบเสร็จ/บิล ──────────────────────────────────────── */}
+              <div>
+                <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>
+                  ใบเสร็จ/บิล <span className="font-normal text-xs">(ไม่บังคับ — แนบได้หลายรูป)</span>
+                </label>
+                <input ref={receiptRef} type="file" accept="image/*" multiple className="hidden"
+                  onChange={e => { const files = e.target.files; if (files?.length) handleReceiptUpload(files) }} />
+
+                {form.receipt_previews.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2 mb-2">
+                    {form.receipt_previews.map((p, i) => (
+                      <div key={i} className="relative">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={p} alt={`receipt-${i}`}
+                          className="w-full aspect-square object-cover rounded-lg border"
+                          style={{ borderColor: 'var(--border)' }} />
+                        <button type="button"
+                          onClick={() => setForm(f => ({
+                            ...f,
+                            receipt_image_urls: f.receipt_image_urls.filter((_, idx) => idx !== i),
+                            receipt_previews: f.receipt_previews.filter((_, idx) => idx !== i),
+                          }))}
+                          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center leading-none font-bold">
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button type="button" onClick={() => receiptRef.current?.click()}
+                  className="w-full py-4 border-2 border-dashed rounded-xl text-sm flex items-center justify-center gap-2"
+                  style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+                  {uploadingReceipt ? (
+                    <><span className="animate-spin">⏳</span> กำลังอัปโหลด...</>
+                  ) : (
+                    <><span>🧾</span> กดเพื่อแนบ ใบเสร็จ/บิล (แนบได้หลายรูป)</>
+                  )}
+                </button>
+              </div>
+
+              {/* ── สลิป ─────────────────────────────────────────────── */}
+              <div>
+                <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>
+                  สลิป <span className="font-normal text-xs">(ไม่บังคับ)</span>
+                </label>
+                <input ref={slipRef} type="file" accept="image/*" className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleSlipUpload(f) }} />
+
+                {form.slip_url_preview ? (
+                  <div className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={form.slip_url_preview} alt="slip" className="w-full rounded-xl object-contain max-h-64 border"
+                      style={{ borderColor: 'var(--border)' }} />
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      <button type="button" onClick={() => slipRef.current?.click()}
+                        className="bg-black/50 text-white text-xs px-2 py-1 rounded-lg">
+                        เปลี่ยน
+                      </button>
+                      <button type="button" onClick={() => setForm(f => ({ ...f, slip_image_url: '', slip_url_preview: '', slip_hash: '', ocr_data: null }))}
+                        className="bg-red-500 text-white text-xs px-2 py-1 rounded-lg">
+                        ลบ
+                      </button>
+                    </div>
+                    {form.ocr_data && (
+                      <div className="mt-2 p-3 rounded-xl text-xs space-y-1"
+                        style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
+                        {form.ocr_data.sender_name && <p>ผู้โอน: <span className="font-medium text-gray-700">{form.ocr_data.sender_name}</span></p>}
+                        {form.ocr_data.sender_bank && <p>ธนาคาร: <span className="font-medium text-gray-700">{form.ocr_data.sender_bank} {form.ocr_data.sender_account}</span></p>}
+                        {form.ocr_data.recipient && <p>ผู้รับ: <span className="font-medium text-gray-700">{form.ocr_data.recipient}</span></p>}
+                        {form.ocr_data.ref_number && <p>อ้างอิง: <span className="font-medium text-gray-700">{form.ocr_data.ref_number}</span></p>}
+                        {form.ocr_data.confidence > 0 && (
+                          <p>ความมั่นใจ: <span className="font-medium text-green-600">{Math.round(form.ocr_data.confidence * 100)}%</span></p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => slipRef.current?.click()}
+                    className="w-full py-4 border-2 border-dashed rounded-xl text-sm flex items-center justify-center gap-2 transition-colors"
+                    style={{ borderColor: ocring ? 'var(--flame-red)' : 'var(--border)', color: 'var(--muted-foreground)' }}>
+                    {ocring ? (
+                      <><span className="animate-spin">⏳</span> กำลังอ่านสลิป...</>
+                    ) : (
+                      <><span>📎</span> กดเพื่อแนบสลิป</>
+                    )}
+                  </button>
+                )}
+              </div>
+
               {/* Document Date (P&L) */}
               <div>
                 <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--charcoal)' }}>
@@ -963,96 +1053,6 @@ export default function ExpensesPage() {
                 <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>บันทึกโดย</label>
                 <input type="text" value={userName} readOnly
                   className="w-full border rounded-xl px-3 py-2.5 bg-gray-50" style={{ borderColor: 'var(--border)' }} />
-              </div>
-
-              {/* ── สลิป ─────────────────────────────────────────────── */}
-              <div>
-                <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>
-                  สลิป <span className="font-normal text-xs">(ไม่บังคับ)</span>
-                </label>
-                <input ref={slipRef} type="file" accept="image/*" className="hidden"
-                  onChange={e => { const f = e.target.files?.[0]; if (f) handleSlipUpload(f) }} />
-
-                {form.slip_url_preview ? (
-                  <div className="relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={form.slip_url_preview} alt="slip" className="w-full rounded-xl object-contain max-h-64 border"
-                      style={{ borderColor: 'var(--border)' }} />
-                    <div className="absolute top-2 right-2 flex gap-1">
-                      <button type="button" onClick={() => slipRef.current?.click()}
-                        className="bg-black/50 text-white text-xs px-2 py-1 rounded-lg">
-                        เปลี่ยน
-                      </button>
-                      <button type="button" onClick={() => setForm(f => ({ ...f, slip_image_url: '', slip_url_preview: '', slip_hash: '', ocr_data: null }))}
-                        className="bg-red-500 text-white text-xs px-2 py-1 rounded-lg">
-                        ลบ
-                      </button>
-                    </div>
-                    {form.ocr_data && (
-                      <div className="mt-2 p-3 rounded-xl text-xs space-y-1"
-                        style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
-                        {form.ocr_data.sender_name && <p>ผู้โอน: <span className="font-medium text-gray-700">{form.ocr_data.sender_name}</span></p>}
-                        {form.ocr_data.sender_bank && <p>ธนาคาร: <span className="font-medium text-gray-700">{form.ocr_data.sender_bank} {form.ocr_data.sender_account}</span></p>}
-                        {form.ocr_data.recipient && <p>ผู้รับ: <span className="font-medium text-gray-700">{form.ocr_data.recipient}</span></p>}
-                        {form.ocr_data.ref_number && <p>อ้างอิง: <span className="font-medium text-gray-700">{form.ocr_data.ref_number}</span></p>}
-                        {form.ocr_data.confidence > 0 && (
-                          <p>ความมั่นใจ: <span className="font-medium text-green-600">{Math.round(form.ocr_data.confidence * 100)}%</span></p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => slipRef.current?.click()}
-                    className="w-full py-4 border-2 border-dashed rounded-xl text-sm flex items-center justify-center gap-2 transition-colors"
-                    style={{ borderColor: ocring ? 'var(--flame-red)' : 'var(--border)', color: 'var(--muted-foreground)' }}>
-                    {ocring ? (
-                      <><span className="animate-spin">⏳</span> กำลังอ่านสลิป...</>
-                    ) : (
-                      <><span>📎</span> กดเพื่อแนบสลิป</>
-                    )}
-                  </button>
-                )}
-              </div>
-
-              {/* ── ใบเสร็จ/บิล ──────────────────────────────────────── */}
-              <div>
-                <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>
-                  ใบเสร็จ/บิล <span className="font-normal text-xs">(ไม่บังคับ — แนบได้หลายรูป)</span>
-                </label>
-                <input ref={receiptRef} type="file" accept="image/*" multiple className="hidden"
-                  onChange={e => { const files = e.target.files; if (files?.length) handleReceiptUpload(files) }} />
-
-                {form.receipt_previews.length > 0 && (
-                  <div className="grid grid-cols-3 gap-2 mb-2">
-                    {form.receipt_previews.map((p, i) => (
-                      <div key={i} className="relative">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={p} alt={`receipt-${i}`}
-                          className="w-full aspect-square object-cover rounded-lg border"
-                          style={{ borderColor: 'var(--border)' }} />
-                        <button type="button"
-                          onClick={() => setForm(f => ({
-                            ...f,
-                            receipt_image_urls: f.receipt_image_urls.filter((_, idx) => idx !== i),
-                            receipt_previews: f.receipt_previews.filter((_, idx) => idx !== i),
-                          }))}
-                          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center leading-none font-bold">
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <button type="button" onClick={() => receiptRef.current?.click()}
-                  className="w-full py-4 border-2 border-dashed rounded-xl text-sm flex items-center justify-center gap-2"
-                  style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
-                  {uploadingReceipt ? (
-                    <><span className="animate-spin">⏳</span> กำลังอัปโหลด...</>
-                  ) : (
-                    <><span>🧾</span> กดเพื่อแนบ ใบเสร็จ/บิล (แนบได้หลายรูป)</>
-                  )}
-                </button>
               </div>
 
               {/* Buttons */}
