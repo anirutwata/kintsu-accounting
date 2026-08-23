@@ -63,6 +63,10 @@ interface ItemRow {
 }
 
 const emptyItemRow = (): ItemRow => ({ category: '', description: '', quantity: '1', unit: 'รายการ', price_per_unit: '' })
+// Checking "แยกรายการสินค้า" seeds one blank row, so items.length is never 0 once
+// itemized mode is on — this checks for "nothing typed yet" instead, so bill-photo
+// OCR still knows it's safe to fill the form in.
+const itemRowsAreEmpty = (items: ItemRow[]) => items.every(i => !i.description.trim() && !i.price_per_unit.trim())
 
 const emptyForm = () => ({
   document_date: getTodayBKK(),  // วันที่เอกสาร/ใบแจ้งหนี้ — ใช้คำนวณ P&L
@@ -294,7 +298,7 @@ export default function ExpensesPage() {
     // Same first-photo-only, don't-overwrite-manual-entry guard as the VAT detection
     // above, but only fires when staff has already switched to itemized mode — there's
     // no point extracting line items into a form that's not showing them.
-    if (form.use_items && form.items.length === 0 && newUrls[0]) {
+    if (form.use_items && itemRowsAreEmpty(form.items) && newUrls[0]) {
       setItemsOcring(true)
       try {
         const res = await fetch('/api/ocr/bill-items', {
@@ -305,7 +309,7 @@ export default function ExpensesPage() {
         const data = await res.json()
         const extracted = Array.isArray(data.items) ? data.items : []
         if (extracted.length > 0) {
-          setForm(f => (f.items.length > 0 ? f : {
+          setForm(f => (!itemRowsAreEmpty(f.items) ? f : {
             ...f,
             items: extracted.map((i: any) => ({
               category: i.suggestedCategory || '',
