@@ -62,7 +62,7 @@ interface ItemRow {
   price_per_unit: string
 }
 
-const emptyItemRow = (): ItemRow => ({ category: '', description: '', quantity: '1', unit: 'รายการ', price_per_unit: '' })
+const emptyItemRow = (): ItemRow => ({ category: '', description: '', quantity: '1', unit: '', price_per_unit: '' })
 // A fresh form always seeds one blank row, so items.length is never 0 — this checks
 // for "nothing typed yet" instead, so bill-photo OCR still knows it's safe to fill
 // the form in without clobbering something staff already entered by hand.
