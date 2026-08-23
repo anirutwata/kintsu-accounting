@@ -644,11 +644,16 @@ export default function ExpensesPage() {
                   ))}
                 </div>
               )}
-              {(!!selectedExpense.discount_satang || (!!selectedExpense.vat_satang && !selectedExpense.vat_inclusive)) && (
+              {(!!selectedExpense.discount_satang || !!selectedExpense.vat_satang) && (
                 <>
                   <DetailRow label="ยอดสินค้า" value={formatBaht(selectedExpense.amount_satang)} />
                   {!!selectedExpense.discount_satang && <DetailRow label="ส่วนลด" value={`-${formatBaht(selectedExpense.discount_satang)}`} />}
-                  {!!selectedExpense.vat_satang && !selectedExpense.vat_inclusive && <DetailRow label="VAT" value={`+${formatBaht(selectedExpense.vat_satang)}`} />}
+                  {!!selectedExpense.vat_satang && (
+                    <DetailRow
+                      label={selectedExpense.vat_inclusive ? 'VAT (รวมในราคาแล้ว)' : 'VAT'}
+                      value={selectedExpense.vat_inclusive ? formatBaht(selectedExpense.vat_satang) : `+${formatBaht(selectedExpense.vat_satang)}`}
+                    />
+                  )}
                 </>
               )}
               <DetailRow label="จำนวนเงินรวมทั้งสิ้น" value={formatBaht(selectedExpense.total_satang)} bold />
