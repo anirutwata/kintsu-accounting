@@ -364,11 +364,10 @@ export async function deleteExpenseDocument(recordId: number) {
   return flowAccountFetch(`/expenses/${recordId}`, { method: 'DELETE' })
 }
 
-// Downloads an image from a public URL (e.g. Supabase storage) and attaches it to an
-// already-created expense document. Best-effort — throws on failure so callers can
-// decide whether a failed attachment should block the rest of the flow.
-export async function attachExpenseFiles(recordId: number, imageUrls: string[]) {
-  const files = await Promise.all(
+// Downloads images from public URLs (e.g. Supabase storage) and returns them ready for
+// a FlowAccount .../attachment/base64 call. Shared by every document type below.
+async function buildAttachmentFiles(imageUrls: string[]) {
+  return Promise.all(
     imageUrls.map(async (url, i) => {
       const res = await fetch(url)
       if (!res.ok) throw new Error(`โหลดรูป ${url} ไม่สำเร็จ (${res.status})`)
@@ -378,7 +377,24 @@ export async function attachExpenseFiles(recordId: number, imageUrls: string[]) 
       return { fileName: `attachment-${i + 1}.${ext}`, base64Data: buffer.toString('base64') }
     }),
   )
+}
+
+// Attaches images to an already-created expense document. Best-effort — throws on
+// failure so callers can decide whether a failed attachment should block the rest of
+// the flow.
+export async function attachExpenseFiles(recordId: number, imageUrls: string[]) {
+  const files = await buildAttachmentFiles(imageUrls)
   return flowAccountFetch(`/expenses/${recordId}/attachment/base64`, {
+    method: 'POST',
+    body: JSON.stringify({ files }),
+  })
+}
+
+// Same as attachExpenseFiles, for a tax invoice — e.g. attaching the customer's own
+// bill/receipt photo from the tax-invoice-request flow onto the issued document.
+export async function attachTaxInvoiceFiles(recordId: number, imageUrls: string[]) {
+  const files = await buildAttachmentFiles(imageUrls)
+  return flowAccountFetch(`/tax-invoices/${recordId}/attachment/base64`, {
     method: 'POST',
     body: JSON.stringify({ files }),
   })
@@ -395,6 +411,14 @@ interface SellItemInput {
 // 1 = บุคคลธรรมดา (individual), 3 = นิติบุคคล (juristic) — sending the raw string fails
 // with "Could not convert string to integer".
 const CONTACT_GROUP_CODE: Record<'individual' | 'juristic', number> = { individual: 1, juristic: 3 }
+
+// Thai postal codes are 5 digits, conventionally written at the very end of the address —
+// FlowAccount has a dedicated contactZipCode field on the contact record (separate from
+// the free-text contactAddress that prints on the document); without this it's left blank
+// even though the zip is right there in the address text.
+function extractZipCode(address?: string): string | undefined {
+  return address?.match(/(\d{5})\s*$/)?.[1]
+}
 
 function buildSellDocument(input: {
   contactName: string
@@ -424,6 +448,7 @@ function buildSellDocument(input: {
     contactName: input.contactName,
     contactTaxId: input.contactTaxId,
     contactAddress: input.contactAddress,
+    contactZipCode: extractZipCode(input.contactAddress),
     contactBranch: input.contactBranch,
     contactGroup: input.contactGroup ? CONTACT_GROUP_CODE[input.contactGroup] : undefined,
     publishedOn: input.publishedOn,

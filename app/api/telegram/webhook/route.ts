@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createTaxInvoice, exportTaxInvoicePdfBase64, resolveTaxInvoicePayment } from '@/lib/flowaccount'
+import { createTaxInvoice, exportTaxInvoicePdfBase64, resolveTaxInvoicePayment, attachTaxInvoiceFiles } from '@/lib/flowaccount'
 import { resolveDefaultPaymentConfig } from '@/lib/paymentConfig'
 import { sendTaxInvoiceEmail } from '@/lib/email'
 import { sendTelegram, editTelegramCaption, answerCallbackQuery, escapeHtml } from '@/lib/telegram'
@@ -95,6 +95,19 @@ export async function POST(req: Request) {
       .from('tax_invoice_requests')
       .update({ status: 'created', flowaccount_record_id: invoice.recordId, flowaccount_document_serial: invoice.documentSerial })
       .eq('id', requestId)
+
+    if (claimed.bill_image_url) {
+      try {
+        await attachTaxInvoiceFiles(invoice.recordId, [claimed.bill_image_url])
+      } catch (attachErr: any) {
+        // Document already created — a failed attachment shouldn't fail the whole
+        // approval, just tell staff so they can attach it manually if it matters.
+        sendTelegram(
+          `⚠️ ออก ${invoice.documentSerial} สำเร็จ แต่แนบรูปบิลของลูกค้าไม่สำเร็จ: ${attachErr.message}`,
+          'taxInvoice',
+        )
+      }
+    }
 
     try {
       const pdfBase64 = await exportTaxInvoicePdfBase64(invoice.recordId)
