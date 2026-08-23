@@ -65,7 +65,10 @@ export async function POST(req: Request) {
   // action === 'approve'
   await answerCallbackQuery(cb.id, 'กำลังออกใบกำกับภาษี...')
 
-  const today = getTodayBKK()
+  // The invoice must be dated the day of the actual sale (per the customer's bill), not
+  // whichever day staff happened to click approve — documentDate falls back to today only
+  // for requests submitted before this column existed.
+  const documentDate = claimed.document_date || getTodayBKK()
   const totalBaht = claimed.total_satang / 100
   // subTotal comes straight from what the customer read off the receipt — not
   // back-calculated from the total — so it matches the receipt's own "ก่อน VAT" line exactly.
@@ -80,10 +83,10 @@ export async function POST(req: Request) {
       contactAddress: claimed.contact_address || undefined,
       contactBranch: claimed.contact_branch || undefined,
       contactGroup: claimed.contact_group || undefined,
-      publishedOn: today,
+      publishedOn: documentDate,
       remarks: claimed.description,
       items: [{ name: claimed.description, quantity: 1, unitName: 'รายการ', pricePerUnit: subTotal }],
-      payment: resolveTaxInvoicePayment(claimed.payment_method, today, roundingAmount),
+      payment: resolveTaxInvoicePayment(claimed.payment_method, documentDate, roundingAmount),
     })
 
     await supabase
@@ -93,7 +96,7 @@ export async function POST(req: Request) {
 
     try {
       const pdfBase64 = await exportTaxInvoicePdfBase64(invoice.recordId)
-      await sendTaxInvoiceEmail({ to: claimed.contact_email, documentSerial: invoice.documentSerial, documentDate: today, pdfBase64 })
+      await sendTaxInvoiceEmail({ to: claimed.contact_email, documentSerial: invoice.documentSerial, documentDate, pdfBase64 })
       await supabase
         .from('tax_invoice_requests')
         .update({ status: 'emailed', emailed_at: new Date().toISOString() })
