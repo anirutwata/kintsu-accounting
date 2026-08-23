@@ -115,11 +115,14 @@ export default function TaxInvoiceRequestPage() {
       const fd = new FormData()
       fd.append('file', file)
       const res = await fetch('/api/upload/receipt', { method: 'POST', body: fd })
-      const json = await res.json()
-      if (!res.ok || !json.url) { setUploadError('อัปโหลดรูปไม่สำเร็จ กรุณาลองใหม่'); return }
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.url) {
+        setUploadError(`อัปโหลดรูปไม่สำเร็จ กรุณาลองใหม่${json?.error ? ` (${json.error})` : ''}`)
+        return
+      }
       set('bill_image_url', json.url)
-    } catch {
-      setUploadError('อัปโหลดรูปไม่สำเร็จ กรุณาลองใหม่')
+    } catch (err: any) {
+      setUploadError(`อัปโหลดรูปไม่สำเร็จ กรุณาลองใหม่${err?.message ? ` (${err.message})` : ''}`)
     } finally {
       setUploadingBill(false)
     }
