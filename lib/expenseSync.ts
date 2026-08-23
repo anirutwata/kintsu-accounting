@@ -81,7 +81,10 @@ async function resolveItems(supabase: any, expense: any) {
   const sourceItems =
     rows && rows.length > 0
       ? rows.map((r: any) => ({ categoryName: r.category, description: r.description, quantity: r.quantity, unitName: r.unit || 'รายการ', pricePerUnitSatang: r.price_per_unit_satang }))
-      : [{ categoryName: expense.category, description: expense.note || expense.category, quantity: 1, unitName: 'รายการ', pricePerUnitSatang: expense.total_satang }]
+      // description here is the FlowAccount line item's product name, not the expense's
+      // own remarks — expense.note is sent separately as the document's remarks (see
+      // buildExpenseInput) and must never leak into the item name.
+      : [{ categoryName: expense.category, description: expense.category, quantity: 1, unitName: 'รายการ', pricePerUnitSatang: expense.total_satang }]
 
   const items = []
   for (const item of sourceItems) {
