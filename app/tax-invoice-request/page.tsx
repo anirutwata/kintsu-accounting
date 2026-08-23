@@ -160,6 +160,15 @@ export default function TaxInvoiceRequestPage() {
               onChange={e => set('document_date', e.target.value)}
               max={getTodayBKK()}
               className="w-full border rounded-xl px-3 py-2 text-sm" />
+            {/* Native date pickers render in whatever language the device/browser is set
+                to (e.g. "24 Aug 2026" on an English-locale phone) — the page can't force
+                that. Show the Thai reading alongside it so the customer can confirm the
+                date is right regardless of their device's language. */}
+            {form.document_date && (
+              <p className="text-xs text-gray-500 mt-1">
+                {new Date(form.document_date + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+              </p>
+            )}
             <p className="text-[10px] text-gray-400 mt-1">วันที่ตามที่ระบุบนบิล — จะใช้เป็นวันที่บนใบกำกับภาษี</p>
           </Field>
 
