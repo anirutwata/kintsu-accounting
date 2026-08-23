@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createTaxInvoice, exportTaxInvoicePdfBase64, resolveTaxInvoicePayment } from '@/lib/flowaccount'
+import { resolveDefaultPaymentConfig } from '@/lib/paymentConfig'
 import { sendTaxInvoiceEmail } from '@/lib/email'
 import { sendTelegram, editTelegramCaption, answerCallbackQuery, escapeHtml } from '@/lib/telegram'
 import { getTodayBKK } from '@/lib/utils'
@@ -77,6 +78,7 @@ export async function POST(req: Request) {
   const roundingAmount = Math.max(0, Math.round((subTotal + vatAmount - totalBaht) * 100) / 100)
 
   try {
+    const paymentConfig = await resolveDefaultPaymentConfig(supabase)
     const invoice = await createTaxInvoice({
       contactName: claimed.contact_name,
       contactTaxId: claimed.contact_tax_id || undefined,
@@ -86,7 +88,7 @@ export async function POST(req: Request) {
       publishedOn: documentDate,
       remarks: claimed.description,
       items: [{ name: claimed.description, quantity: 1, unitName: 'รายการ', pricePerUnit: subTotal }],
-      payment: resolveTaxInvoicePayment(claimed.payment_method, documentDate, roundingAmount),
+      payment: resolveTaxInvoicePayment(claimed.payment_method, documentDate, roundingAmount, paymentConfig),
     })
 
     await supabase

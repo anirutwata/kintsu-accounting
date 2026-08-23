@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createCashInvoice, resolveTaxInvoicePayment } from '@/lib/flowaccount'
+import { resolveDefaultPaymentConfig } from '@/lib/paymentConfig'
 
 // Only Dine-in (Foodstory) + Papaya POS have a payment-channel breakdown — GrabFood and
 // Takeaway are recorded as a single lump revenue figure with no cash/transfer/credit split,
@@ -48,6 +49,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ date: 
 
   const updates: Record<string, unknown> = {}
   const errors: Record<string, string> = {}
+  const paymentConfig = await resolveDefaultPaymentConfig(supabase)
 
   for (const channel of CHANNELS) {
     const amountSatang = amountByChannel[channel.key]
@@ -60,7 +62,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ date: 
     const preVatSatang = amountSatang - vatSatang
 
     try {
-      const payment = resolveTaxInvoicePayment(channel.method, date, 0)
+      const payment = resolveTaxInvoicePayment(channel.method, date, 0, paymentConfig)
       const result = await createCashInvoice({
         contactName: 'ลูกค้าทั่วไป',
         publishedOn: date,

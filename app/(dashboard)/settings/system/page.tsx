@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import type { Settings } from '@/types'
 
 interface BankAccount { id: string; bank_name: string; account_number: string; account_name: string }
+interface EdcChannel { id: number; name: string; type: number }
 
 export default function SystemSettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null)
@@ -11,6 +12,8 @@ export default function SystemSettingsPage() {
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [banks, setBanks] = useState<BankAccount[]>([])
+  const [edcChannels, setEdcChannels] = useState<EdcChannel[]>([])
+  const [edcChannelsError, setEdcChannelsError] = useState('')
 
   // form fields
   const [restaurantName, setRestaurantName] = useState('')
@@ -27,10 +30,16 @@ export default function SystemSettingsPage() {
   const [ppPromptpayBankId, setPpPromptpayBankId] = useState('')
   const [ppCompanyTransferBankId, setPpCompanyTransferBankId] = useState('')
   const [ppCreditCardBankId, setPpCreditCardBankId] = useState('')
+  const [defaultTransferBankId, setDefaultTransferBankId] = useState('')
+  const [defaultEdcChannelId, setDefaultEdcChannelId] = useState('')
 
   useEffect(() => {
     load()
     fetch('/api/bank-accounts').then(r => r.json()).then(d => setBanks(Array.isArray(d) ? d : []))
+    fetch('/api/flowaccount/payment-channels').then(r => r.json()).then(d => {
+      if (Array.isArray(d)) setEdcChannels(d)
+      else setEdcChannelsError(d.error || 'ดึงช่องทางจาก FlowAccount ไม่สำเร็จ')
+    }).catch(() => setEdcChannelsError('เชื่อมต่อ FlowAccount ไม่สำเร็จ'))
   }, [])
 
   async function load() {
@@ -52,6 +61,8 @@ export default function SystemSettingsPage() {
       setPpPromptpayBankId(s.pp_promptpay_bank_id || '')
       setPpCompanyTransferBankId(s.pp_company_transfer_bank_id || '')
       setPpCreditCardBankId(s.pp_credit_card_bank_id || '')
+      setDefaultTransferBankId(s.default_transfer_bank_account_id || '')
+      setDefaultEdcChannelId(s.default_edc_channel_id ? String(s.default_edc_channel_id) : '')
     }
     setLoading(false)
   }
@@ -78,6 +89,9 @@ export default function SystemSettingsPage() {
         pp_promptpay_bank_id: ppPromptpayBankId || null,
         pp_company_transfer_bank_id: ppCompanyTransferBankId || null,
         pp_credit_card_bank_id: ppCreditCardBankId || null,
+        default_transfer_bank_account_id: defaultTransferBankId || null,
+        default_edc_channel_id: defaultEdcChannelId ? Number(defaultEdcChannelId) : null,
+        default_edc_channel_name: edcChannels.find(c => String(c.id) === defaultEdcChannelId)?.name || null,
       }),
     })
     setSaving(false)
@@ -98,6 +112,8 @@ export default function SystemSettingsPage() {
       setPpPromptpayBankId(s.pp_promptpay_bank_id || '')
       setPpCompanyTransferBankId(s.pp_company_transfer_bank_id || '')
       setPpCreditCardBankId(s.pp_credit_card_bank_id || '')
+      setDefaultTransferBankId(s.default_transfer_bank_account_id || '')
+      setDefaultEdcChannelId(s.default_edc_channel_id ? String(s.default_edc_channel_id) : '')
     } else {
       const d = await res.json()
       setSaveError(d.error || 'บันทึกไม่สำเร็จ')
@@ -201,6 +217,33 @@ export default function SystemSettingsPage() {
                 {banks.map(b => <option key={b.id} value={b.id}>{b.bank_name} {b.account_number}</option>)}
               </select>
             </div>
+          </div>
+        </div>
+
+        {/* FlowAccount payment channels — used by tax-invoice approvals AND the daily-sales
+            sync when they record an incoming transfer/card payment in FlowAccount */}
+        <div className="bg-white rounded-2xl border p-4 space-y-3" style={{ borderColor: 'var(--border)' }}>
+          <p className="text-xs font-semibold" style={{ color: 'var(--charcoal)' }}>ช่องทางรับเงินใน FlowAccount</p>
+          <p className="text-[10px] -mt-2" style={{ color: 'var(--muted-foreground)' }}>
+            ใช้ตอนออกใบกำกับภาษีและสรุปยอดขายเข้า FlowAccount — เลือกจากรายการที่ตั้งค่าไว้ใน FlowAccount จริง
+          </p>
+          <div>
+            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>บัญชีธนาคารสำหรับรับโอนเงิน</label>
+            <select value={defaultTransferBankId} onChange={e => setDefaultTransferBankId(e.target.value)}
+              className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}>
+              <option value="">-- ไม่ระบุ --</option>
+              {banks.map(b => <option key={b.id} value={b.id}>{b.bank_name} {b.account_number} · {b.account_name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>ช่องทางเครื่องรูดบัตร (EDC)</label>
+            <select value={defaultEdcChannelId} onChange={e => setDefaultEdcChannelId(e.target.value)}
+              disabled={edcChannels.length === 0}
+              className="w-full border rounded-xl px-3 py-2 text-sm disabled:opacity-50" style={{ borderColor: 'var(--border)' }}>
+              <option value="">-- ไม่ระบุ --</option>
+              {edcChannels.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            {edcChannelsError && <p className="text-xs mt-1 text-red-500">❌ {edcChannelsError}</p>}
           </div>
         </div>
 
