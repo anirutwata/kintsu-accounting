@@ -190,7 +190,12 @@ export async function syncExpenseToFlowAccount(supabase: any, expenseId: string)
     const paymentChannel = await resolvePaymentChannel(supabase, expense)
     if (paymentChannel.ok) {
       try {
-        await payExpense(result.recordId, expense.document_date || expense.date, Number(result.grandTotal), paymentChannel.channel)
+        // "collected" is the net amount that actually moved through this channel —
+        // when the vendor's bill already nets out withholding tax, that's grandTotal
+        // minus the withheld amount, not the full invoice total (the withheld portion
+        // never reaches the vendor's bank account at all).
+        const collected = Number(result.grandTotal) - (expense.wht_satang ?? 0) / 100
+        await payExpense(result.recordId, expense.document_date || expense.date, collected, paymentChannel.channel)
       } catch (payErr: any) {
         sendTelegram(
           `⚠️ ส่ง ${result.documentSerial} เข้า FlowAccount สำเร็จ แต่บันทึกชำระเงินไม่สำเร็จ: ${payErr.message}\nต้องลงชำระเองใน FlowAccount`,

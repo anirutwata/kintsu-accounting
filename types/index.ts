@@ -75,6 +75,7 @@ export interface Expense {
   category: ExpenseCategory
   amount_satang: number
   vat_satang: number
+  wht_satang: number
   total_satang: number
   payment_method: PaymentMethod
   bank_account_id: string | null

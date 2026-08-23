@@ -39,7 +39,7 @@ export async function POST(req: Request) {
   const userName = cookieStore.get('kintsu_acc_name')?.value || 'ไม่ระบุ'
 
   const body = await req.json()
-  const { category, amount_satang, vat_satang, payment_method, bank_account_id,
+  const { category, amount_satang, vat_satang, wht_satang, payment_method, bank_account_id,
           transfer_time, sender_name, sender_bank, sender_account,
           recipient_name, recipient_address, slip_image_url, slip_hash, ocr_data,
           receipt_image_urls, note, date, document_date,
@@ -74,6 +74,7 @@ export async function POST(req: Request) {
       category: computedCategory,
       amount_satang: computedAmountSatang,
       vat_satang: vat_satang || 0,
+      wht_satang: wht_satang || 0,
       total_satang: computedAmountSatang,
       payment_method: payment_method || 'เงินสด',
       bank_account_id: bank_account_id || null,

@@ -71,6 +71,8 @@ const emptyForm = () => ({
   amount: '',
   has_vat: false,
   vat: '',
+  has_wht: false,
+  wht: '',
   category: '',
   use_items: false,
   items: [] as ItemRow[],
@@ -248,7 +250,7 @@ export default function ExpensesPage() {
     // Only auto-detect VAT off the first bill photo attached to this entry, and only
     // when the staff member hasn't already ticked/typed VAT themselves — never
     // overwrite a manual entry.
-    const shouldDetectVat = form.receipt_image_urls.length === 0 && !form.has_vat && !form.vat
+    const shouldDetectVat = form.receipt_image_urls.length === 0 && !form.has_vat && !form.vat && !form.has_wht && !form.wht
     const newUrls: string[] = []
     const newPreviews: string[] = []
     for (const file of Array.from(files)) {
@@ -282,7 +284,10 @@ export default function ExpensesPage() {
           // Guard again at write time — staff may have ticked VAT manually while OCR was in flight.
           setForm(f => (f.has_vat || f.vat ? f : { ...f, has_vat: true, vat: (data.vatSatang / 100).toFixed(2) }))
         }
-      } catch { /* ignore — staff can still tick VAT manually */ }
+        if (data.hasWht && data.whtSatang > 0) {
+          setForm(f => (f.has_wht || f.wht ? f : { ...f, has_wht: true, wht: (data.whtSatang / 100).toFixed(2) }))
+        }
+      } catch { /* ignore — staff can still tick VAT/WHT manually */ }
       setVatOcring(false)
     }
 
@@ -325,6 +330,7 @@ export default function ExpensesPage() {
         ? toSatang(itemsTotal(form.items))
         : toSatang(parseFloat(form.amount.replace(/,/g, '')) || 0)
       const vatSatang = form.has_vat ? toSatang(parseFloat(form.vat.replace(/,/g, '')) || 0) : 0
+      const whtSatang = form.has_wht ? toSatang(parseFloat(form.wht.replace(/,/g, '')) || 0) : 0
       const selectedBank = bankAccounts.find(b => b.id === form.bank_account_id)
       const isBank = form.bank_account_id && !form.bank_account_id.startsWith('__')
       const paymentMethod = isBank ? 'โอนเงิน' : form.bank_account_id === '__card__' ? 'บัตรเครดิต' : 'เงินสด'
@@ -345,6 +351,7 @@ export default function ExpensesPage() {
           : { category: form.category, items: editingId ? [] : undefined }),
         amount_satang: amountSatang,
         vat_satang: vatSatang,
+        wht_satang: whtSatang,
         payment_method: paymentMethod,
         bank_account_id: isBank ? form.bank_account_id : null,
         transfer_time: form.transfer_time || null,
@@ -395,6 +402,8 @@ export default function ExpensesPage() {
       amount: String(exp.amount_satang / 100),
       has_vat: !!exp.vat_satang,
       vat: exp.vat_satang ? String(exp.vat_satang / 100) : '',
+      has_wht: !!exp.wht_satang,
+      wht: exp.wht_satang ? String(exp.wht_satang / 100) : '',
       category: exp.category,
       use_items: false,
       items: [],
@@ -628,6 +637,12 @@ export default function ExpensesPage() {
                 </div>
               )}
               <DetailRow label="ยอดเงิน" value={formatBaht(selectedExpense.total_satang)} bold />
+              {!!selectedExpense.wht_satang && (
+                <>
+                  <DetailRow label="หัก ณ ที่จ่าย" value={`-${formatBaht(selectedExpense.wht_satang)}`} />
+                  <DetailRow label="ยอดจ่ายสุทธิ" value={formatBaht(selectedExpense.total_satang - selectedExpense.wht_satang)} bold />
+                </>
+              )}
               <DetailRow label="วิธีชำระ" value={selectedExpense.payment_method} />
               {selectedExpense.sender_bank && (
                 <DetailRow label="บัญชีโอน" value={`${selectedExpense.sender_bank} ${selectedExpense.sender_account || ''} ${selectedExpense.sender_name || ''}`} />
@@ -902,7 +917,7 @@ export default function ExpensesPage() {
                   มี VAT (รวมอยู่ในยอดเงินด้านบนแล้ว)
                 </label>
                 {vatOcring && (
-                  <p className="text-xs mb-1.5" style={{ color: 'var(--muted-foreground)' }}>🔍 กำลังตรวจสอบ VAT จากรูปบิล...</p>
+                  <p className="text-xs mb-1.5" style={{ color: 'var(--muted-foreground)' }}>🔍 กำลังตรวจสอบ VAT/หัก ณ ที่จ่ายจากรูปบิล...</p>
                 )}
                 {form.has_vat && (
                   <input type="text" inputMode="decimal"
@@ -913,6 +928,31 @@ export default function ExpensesPage() {
                     }}
                     className="w-full border rounded-xl px-3 py-2.5 text-right text-base"
                     style={{ borderColor: 'var(--border)' }} placeholder="VAT (บาท) — คำนวณ 7% ให้อัตโนมัติ แก้ไขได้" />
+                )}
+              </div>
+
+              {/* หัก ณ ที่จ่าย — บิลของผู้จำหน่ายบางเจ้าหักไว้แล้วก่อนคำนวณ "ยอดชำระ"
+                  ยอดเงินด้านบนยังเป็นยอดเต็มตามบิล (ยอดที่รับรู้เป็นค่าใช้จ่าย) ส่วนนี้แค่บันทึกว่า
+                  ส่วนหนึ่งของยอดนั้นไม่ได้จ่ายให้ผู้จำหน่ายจริง (นำส่งกรมสรรพากรแทน) — ยังไม่สร้าง
+                  เอกสารหัก ณ ที่จ่ายใน FlowAccount ให้อัตโนมัติ (รอออกแบบขั้นตอนแยกต่างหาก) */}
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>
+                  <input type="checkbox" checked={form.has_wht}
+                    onChange={e => {
+                      const checked = e.target.checked
+                      setForm(f => (checked ? { ...f, has_wht: true } : { ...f, has_wht: false, wht: '' }))
+                    }} />
+                  มีหัก ณ ที่จ่าย (ตามที่ระบุในบิล)
+                </label>
+                {form.has_wht && (
+                  <input type="text" inputMode="decimal"
+                    value={form.wht}
+                    onChange={e => {
+                      const raw = e.target.value.replace(/,/g, '').replace(/[^\d.]/g, '')
+                      if (/^\d*\.?\d{0,2}$/.test(raw)) setForm(f => ({ ...f, wht: raw }))
+                    }}
+                    className="w-full border rounded-xl px-3 py-2.5 text-right text-base"
+                    style={{ borderColor: 'var(--border)' }} placeholder="ยอดหัก ณ ที่จ่าย (บาท) — ตามตัวเลขบนบิล" />
                 )}
               </div>
 

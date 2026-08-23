@@ -11,9 +11,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const updaterName = cookieStore.get('kintsu_acc_name')?.value || null
 
   const body = await req.json()
-  const { amount_satang, vat_satang, items, ...rest } = body as {
+  const { amount_satang, vat_satang, wht_satang, items, ...rest } = body as {
     amount_satang?: number
     vat_satang?: number
+    wht_satang?: number
     items?: { category: string; description: string; quantity: number; unit: string; price_per_unit_satang: number }[]
     [k: string]: any
   }
@@ -41,6 +42,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // never changes based on VAT, only how it's later reported to FlowAccount.
     updates.amount_satang = computedAmountSatang
     updates.vat_satang = vat_satang || 0
+    updates.wht_satang = wht_satang || 0
     updates.total_satang = computedAmountSatang
   }
 
