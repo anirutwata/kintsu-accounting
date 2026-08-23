@@ -62,14 +62,17 @@ export async function GET(req: Request) {
     const province = first(result.Province)
     const postCode = first(result.PostCode)
 
+    // Bangkok addresses use แขวง/เขต, not ตำบล/อำเภอ like every other province, and
+    // conventionally drop the "จังหวัด" prefix in front of "กรุงเทพมหานคร" itself.
+    const isBangkok = province === 'กรุงเทพมหานคร'
     const addressParts = [
       houseNumber,
       mooNumber && mooNumber !== '-' ? `หมู่ ${mooNumber}` : '',
       soiName && soiName !== '-' ? `ซอย${soiName}` : '',
       streetName && streetName !== '-' ? `ถนน${streetName}` : '',
-      thambol ? `ตำบล${thambol}` : '',
-      amphur ? `อำเภอ${amphur}` : '',
-      province ? `จังหวัด${province}` : '',
+      thambol ? `${isBangkok ? 'แขวง' : 'ตำบล'}${thambol}` : '',
+      amphur ? `${isBangkok ? 'เขต' : 'อำเภอ'}${amphur}` : '',
+      province ? (isBangkok ? province : `จังหวัด${province}`) : '',
       postCode,
     ].filter(Boolean)
 
