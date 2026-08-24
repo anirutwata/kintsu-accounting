@@ -273,6 +273,7 @@ async function getSystemEntries(supabase: Awaited<ReturnType<typeof createClient
   const { data: transfers } = await supabase
     .from('bank_transfers')
     .select('id, date, amount_satang, from_bank, from_account, to_bank, to_account, note')
+    .eq('is_deleted', false)
     .gte('date', startDate)
     .lte('date', endDate)
     .order('date')

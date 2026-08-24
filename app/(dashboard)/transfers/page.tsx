@@ -19,6 +19,10 @@ interface Transfer {
   note: string | null
   slip_image_url: string | null
   created_by_name: string | null
+  flowaccount_journal_record_id: number | null
+  flowaccount_journal_serial: string | null
+  flowaccount_synced_at: string | null
+  flowaccount_sync_error: string | null
 }
 
 function getClientRole() {
@@ -48,7 +52,7 @@ export default function TransfersPage() {
   const today = getTodayBKK()
   const currentMonth = today.substring(0, 7)
 
-  const [role, setRole] = useState('')
+  const [role] = useState(getClientRole)
   const [transfers, setTransfers] = useState<Transfer[]>([])
   const [accounts, setAccounts] = useState<BankAccount[]>([])
   const [loading, setLoading] = useState(true)
@@ -60,6 +64,7 @@ export default function TransfersPage() {
   const [saveError, setSaveError] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [syncingId, setSyncingId] = useState<string | null>(null)
   const [ocring, setOcring] = useState(false)
   const [slipPreview, setSlipPreview] = useState('')
   const [slipFile, setSlipFile] = useState<File | null>(null)
@@ -79,7 +84,6 @@ export default function TransfersPage() {
   })
 
   useEffect(() => {
-    setRole(getClientRole())
     loadAccounts()
   }, [])
 
@@ -253,6 +257,16 @@ export default function TransfersPage() {
       load(selectedMonth)
     }
     setDeleting(false)
+  }
+
+  async function handleFlowAccountSync(id: string) {
+    setSyncingId(id)
+    try {
+      await fetch(`/api/transfers/${id}/flowaccount-sync`, { method: 'POST' })
+      await load(selectedMonth)
+    } finally {
+      setSyncingId(null)
+    }
   }
 
   const monthOptions = getMonthOptions()
@@ -458,6 +472,29 @@ export default function TransfersPage() {
                         </span>
                       </div>
                       {t.note && <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{t.note}</p>}
+                      {t.flowaccount_journal_serial ? (
+                        <p className="text-xs font-medium text-green-700">FlowAccount · {t.flowaccount_journal_serial}</p>
+                      ) : t.flowaccount_sync_error ? (
+                        <div className="mt-1">
+                          <p className="text-[11px] text-amber-700">ส่ง FlowAccount ไม่สำเร็จ: {t.flowaccount_sync_error}</p>
+                          {(role === 'owner' || role === 'manager') && (
+                            <button type="button" onClick={() => handleFlowAccountSync(t.id)} disabled={syncingId === t.id}
+                              className="mt-1 text-xs font-semibold text-blue-700 disabled:opacity-50">
+                              {syncingId === t.id ? 'กำลังส่ง...' : 'ส่งเข้า FlowAccount อีกครั้ง'}
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="mt-1">
+                          <p className="text-[11px] text-amber-700">ยังไม่ได้ส่งเข้า FlowAccount</p>
+                          {(role === 'owner' || role === 'manager') && (
+                            <button type="button" onClick={() => handleFlowAccountSync(t.id)} disabled={syncingId === t.id}
+                              className="mt-1 text-xs font-semibold text-blue-700 disabled:opacity-50">
+                              {syncingId === t.id ? 'กำลังส่ง...' : 'ส่งเข้า FlowAccount'}
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 

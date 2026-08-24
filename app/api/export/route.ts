@@ -73,6 +73,7 @@ export async function GET(req: Request) {
     supabase
       .from('bank_transfers')
       .select('date, amount_satang, from_bank, from_account, to_bank, to_account, note, created_by_name')
+      .eq('is_deleted', false)
       .gte('date', startDate)
       .lte('date', endDate)
       .order('date')

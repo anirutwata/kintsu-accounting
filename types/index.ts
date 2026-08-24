@@ -151,6 +151,7 @@ export interface BankAccount {
   sort_order: number
   created_at: string
   flowaccount_bank_account_id: number | null
+  flowaccount_chart_of_account_id: number | null
 }
 
 export interface PettyCash {

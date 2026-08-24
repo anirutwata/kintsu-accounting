@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { sendTelegram, buildTransferMessage } from '@/lib/telegram'
+import { syncBankTransferToFlowAccount } from '@/lib/bankTransferSync'
 
 function triggerGasSync(month: string) {
   const gasUrl = process.env.GAS_WEBHOOK_URL
@@ -14,7 +15,7 @@ export async function GET(req: Request) {
   const supabase = await createClient()
   const { searchParams } = new URL(req.url)
   const month = searchParams.get('month')
-  let query = supabase.from('bank_transfers').select('*').order('date', { ascending: false }).order('created_at', { ascending: false })
+  let query = supabase.from('bank_transfers').select('*').eq('is_deleted', false).order('date', { ascending: false }).order('created_at', { ascending: false })
   if (month) {
     const [y, m] = month.split('-').map(Number)
     const nextM = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
@@ -67,5 +68,15 @@ export async function POST(req: Request) {
     isDelete: false,
   }), 'transfers')
 
-  return NextResponse.json(data)
+  const syncResult = await syncBankTransferToFlowAccount(supabase, data.id)
+  if (!syncResult.ok) {
+    return NextResponse.json({ ...data, flowaccount_sync_error: syncResult.error })
+  }
+
+  return NextResponse.json({
+    ...data,
+    flowaccount_journal_record_id: syncResult.recordId,
+    flowaccount_journal_serial: syncResult.documentSerial,
+    flowaccount_sync_error: null,
+  })
 }

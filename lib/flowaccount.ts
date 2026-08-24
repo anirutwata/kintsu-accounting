@@ -78,6 +78,43 @@ export interface FlowAccountExpensePage {
   list: unknown[]
 }
 
+export interface FlowAccountChartOfAccount {
+  id: number
+  code: string
+  category: string
+  nameLocal: string
+  nameForeign: string
+}
+
+export async function getChartOfAccounts(): Promise<FlowAccountChartOfAccount[]> {
+  const data = await flowAccountFetch('/chart-of-accounts/accounts')
+  const accounts = (data?.accounts ?? []) as Array<{
+    id: number | string
+    code: number | string
+    category: string
+    nameLocal: string
+    nameForeign: string
+  }>
+  return accounts.map(account => ({
+    id: Number(account.id),
+    code: String(account.code),
+    category: account.category,
+    nameLocal: account.nameLocal,
+    nameForeign: account.nameForeign,
+  }))
+}
+
+export async function createApprovedJournal(payload: import('./bankTransferJournal').FlowAccountJournalPayload) {
+  return flowAccountFetch('/journal-entries/approve', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function voidJournalEntry(recordId: number) {
+  return flowAccountFetch(`/journal-entries/${recordId}/void`, { method: 'POST' })
+}
+
 // FlowAccount has no PAY/payment-slip collection in its public OpenAPI. A paid
 // payment slip is exposed through its source EXP documents instead: status=6,
 // referencedToMe contains the PAY serial, and payments contains the batch's

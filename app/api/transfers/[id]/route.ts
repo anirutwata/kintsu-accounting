@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { sendTelegram, buildTransferMessage } from '@/lib/telegram'
+import { syncBankTransferToFlowAccount, voidBankTransferJournal } from '@/lib/bankTransferSync'
 
 function triggerGasSync(month: string) {
   const gasUrl = process.env.GAS_WEBHOOK_URL
@@ -15,6 +16,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = await req.json()
   const { date, amount_satang, from_bank, from_account, to_bank, to_account, note, slip_image_url } = body
 
+  const { data: existing } = await supabase
+    .from('bank_transfers')
+    .select('*')
+    .eq('id', id)
+    .eq('is_deleted', false)
+    .maybeSingle()
+  if (!existing) return NextResponse.json({ error: 'ไม่พบรายการโอนเงิน' }, { status: 404 })
+
+  if (existing.flowaccount_journal_record_id) {
+    const voidResult = await voidBankTransferJournal(existing.flowaccount_journal_record_id)
+    if (!voidResult.ok) {
+      return NextResponse.json({ error: `ยังไม่แก้ไขรายการ เพราะยกเลิก ${existing.flowaccount_journal_serial} ใน FlowAccount ไม่สำเร็จ: ${voidResult.error}` }, { status: 502 })
+    }
+  }
+
   const { data, error } = await supabase
     .from('bank_transfers')
     .update({
@@ -26,6 +42,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       to_account: to_account || null,
       note: note?.trim() || null,
       slip_image_url: slip_image_url || null,
+      flowaccount_journal_record_id: null,
+      flowaccount_journal_serial: null,
+      flowaccount_synced_at: null,
+      flowaccount_sync_error: null,
     })
     .eq('id', id)
     .select()
@@ -34,15 +54,34 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   triggerGasSync(data.date.substring(0, 7))
-  return NextResponse.json(data)
+  const syncResult = await syncBankTransferToFlowAccount(supabase, data.id)
+  if (!syncResult.ok) return NextResponse.json({ ...data, flowaccount_sync_error: syncResult.error })
+  return NextResponse.json({
+    ...data,
+    flowaccount_journal_record_id: syncResult.recordId,
+    flowaccount_journal_serial: syncResult.documentSerial,
+    flowaccount_sync_error: null,
+  })
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const { id } = await params
 
-  const { data: transfer } = await supabase.from('bank_transfers').select('*').eq('id', id).single()
-  const { error } = await supabase.from('bank_transfers').delete().eq('id', id)
+  const { data: transfer } = await supabase.from('bank_transfers').select('*').eq('id', id).eq('is_deleted', false).maybeSingle()
+  if (!transfer) return NextResponse.json({ error: 'ไม่พบรายการโอนเงิน' }, { status: 404 })
+
+  if (transfer.flowaccount_journal_record_id) {
+    const voidResult = await voidBankTransferJournal(transfer.flowaccount_journal_record_id)
+    if (!voidResult.ok) {
+      return NextResponse.json({ error: `ยังไม่ลบรายการ เพราะยกเลิก ${transfer.flowaccount_journal_serial} ใน FlowAccount ไม่สำเร็จ: ${voidResult.error}` }, { status: 502 })
+    }
+  }
+
+  const { error } = await supabase.from('bank_transfers').update({
+    is_deleted: true,
+    deleted_at: new Date().toISOString(),
+  }).eq('id', id).eq('is_deleted', false)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   if (transfer) {

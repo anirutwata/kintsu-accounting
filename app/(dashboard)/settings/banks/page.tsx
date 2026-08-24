@@ -4,12 +4,14 @@ import type { BankAccount } from '@/types'
 import { BANKS } from '@/lib/banks'
 
 interface FlowAccountBank { id: number; accountNumber: string; accountName: string; bankName: string; branch: string }
-interface FormState { bank_name: string; account_number: string; account_name: string; flowaccount_bank_account_id: string }
-const emptyForm = (): FormState => ({ bank_name: BANKS[0], account_number: '', account_name: '', flowaccount_bank_account_id: '' })
+interface FlowAccountChartAccount { id: number; code: string; nameLocal: string }
+interface FormState { bank_name: string; account_number: string; account_name: string; flowaccount_bank_account_id: string; flowaccount_chart_of_account_id: string }
+const emptyForm = (): FormState => ({ bank_name: BANKS[0], account_number: '', account_name: '', flowaccount_bank_account_id: '', flowaccount_chart_of_account_id: '' })
 
 export default function BanksPage() {
   const [banks, setBanks] = useState<BankAccount[]>([])
   const [flowBanks, setFlowBanks] = useState<FlowAccountBank[]>([])
+  const [flowChartAccounts, setFlowChartAccounts] = useState<FlowAccountChartAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editBank, setEditBank] = useState<BankAccount | null>(null)
@@ -24,14 +26,17 @@ export default function BanksPage() {
 
   async function load() {
     setLoading(true)
-    const [res, flowRes] = await Promise.all([
+    const [res, flowRes, chartRes] = await Promise.all([
       fetch('/api/bank-accounts?all=true'),
       fetch('/api/flowaccount/bank-accounts'),
+      fetch('/api/flowaccount/chart-of-accounts'),
     ])
     const data = await res.json()
     setBanks(Array.isArray(data) ? data : [])
     const flowData = await flowRes.json()
     setFlowBanks(Array.isArray(flowData) ? flowData : [])
+    const chartData = await chartRes.json()
+    setFlowChartAccounts(Array.isArray(chartData) ? chartData : [])
     setLoading(false)
   }
 
@@ -49,6 +54,7 @@ export default function BanksPage() {
       account_number: bank.account_number,
       account_name: bank.account_name,
       flowaccount_bank_account_id: bank.flowaccount_bank_account_id ? String(bank.flowaccount_bank_account_id) : '',
+      flowaccount_chart_of_account_id: bank.flowaccount_chart_of_account_id ? String(bank.flowaccount_chart_of_account_id) : '',
     })
     setSaveError('')
     setShowForm(true)
@@ -65,6 +71,7 @@ export default function BanksPage() {
       account_number: form.account_number,
       account_name: form.account_name,
       flowaccount_bank_account_id: form.flowaccount_bank_account_id ? Number(form.flowaccount_bank_account_id) : null,
+      flowaccount_chart_of_account_id: form.flowaccount_chart_of_account_id ? Number(form.flowaccount_chart_of_account_id) : null,
     }
     const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     if (res.ok) {
@@ -139,7 +146,7 @@ export default function BanksPage() {
                     {!bank.is_active && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">ปิดใช้งาน</span>
                     )}
-                    {bank.flowaccount_bank_account_id ? (
+                    {bank.flowaccount_bank_account_id && bank.flowaccount_chart_of_account_id ? (
                       <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-50 text-green-700">ผูก FlowAccount แล้ว</span>
                     ) : (
                       <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700">ยังไม่ผูก FlowAccount</span>
@@ -218,6 +225,19 @@ export default function BanksPage() {
                 </select>
                 <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
                   ใช้สำหรับรายจ่ายที่ชำระด้วยการโอนเงิน — ระบบจะลงชำระให้ FlowAccount อัตโนมัติผ่านบัญชีนี้
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-medium block mb-1" style={{ color: 'var(--muted-foreground)' }}>ผังบัญชีธนาคารใน FlowAccount (สำหรับ JV)</label>
+                <select value={form.flowaccount_chart_of_account_id} onChange={set('flowaccount_chart_of_account_id')}
+                  className="w-full border rounded-xl px-3 py-2 text-sm" style={{ borderColor: 'var(--border)', background: 'white' }}>
+                  <option value="">— ยังไม่ผูก (สร้างสมุดรายวันทั่วไปไม่ได้) —</option>
+                  {flowChartAccounts.map(account => (
+                    <option key={account.id} value={account.id}>{account.code} · {account.nameLocal}</option>
+                  ))}
+                </select>
+                <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                  ใช้เดบิต/เครดิตเมื่อบันทึกการโอนเงินระหว่างบัญชีเป็น JV ใน FlowAccount
                 </p>
               </div>
               <button type="submit" disabled={saving}
