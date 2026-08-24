@@ -571,6 +571,11 @@ export default function ExpensesPage() {
                         <p className="text-sm font-medium" style={{ color: 'var(--charcoal)' }}>{exp.recipient_name}</p>
                       )}
                       {exp.note && <p className="text-sm truncate" style={{ color: 'var(--muted-foreground)' }}>{exp.note}</p>}
+                      {exp.source !== 'flowaccount_payment_slip' && exp.flowaccount_document_serial && (
+                        <p className="mt-1 text-xs font-medium text-emerald-700">
+                          FlowAccount · {exp.flowaccount_document_serial}
+                        </p>
+                      )}
                       <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                         {exp.date !== (exp.document_date || exp.date) && (
                           <span className="text-xs px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
