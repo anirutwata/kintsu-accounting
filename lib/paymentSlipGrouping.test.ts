@@ -34,4 +34,43 @@ describe('payment slip grouping', () => {
     const [group] = groupExpensesByPaymentSlip([{ ...base, total_satang: 107_000, wht_satang: 3_000 }])
     expect(group).toMatchObject({ gross_total_satang: 107_000, total_satang: 104_000, status: 'paid' })
   })
+
+  it('shows a locally recorded transfer as awaiting FlowAccount', () => {
+    const pending = { ...base, flowaccount_payment_status: 'pendingPayment' }
+    const [group] = groupExpensesByPaymentSlip([pending], [{
+      id: 'local-1',
+      payment_slip_serial: 'PAY1',
+      payment_date: '2026-08-24',
+      bank_account_id: 'bank-1',
+      bank_name: 'KBANK',
+      account_number: '123-4-56789-0',
+      amount_satang: 100_000,
+      slip_image_url: 'https://example.com/slip.jpg',
+      note: null,
+      recorded_by_name: 'Anirut',
+    }])
+
+    expect(group).toMatchObject({
+      status: 'awaiting_flowaccount',
+      local_payment: { payment_slip_serial: 'PAY1', amount_satang: 100_000 },
+    })
+  })
+
+  it('uses FlowAccount paid status as final even when a local transfer exists', () => {
+    const [group] = groupExpensesByPaymentSlip([base], [{
+      id: 'local-1',
+      payment_slip_serial: 'PAY1',
+      payment_date: '2026-08-24',
+      bank_account_id: 'bank-1',
+      bank_name: 'KBANK',
+      account_number: '123-4-56789-0',
+      amount_satang: 100_000,
+      slip_image_url: 'https://example.com/slip.jpg',
+      note: null,
+      recorded_by_name: 'Anirut',
+    }])
+
+    expect(group.status).toBe('paid')
+    expect(group.local_payment?.slip_image_url).toBe('https://example.com/slip.jpg')
+  })
 })

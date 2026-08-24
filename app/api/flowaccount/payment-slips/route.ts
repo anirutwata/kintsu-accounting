@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { groupExpensesByPaymentSlip, type PaymentSlipExpense } from '@/lib/paymentSlipGrouping'
+import { groupExpensesByPaymentSlip, type PaymentSlipExpense, type PaymentSlipLocalPayment } from '@/lib/paymentSlipGrouping'
 
 export async function GET(req: Request) {
   const month = new URL(req.url).searchParams.get('month')
@@ -21,9 +21,24 @@ export async function GET(req: Request) {
     query = query.gte('date', `${month}-01`).lt('date', nextMonth)
   }
 
-  const { data, error } = await query
+  const [{ data, error }, { data: localPayments, error: localPaymentsError }] = await Promise.all([
+    query,
+    supabase
+      .from('payment_slip_local_payments')
+      .select('id, payment_slip_serial, payment_date, bank_account_id, amount_satang, slip_image_url, note, recorded_by_name, bank_accounts(bank_name, account_number)')
+      .eq('is_deleted', false),
+  ])
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  const groups = groupExpensesByPaymentSlip((data ?? []) as PaymentSlipExpense[])
+  if (localPaymentsError) return NextResponse.json({ error: localPaymentsError.message }, { status: 500 })
+  const mappedLocalPayments = (localPayments ?? []).map(payment => {
+    const account = Array.isArray(payment.bank_accounts) ? payment.bank_accounts[0] : payment.bank_accounts
+    return {
+      ...payment,
+      bank_name: account?.bank_name ?? '',
+      account_number: account?.account_number ?? '',
+    }
+  }) as PaymentSlipLocalPayment[]
+  const groups = groupExpensesByPaymentSlip((data ?? []) as PaymentSlipExpense[], mappedLocalPayments)
   return NextResponse.json({
     data: groups,
     totalPaymentSlips: groups.length,

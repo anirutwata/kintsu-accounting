@@ -18,11 +18,29 @@ export interface PaymentSlipGroup {
   payment_channel: string | null
   total_satang: number
   gross_total_satang: number
-  status: 'pending' | 'paid'
+  status: 'pending' | 'awaiting_flowaccount' | 'paid'
+  local_payment: PaymentSlipLocalPayment | null
   expenses: PaymentSlipExpense[]
 }
 
-export function groupExpensesByPaymentSlip(expenses: PaymentSlipExpense[]): PaymentSlipGroup[] {
+export interface PaymentSlipLocalPayment {
+  id: string
+  payment_slip_serial: string
+  payment_date: string
+  bank_account_id: string
+  bank_name: string
+  account_number: string
+  amount_satang: number
+  slip_image_url: string
+  note: string | null
+  recorded_by_name: string | null
+}
+
+export function groupExpensesByPaymentSlip(
+  expenses: PaymentSlipExpense[],
+  localPayments: PaymentSlipLocalPayment[] = [],
+): PaymentSlipGroup[] {
+  const localPaymentBySerial = new Map(localPayments.map(payment => [payment.payment_slip_serial, payment]))
   const groups = new Map<string, PaymentSlipGroup>()
   for (const expense of expenses) {
     const serial = expense.flowaccount_payment_slip_serial
@@ -33,17 +51,20 @@ export function groupExpensesByPaymentSlip(expenses: PaymentSlipExpense[]): Paym
       total_satang: 0,
       gross_total_satang: 0,
       status: 'paid',
+      local_payment: null,
       expenses: [],
     }
     group.gross_total_satang += expense.total_satang
     group.total_satang += expense.total_satang - expense.wht_satang
     if (expense.flowaccount_payment_status === 'pendingPayment') group.status = 'pending'
     group.expenses.push(expense)
+    group.local_payment = localPaymentBySerial.get(serial) ?? null
     groups.set(serial, group)
   }
   return [...groups.values()]
     .map(group => ({
       ...group,
+      status: group.status === 'pending' && group.local_payment ? 'awaiting_flowaccount' as const : group.status,
       expenses: group.expenses.sort((a, b) => a.document_date.localeCompare(b.document_date)),
     }))
     .sort((a, b) => b.payment_date.localeCompare(a.payment_date) || b.serial.localeCompare(a.serial))
