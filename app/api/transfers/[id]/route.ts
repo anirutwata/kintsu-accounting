@@ -24,11 +24,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .maybeSingle()
   if (!existing) return NextResponse.json({ error: 'ไม่พบรายการโอนเงิน' }, { status: 404 })
 
-  if (existing.flowaccount_journal_record_id) {
+  if (existing.flowaccount_journal_record_id && existing.flowaccount_journal_state !== 'void_pending') {
+    const { data: pending, error: pendingError } = await supabase.from('bank_transfers').update({
+      flowaccount_journal_state: 'voiding',
+      flowaccount_sync_error: 'กำลัง Void JV เดิมเพื่อบันทึกการแก้ไข',
+    }).eq('id', id).eq('flowaccount_journal_state', 'synced').select('id').maybeSingle()
+    if (pendingError) return NextResponse.json({ error: pendingError.message }, { status: 500 })
+    if (!pending) return NextResponse.json({ error: 'รายการนี้กำลังถูกแก้ไข กรุณาลองใหม่อีกครั้ง' }, { status: 409 })
+
     const voidResult = await voidBankTransferJournal(existing.flowaccount_journal_record_id)
     if (!voidResult.ok) {
+      await supabase.from('bank_transfers').update({ flowaccount_journal_state: 'synced', flowaccount_sync_error: null }).eq('id', id)
       return NextResponse.json({ error: `ยังไม่แก้ไขรายการ เพราะยกเลิก ${existing.flowaccount_journal_serial} ใน FlowAccount ไม่สำเร็จ: ${voidResult.error}` }, { status: 502 })
     }
+    const { error: voidedStateError } = await supabase.from('bank_transfers').update({
+      flowaccount_journal_state: 'void_pending',
+      flowaccount_sync_error: 'JV เดิมถูก Void แล้ว รอบันทึกข้อมูลใหม่',
+    }).eq('id', id).eq('flowaccount_journal_state', 'voiding')
+    if (voidedStateError) return NextResponse.json({ error: `JV เดิมถูก Void แล้ว แต่บันทึกสถานะ KINTSU ไม่สำเร็จ: ${voidedStateError.message}` }, { status: 500 })
   }
 
   const { data, error } = await supabase
@@ -44,6 +57,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       slip_image_url: slip_image_url || null,
       flowaccount_journal_record_id: null,
       flowaccount_journal_serial: null,
+      flowaccount_journal_state: 'idle',
       flowaccount_synced_at: null,
       flowaccount_sync_error: null,
     })
@@ -71,11 +85,24 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { data: transfer } = await supabase.from('bank_transfers').select('*').eq('id', id).eq('is_deleted', false).maybeSingle()
   if (!transfer) return NextResponse.json({ error: 'ไม่พบรายการโอนเงิน' }, { status: 404 })
 
-  if (transfer.flowaccount_journal_record_id) {
+  if (transfer.flowaccount_journal_record_id && transfer.flowaccount_journal_state !== 'void_pending') {
+    const { data: pending, error: pendingError } = await supabase.from('bank_transfers').update({
+      flowaccount_journal_state: 'voiding',
+      flowaccount_sync_error: 'กำลัง Void JV ก่อนลบรายการ',
+    }).eq('id', id).eq('flowaccount_journal_state', 'synced').select('id').maybeSingle()
+    if (pendingError) return NextResponse.json({ error: pendingError.message }, { status: 500 })
+    if (!pending) return NextResponse.json({ error: 'รายการนี้กำลังถูกลบ กรุณาลองใหม่อีกครั้ง' }, { status: 409 })
+
     const voidResult = await voidBankTransferJournal(transfer.flowaccount_journal_record_id)
     if (!voidResult.ok) {
+      await supabase.from('bank_transfers').update({ flowaccount_journal_state: 'synced', flowaccount_sync_error: null }).eq('id', id)
       return NextResponse.json({ error: `ยังไม่ลบรายการ เพราะยกเลิก ${transfer.flowaccount_journal_serial} ใน FlowAccount ไม่สำเร็จ: ${voidResult.error}` }, { status: 502 })
     }
+    const { error: voidedStateError } = await supabase.from('bank_transfers').update({
+      flowaccount_journal_state: 'void_pending',
+      flowaccount_sync_error: 'JV เดิมถูก Void แล้ว รอ soft-delete รายการ',
+    }).eq('id', id).eq('flowaccount_journal_state', 'voiding')
+    if (voidedStateError) return NextResponse.json({ error: `JV เดิมถูก Void แล้ว แต่บันทึกสถานะ KINTSU ไม่สำเร็จ: ${voidedStateError.message}` }, { status: 500 })
   }
 
   const { error } = await supabase.from('bank_transfers').update({

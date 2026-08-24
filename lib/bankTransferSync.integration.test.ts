@@ -44,7 +44,10 @@ live('FlowAccount bank transfer JV (production)', () => {
     transferId = transfer!.id
 
     const first = await syncBankTransferToFlowAccount(supabase, transferId!)
-    if (!first.ok) throw new Error(first.error)
+    if (!first.ok) {
+      journalRecordId = 'cleanupRequiredRecordId' in first ? first.cleanupRequiredRecordId ?? null : null
+      throw new Error(first.error)
+    }
     expect(first.ok).toBe(true)
     journalRecordId = first.recordId
     expect(first.created).toBe(true)

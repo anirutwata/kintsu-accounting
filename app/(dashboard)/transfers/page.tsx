@@ -21,6 +21,7 @@ interface Transfer {
   created_by_name: string | null
   flowaccount_journal_record_id: number | null
   flowaccount_journal_serial: string | null
+  flowaccount_journal_state: 'idle' | 'creating' | 'synced' | 'voiding' | 'void_pending' | 'error'
   flowaccount_synced_at: string | null
   flowaccount_sync_error: string | null
 }
@@ -472,7 +473,7 @@ export default function TransfersPage() {
                         </span>
                       </div>
                       {t.note && <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{t.note}</p>}
-                      {t.flowaccount_journal_serial ? (
+                      {t.flowaccount_journal_serial && t.flowaccount_journal_state === 'synced' ? (
                         <p className="text-xs font-medium text-green-700">FlowAccount · {t.flowaccount_journal_serial}</p>
                       ) : t.flowaccount_sync_error ? (
                         <div className="mt-1">

@@ -8,10 +8,23 @@ alter table bank_accounts
 alter table bank_transfers
   add column if not exists flowaccount_journal_record_id bigint,
   add column if not exists flowaccount_journal_serial text,
+  add column if not exists flowaccount_journal_state text not null default 'idle'
+    check (flowaccount_journal_state in ('idle', 'creating', 'synced', 'voiding', 'void_pending', 'error')),
   add column if not exists flowaccount_synced_at timestamptz,
   add column if not exists flowaccount_sync_error text,
   add column if not exists is_deleted boolean not null default false,
   add column if not exists deleted_at timestamptz;
+
+alter table bank_transfers
+  drop constraint if exists bank_transfers_flowaccount_journal_state_check;
+alter table bank_transfers
+  add constraint bank_transfers_flowaccount_journal_state_check
+  check (flowaccount_journal_state in ('idle', 'creating', 'synced', 'voiding', 'void_pending', 'error'));
+
+update bank_transfers
+set flowaccount_journal_state = 'synced'
+where flowaccount_journal_record_id is not null
+  and flowaccount_journal_state = 'idle';
 
 create unique index if not exists bank_transfers_flowaccount_journal_uidx
   on bank_transfers(flowaccount_journal_record_id)
