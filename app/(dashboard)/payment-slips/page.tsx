@@ -77,6 +77,10 @@ export default function PaymentSlipsPage() {
   async function savePayment(event: React.FormEvent) {
     event.preventDefault()
     if (!payingSerial) return
+    if (!paymentForm.slip_image_url) {
+      setPaymentError('กรุณาแนบสลิปการโอน')
+      return
+    }
     setSavingPayment(true)
     setPaymentError('')
     try {
@@ -208,12 +212,19 @@ export default function PaymentSlipsPage() {
                         onChange={event => setPaymentForm(form => ({ ...form, amount: event.target.value }))}
                         className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
                     </label>
-                    <label className="block text-xs text-gray-600">สลิปการโอน
-                      <input type="file" accept="image/*" required={!paymentForm.slip_image_url}
+                    <div className="text-xs text-gray-600">สลิปการโอน
+                      <input id={`payment-slip-${group.serial}`} type="file" accept="image/*" className="sr-only"
                         onChange={event => { const file = event.target.files?.[0]; if (file) uploadSlip(file) }}
-                        className="mt-1 block w-full text-sm" />
-                    </label>
-                    {paymentForm.slip_image_url && <p className="text-xs text-green-700">✓ แนบสลิปแล้ว</p>}
+                        disabled={uploadingSlip} />
+                      <label htmlFor={`payment-slip-${group.serial}`}
+                        className={`mt-1 flex min-h-24 cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed px-4 text-center text-base font-medium transition-colors ${paymentForm.slip_image_url ? 'border-green-400 bg-green-50 text-green-700' : 'border-[#d8ccb7] bg-white text-[#766a58]'} ${uploadingSlip ? 'pointer-events-none opacity-60' : ''}`}>
+                        {uploadingSlip
+                          ? '⏳ กำลังอัปโหลดสลิป...'
+                          : paymentForm.slip_image_url
+                            ? '✅ แนบสลิปแล้ว · กดเพื่อเปลี่ยน'
+                            : '📎 กดเพื่อแนบสลิป'}
+                      </label>
+                    </div>
                     <label className="block text-xs text-gray-600">หมายเหตุ (ถ้ามี)
                       <input type="text" value={paymentForm.note}
                         onChange={event => setPaymentForm(form => ({ ...form, note: event.target.value }))}
