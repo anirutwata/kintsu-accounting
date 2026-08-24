@@ -577,14 +577,15 @@ export async function createTaxInvoice(input: CreateTaxInvoiceInput) {
   })
 }
 
-// Returns base64-encoded PDF bytes (ใบกำกับภาษี + ใบเสร็จรับเงิน รวมในไฟล์เดียว)
+// Returns base64-encoded PDF bytes — just the one combined ใบกำกับภาษี/ใบเสร็จรับเงิน
+// page. Omitting `receipt` (rather than setting it true) is what keeps this to a single
+// page: FlowAccount appends a second, separate ใบเสร็จรับเงิน page whenever it's set.
 export async function exportTaxInvoicePdfBase64(recordId: number): Promise<string> {
   return flowAccountFetch(`/tax-invoices/${recordId}/export-pdf/base64`, {
     method: 'POST',
     body: JSON.stringify({
       culture: 'th',
       document: { original: true },
-      receipt: { original: true },
     }),
   })
 }
