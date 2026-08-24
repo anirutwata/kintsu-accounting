@@ -7,6 +7,10 @@ import { updateFlowAccountSync, deleteFlowAccountSync } from '@/lib/expenseSync'
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
+  const { data: sourceRow } = await supabase.from('expenses').select('source').eq('id', id).maybeSingle()
+  if (sourceRow?.source === 'flowaccount_payment_slip') {
+    return NextResponse.json({ error: 'รายการจาก FlowAccount เป็นแบบอ่านอย่างเดียว กรุณาแก้ที่ FlowAccount แล้ว Sync ใหม่' }, { status: 409 })
+  }
   const cookieStore = await cookies()
   const updaterName = cookieStore.get('kintsu_acc_name')?.value || null
 
@@ -107,6 +111,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
+  const { data: sourceRow } = await supabase.from('expenses').select('source').eq('id', id).maybeSingle()
+  if (sourceRow?.source === 'flowaccount_payment_slip') {
+    return NextResponse.json({ error: 'รายการจาก FlowAccount เป็นแบบอ่านอย่างเดียว กรุณาลบ/void ที่ FlowAccount แล้ว Sync ใหม่' }, { status: 409 })
+  }
   const cookieStore = await cookies()
   const userId = cookieStore.get('kintsu_acc_user_id')?.value
 

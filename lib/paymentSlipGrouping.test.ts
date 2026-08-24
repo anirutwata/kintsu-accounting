@@ -11,6 +11,8 @@ const base: PaymentSlipExpense = {
   flowaccount_payment_slip_serial: 'PAY1',
   flowaccount_payment_channel: 'โอนเงิน - KasikornBank',
   flowaccount_reference: null,
+  flowaccount_payment_status: 'paidByPaymentSlip',
+  wht_satang: 0,
 }
 
 describe('payment slip grouping', () => {
@@ -26,5 +28,10 @@ describe('payment slip grouping', () => {
       total_satang: 350_000,
       expenses: [{ flowaccount_document_serial: 'EXP1' }, { flowaccount_document_serial: 'EXP2' }],
     })
+  })
+
+  it('uses the net bank transfer after withholding tax', () => {
+    const [group] = groupExpensesByPaymentSlip([{ ...base, total_satang: 107_000, wht_satang: 3_000 }])
+    expect(group).toMatchObject({ gross_total_satang: 107_000, total_satang: 104_000, status: 'paid' })
   })
 })

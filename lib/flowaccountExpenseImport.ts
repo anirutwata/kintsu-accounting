@@ -15,6 +15,7 @@ export interface FlowAccountExpenseDocument {
   status: number | string
   statusString?: string
   publishedOn: string
+  dueDate?: string
   contactName?: string
   contactAddress?: string
   reference?: string
@@ -33,6 +34,7 @@ export interface FlowAccountExpenseDocument {
     paymentDate?: string
     paymentMethod?: number | string
     paymentChannel?: string
+    pettyCashName?: string
   }
   items?: FlowAccountExpenseItem[]
 }
@@ -90,28 +92,18 @@ function paymentSlipSerial(document: FlowAccountExpenseDocument): string | null 
   )?.documentSerial ?? null
 }
 
-function paymentMethod(value: number | string | undefined): ImportedExpenseRow['payment_method'] {
+function paymentMethod(value: number | string | undefined, paid: boolean): ImportedExpenseRow['payment_method'] {
+  if (!paid) return 'เครดิต'
   if (String(value) === '1') return 'เงินสด'
+  if (String(value) === '5') return 'โอนเงิน'
+  if (String(value) === '11') return 'เงินสด'
   if (String(value) === '13') return 'บัตรเครดิต'
-  return 'โอนเงิน'
+  throw new Error(`ไม่รองรับ paymentMethod=${String(value)}`)
 }
-
-// Historical FlowAccount expenses use several custom chart-of-account IDs that
-// pre-date KINTSU's current expense-category mapping. These aliases were audited
-// against the real Jun-Aug 2026 PAY documents; keeping them explicit prevents a
-// food-cost document from silently falling back to "ค่าบริการอื่นๆ".
-const historicalCategoryByDebitId = new Map<number, string>([
-  [444011608, 'วัตถุดิบทางตรง-อื่นๆ'],       // 51121.01 ซื้อวัตถุดิบประกอบอาหาร
-  [444013888, 'เครื่องดื่ม'],                // 51121.02 เครื่องดื่ม
-  [444013892, 'เครื่องดื่ม'],                // 51121.03 เครื่องดื่ม - แอลกอฮอลล์
-  [218906633, 'วัสดุสิ้นเปลืองทั่วไปในร้านอาหาร'], // 51122 ซื้อวัสดุสิ้นเปลือง
-  [209573422, 'วัตถุดิบทางตรง-อื่นๆ'],       // 51111.01 ซื้อสินค้า
-  [209573481, 'วัสดุสิ้นเปลืองทั่วไปในร้านอาหาร'], // 53032.03 เครื่องเขียน/วัสดุสิ้นเปลือง
-])
 
 export function isPaidByPaymentSlip(document: FlowAccountExpenseDocument): boolean {
   return !document.isDelete &&
-    (String(document.status) === '6' || document.statusString === 'paidByPaymentSlip') &&
+    (['4', '6'].includes(String(document.status)) || ['pendingPayment', 'paidByPaymentSlip'].includes(document.statusString || '')) &&
     paymentSlipSerial(document) !== null
 }
 
@@ -135,7 +127,7 @@ export function mapFlowAccountExpense(
     const totalSatang = toSatang(item.total ?? Number(item.pricePerUnit ?? 0) * quantity)
     const debitId = Number(item.debitId)
     return {
-      category: categoryByDebitId.get(debitId) ?? historicalCategoryByDebitId.get(debitId) ?? fallbackCategory,
+      category: categoryByDebitId.get(debitId) ?? fallbackCategory,
       description: item.description || item.debitNameLocal || document.reference || document.documentSerial,
       // FlowAccount can carry inline item discounts. KINTSU stores the authoritative
       // post-discount line total, so use one summarized unit instead of re-deriving a
@@ -152,6 +144,7 @@ export function mapFlowAccountExpense(
   const vatSatang = toSatang(document.vatAmount)
   const totalSatang = toSatang(document.grandTotal)
   const amountSatang = Math.max(1, totalSatang - (document.isVatInclusive ? 0 : vatSatang) + discountSatang)
+  const paid = String(document.status) === '6' || document.statusString === 'paidByPaymentSlip'
   const primaryCategory = items.length === 0
     ? fallbackCategory
     : [...new Set(items.map(item => item.category))].length === 1
@@ -161,7 +154,7 @@ export function mapFlowAccountExpense(
   return {
     expense: {
       document_date: isoDate(document.publishedOn, document.payments?.paymentDate || ''),
-      date: isoDate(document.payments?.paymentDate, document.publishedOn),
+      date: isoDate(document.payments?.paymentDate, document.dueDate || document.publishedOn),
       category: primaryCategory,
       amount_satang: amountSatang,
       vat_satang: vatSatang,
@@ -169,8 +162,8 @@ export function mapFlowAccountExpense(
       wht_satang: toSatang(document.documentWithholdingTaxAmount),
       discount_satang: discountSatang,
       total_satang: totalSatang,
-      payment_method: paymentMethod(document.payments?.paymentMethod),
-      is_paid: true,
+      payment_method: paymentMethod(document.payments?.paymentMethod, paid),
+      is_paid: paid,
       is_deleted: false,
       deleted_at: null,
       recipient_name: document.contactName || null,
@@ -181,7 +174,7 @@ export function mapFlowAccountExpense(
       flowaccount_document_serial: document.documentSerial,
       flowaccount_payment_slip_serial: paySerial,
       flowaccount_payment_status: document.statusString || 'paidByPaymentSlip',
-      flowaccount_payment_channel: document.payments?.paymentChannel || null,
+      flowaccount_payment_channel: document.payments?.paymentChannel || document.payments?.pettyCashName || null,
       flowaccount_reference: document.reference || null,
       flowaccount_synced_at: new Date().toISOString(),
       source: 'flowaccount_payment_slip',

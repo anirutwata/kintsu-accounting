@@ -8,6 +8,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .from('expense_items')
     .select('*')
     .eq('expense_id', id)
+    .eq('is_deleted', false)
     .order('sort_order')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)

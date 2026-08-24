@@ -76,6 +76,7 @@ async function resolveItems(supabase: any, expense: any) {
     .from('expense_items')
     .select('category, description, quantity, unit, price_per_unit_satang')
     .eq('expense_id', expense.id)
+    .eq('is_deleted', false)
     .order('sort_order')
 
   const sourceItems =

@@ -54,13 +54,18 @@ export default function PaymentSlipsPage() {
                 <div>
                   <p className="font-semibold text-blue-700">{group.serial}</p>
                   <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                    ชำระ {thaiDate(group.payment_date)} · {group.expenses.length} เอกสาร
+                    {group.status === 'paid' ? 'ชำระ' : 'ครบกำหนด'} {thaiDate(group.payment_date)} · {group.expenses.length} เอกสาร
                   </p>
                   {group.payment_channel && <p className="text-xs mt-1 text-gray-500">{group.payment_channel}</p>}
                 </div>
                 <div className="text-right">
                   <p className="font-bold" style={{ color: 'var(--charcoal)' }}>{formatBaht(group.total_satang)}</p>
-                  <span className="text-xs text-green-700">ชำระเงินแล้ว</span>
+                  <span className={`text-xs ${group.status === 'paid' ? 'text-green-700' : 'text-amber-700'}`}>
+                    {group.status === 'paid' ? 'ชำระเงินแล้ว' : 'รอชำระ'}
+                  </span>
+                  {group.gross_total_satang !== group.total_satang && (
+                    <p className="text-[10px] text-gray-400">ก่อนหัก WHT {formatBaht(group.gross_total_satang)}</p>
+                  )}
                 </div>
               </div>
             </button>

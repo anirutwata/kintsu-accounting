@@ -75,7 +75,26 @@ describe('FlowAccount payment-slip expense import', () => {
   })
 
   it('maps audited historical FlowAccount debit accounts instead of using a generic fallback', () => {
-    const mapped = mapFlowAccountExpense(paidBySlip, new Map())
+    const mapped = mapFlowAccountExpense(paidBySlip, new Map([[444011608, 'วัตถุดิบทางตรง-อื่นๆ']]))
     expect(mapped.items[0].category).toBe('วัตถุดิบทางตรง-อื่นๆ')
+  })
+
+  it('imports a pending PAY as unpaid credit using its due date', () => {
+    const mapped = mapFlowAccountExpense({
+      ...paidBySlip,
+      status: '4',
+      statusString: 'pendingPayment',
+      dueDate: '2026-08-30T00:00:00',
+      payments: { paymentDate: '', paymentMethod: '0', paymentChannel: '' },
+    }, new Map([[444011608, 'วัตถุดิบทางตรง-อื่นๆ']]))
+    expect(mapped.expense).toMatchObject({ date: '2026-08-30', is_paid: false, payment_method: 'เครดิต' })
+  })
+
+  it('maps FlowAccount petty cash payments without pretending they are bank transfers', () => {
+    const mapped = mapFlowAccountExpense({
+      ...paidBySlip,
+      payments: { paymentDate: '2026-08-22', paymentMethod: '11', pettyCashName: 'เงินสดย่อย Kintsu' },
+    }, new Map([[444011608, 'วัตถุดิบทางตรง-อื่นๆ']]))
+    expect(mapped.expense).toMatchObject({ payment_method: 'เงินสด', flowaccount_payment_channel: 'เงินสดย่อย Kintsu' })
   })
 })

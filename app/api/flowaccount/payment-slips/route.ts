@@ -7,7 +7,7 @@ export async function GET(req: Request) {
   const supabase = await createClient()
   let query = supabase
     .from('expenses')
-    .select('id, date, document_date, recipient_name, total_satang, flowaccount_document_serial, flowaccount_payment_slip_serial, flowaccount_payment_channel, flowaccount_reference')
+    .select('id, date, document_date, recipient_name, total_satang, wht_satang, flowaccount_document_serial, flowaccount_payment_slip_serial, flowaccount_payment_channel, flowaccount_reference, flowaccount_payment_status')
     .eq('source', 'flowaccount_payment_slip')
     .eq('is_deleted', false)
     .not('flowaccount_payment_slip_serial', 'is', null)
