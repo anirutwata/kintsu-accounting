@@ -39,7 +39,7 @@ export async function GET(req: Request) {
   // its own category/total_satang below.
   const expenseIds = (expenses || []).map((e) => e.id)
   const { data: itemRows } = expenseIds.length
-    ? await supabase.from('expense_items').select('expense_id, category, total_satang').in('expense_id', expenseIds)
+    ? await supabase.from('expense_items').select('expense_id, category, total_satang').in('expense_id', expenseIds).eq('is_deleted', false)
     : { data: [] as { expense_id: string; category: string; total_satang: number }[] }
   const itemsByExpenseId = new Map<string, { category: string; total_satang: number }[]>()
   for (const row of itemRows || []) {

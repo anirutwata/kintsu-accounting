@@ -70,10 +70,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // edit, etc.) — leave existing rows alone. Any array (including []) means the client
   // owns the full itemized set now, so replace what's stored.
   if (items !== undefined) {
-    const { error: deleteItemsError } = await supabase.from('expense_items').delete().eq('expense_id', id)
+    const { error: deleteItemsError } = await supabase.from('expense_items').update({
+      is_deleted: true,
+      deleted_at: new Date().toISOString(),
+    }).eq('expense_id', id).eq('is_deleted', false)
     if (deleteItemsError) return NextResponse.json({ error: deleteItemsError.message }, { status: 500 })
     if (hasItems) {
-      const { error: itemsError } = await supabase.from('expense_items').insert(
+      const { error: itemsError } = await supabase.from('expense_items').upsert(
         items!.map((i, idx) => ({
           expense_id: id,
           category: i.category,
@@ -83,7 +86,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           price_per_unit_satang: i.price_per_unit_satang,
           total_satang: Math.round(i.quantity * i.price_per_unit_satang),
           sort_order: idx,
+          is_deleted: false,
+          deleted_at: null,
         })),
+        { onConflict: 'expense_id,sort_order' },
       )
       if (itemsError) return NextResponse.json({ error: itemsError.message }, { status: 500 })
     }
