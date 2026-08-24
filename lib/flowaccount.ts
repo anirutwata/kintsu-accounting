@@ -73,6 +73,36 @@ async function flowAccountFetch(path: string, init: RequestInit = {}) {
   return json.data
 }
 
+export interface FlowAccountExpensePage {
+  totalDocument: number
+  list: unknown[]
+}
+
+// FlowAccount has no PAY/payment-slip collection in its public OpenAPI. A paid
+// payment slip is exposed through its source EXP documents instead: status=6,
+// referencedToMe contains the PAY serial, and payments contains the batch's
+// payment date/channel. Fetch the raw EXP rows so the import layer can group
+// them by PAY without creating another expense for the PAY total.
+export async function listFlowAccountExpenses(
+  startDate: string,
+  endDate: string,
+  currentPage = 1,
+  pageSize = 200,
+): Promise<FlowAccountExpensePage> {
+  const params = new URLSearchParams({
+    currentPage: String(currentPage),
+    pageSize: String(pageSize),
+    range: '5',
+    startDate,
+    endDate,
+  })
+  const data = await flowAccountFetch(`/expenses?${params.toString()}`)
+  return {
+    totalDocument: Number(data?.totalDocument ?? 0),
+    list: data?.list ?? [],
+  }
+}
+
 export interface ExpenseCategory {
   // Only populated for the curated "business category" subset — most of the accounting
   // chart of accounts has no systemCode/categoryId and posts via creditId/debitId alone.

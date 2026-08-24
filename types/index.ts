@@ -106,6 +106,11 @@ export interface Expense {
   flowaccount_record_id: number | null
   flowaccount_document_serial: string | null
   flowaccount_synced_at: string | null
+  flowaccount_payment_slip_serial: string | null
+  flowaccount_payment_status: string | null
+  flowaccount_payment_channel: string | null
+  flowaccount_reference: string | null
+  source: 'kintsu' | 'flowaccount_payment_slip'
   items?: ExpenseItem[]
 }
 

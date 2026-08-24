@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import Link from 'next/link'
 import { formatBaht, toSatang } from '@/lib/money'
 import { getTodayBKK, getMonthKey, formatThaiMonth } from '@/lib/utils'
 import { compressImageFile } from '@/lib/compressImage'
@@ -143,6 +144,7 @@ export default function ExpensesPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [syncingFa, setSyncingFa] = useState(false)
   const [syncFaError, setSyncFaError] = useState('')
+  const [syncingPaymentSlips, setSyncingPaymentSlips] = useState(false)
 
   async function handleSyncFlowAccount(id: string) {
     setSyncingFa(true)
@@ -155,6 +157,21 @@ export default function ExpensesPage() {
       loadExpenses()
     } finally {
       setSyncingFa(false)
+    }
+  }
+
+  async function handleSyncPaymentSlips() {
+    setSyncingPaymentSlips(true)
+    try {
+      const res = await fetch('/api/flowaccount/payment-slips/sync', { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok && res.status !== 207) throw new Error(json.error || 'Sync ไม่สำเร็จ')
+      await loadExpenses()
+      alert(`Sync ใบเตรียมจ่ายสำเร็จ\nเพิ่มใหม่ ${json.created || 0} รายการ\nอัปเดต ${json.updated || 0} รายการ${json.errors?.length ? `\nผิดพลาด ${json.errors.length} รายการ` : ''}`)
+    } catch (error) {
+      alert(`Sync ใบเตรียมจ่ายไม่สำเร็จ: ${String(error)}`)
+    } finally {
+      setSyncingPaymentSlips(false)
     }
   }
 
@@ -511,6 +528,17 @@ export default function ExpensesPage() {
         + บันทึกค่าใช้จ่าย
       </button>
 
+      <button onClick={handleSyncPaymentSlips} disabled={syncingPaymentSlips}
+        className="w-full py-3 rounded-2xl font-semibold border-2 disabled:opacity-50"
+        style={{ borderColor: '#2563EB', color: '#2563EB', background: '#EFF6FF' }}>
+        {syncingPaymentSlips ? 'กำลัง Sync ใบเตรียมจ่าย...' : '🔄 Sync ใบเตรียมจ่ายจาก FlowAccount'}
+      </button>
+
+      <Link href="/payment-slips" className="block w-full py-3 rounded-2xl font-semibold text-center border"
+        style={{ borderColor: 'var(--border)', color: 'var(--charcoal)', background: 'white' }}>
+        📄 ดูใบเตรียมจ่ายแบบรวมยอด
+      </Link>
+
       {/* Expense List grouped by date */}
       <div className="space-y-4">
         {sortedDates.map(date => (
@@ -533,6 +561,11 @@ export default function ExpensesPage() {
                           style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
                           {exp.category}
                         </span>
+                        {exp.source === 'flowaccount_payment_slip' && (
+                          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                            FlowAccount · {exp.flowaccount_payment_slip_serial}
+                          </span>
+                        )}
                       </div>
                       {exp.recipient_name && (
                         <p className="text-sm font-medium" style={{ color: 'var(--charcoal)' }}>{exp.recipient_name}</p>
@@ -676,6 +709,15 @@ export default function ExpensesPage() {
               {selectedExpense.flowaccount_document_serial && (
                 <DetailRow label="FlowAccount" value={`✅ ${selectedExpense.flowaccount_document_serial}`} />
               )}
+              {selectedExpense.flowaccount_payment_slip_serial && (
+                <DetailRow label="ใบเตรียมจ่าย" value={selectedExpense.flowaccount_payment_slip_serial} />
+              )}
+              {selectedExpense.flowaccount_payment_channel && (
+                <DetailRow label="ช่องทางใน FlowAccount" value={selectedExpense.flowaccount_payment_channel} />
+              )}
+              {selectedExpense.flowaccount_reference && (
+                <DetailRow label="เลขอ้างอิงผู้ขาย" value={selectedExpense.flowaccount_reference} />
+              )}
 
               {/* Slip image */}
               {selectedExpense.slip_image_url && (
@@ -705,16 +747,24 @@ export default function ExpensesPage() {
                 </div>
               )}
 
-              {syncFaError && <p className="text-xs text-red-500">❌ {syncFaError}</p>}
-              <button onClick={() => handleSyncFlowAccount(selectedExpense.id)}
-                disabled={syncingFa}
-                className="w-full py-2.5 rounded-xl text-sm font-semibold border-2 disabled:opacity-50"
-                style={{ borderColor: '#2563EB', color: '#2563EB' }}>
-                {syncingFa ? 'กำลังส่ง...' : selectedExpense.flowaccount_document_serial ? '🔁 ส่งเข้า FlowAccount อีกครั้ง' : '📤 ส่งเข้า FlowAccount'}
-              </button>
+              {selectedExpense.source === 'flowaccount_payment_slip' ? (
+                <p className="text-xs rounded-lg bg-blue-50 border border-blue-200 text-blue-700 px-3 py-2">
+                  รายการนี้นำเข้าจาก FlowAccount และเป็นแบบอ่านอย่างเดียว แก้ไขข้อมูลต้นทางใน FlowAccount แล้วกด Sync ใหม่
+                </p>
+              ) : (
+                <>
+                  {syncFaError && <p className="text-xs text-red-500">❌ {syncFaError}</p>}
+                  <button onClick={() => handleSyncFlowAccount(selectedExpense.id)}
+                    disabled={syncingFa}
+                    className="w-full py-2.5 rounded-xl text-sm font-semibold border-2 disabled:opacity-50"
+                    style={{ borderColor: '#2563EB', color: '#2563EB' }}>
+                    {syncingFa ? 'กำลังส่ง...' : selectedExpense.flowaccount_document_serial ? '🔁 ส่งเข้า FlowAccount อีกครั้ง' : '📤 ส่งเข้า FlowAccount'}
+                  </button>
+                </>
+              )}
 
               {/* Action buttons */}
-              <div className="flex gap-2 pt-2">
+              {selectedExpense.source !== 'flowaccount_payment_slip' && <div className="flex gap-2 pt-2">
                 <button onClick={() => openEdit(selectedExpense)}
                   className="flex-1 py-2.5 rounded-xl text-sm font-semibold border-2"
                   style={{ borderColor: 'var(--flame-red)', color: 'var(--flame-red)' }}>
@@ -738,7 +788,7 @@ export default function ExpensesPage() {
                     ลบ
                   </button>
                 )}
-              </div>
+              </div>}
             </div>
           </div>
         </div>
