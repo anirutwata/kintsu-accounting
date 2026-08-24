@@ -53,6 +53,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (voidedStateError) return NextResponse.json({ error: `JV เดิมถูก Void แล้ว แต่บันทึกสถานะ KINTSU ไม่สำเร็จ: ${voidedStateError.message}` }, { status: 500 })
   }
 
+  const expectedMutationState = existing.flowaccount_journal_record_id
+    ? 'void_pending'
+    : existing.flowaccount_journal_state
+
   const { data, error } = await supabase
     .from('bank_transfers')
     .update({
@@ -73,10 +77,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       flowaccount_sync_error: null,
     })
     .eq('id', id)
+    .eq('is_deleted', false)
+    .eq('flowaccount_journal_state', expectedMutationState)
     .select()
-    .single()
+    .maybeSingle()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!data) return NextResponse.json({ error: 'สถานะรายการเปลี่ยนระหว่างแก้ไข กรุณาลองใหม่อีกครั้ง' }, { status: 409 })
 
   triggerGasSync(data.date.substring(0, 7))
   const syncResult = await syncBankTransferToFlowAccount(supabase, data.id)
@@ -125,11 +132,16 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     if (voidedStateError) return NextResponse.json({ error: `JV เดิมถูก Void แล้ว แต่บันทึกสถานะ KINTSU ไม่สำเร็จ: ${voidedStateError.message}` }, { status: 500 })
   }
 
-  const { error } = await supabase.from('bank_transfers').update({
+  const expectedDeleteState = transfer.flowaccount_journal_record_id
+    ? 'void_pending'
+    : transfer.flowaccount_journal_state
+
+  const { data: deleted, error } = await supabase.from('bank_transfers').update({
     is_deleted: true,
     deleted_at: new Date().toISOString(),
-  }).eq('id', id).eq('is_deleted', false)
+  }).eq('id', id).eq('is_deleted', false).eq('flowaccount_journal_state', expectedDeleteState).select('id').maybeSingle()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!deleted) return NextResponse.json({ error: 'สถานะรายการเปลี่ยนระหว่างลบ กรุณาลองใหม่อีกครั้ง' }, { status: 409 })
 
   if (transfer) {
     triggerGasSync(transfer.date.substring(0, 7))
