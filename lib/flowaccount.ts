@@ -416,8 +416,17 @@ const CONTACT_GROUP_CODE: Record<'individual' | 'juristic', number> = { individu
 // FlowAccount has a dedicated contactZipCode field on the contact record (separate from
 // the free-text contactAddress that prints on the document); without this it's left blank
 // even though the zip is right there in the address text.
+const ZIP_CODE_RE = /\s*(\d{5})\s*$/
+
 function extractZipCode(address?: string): string | undefined {
-  return address?.match(/(\d{5})\s*$/)?.[1]
+  return address?.match(ZIP_CODE_RE)?.[1]
+}
+
+// Once the zip is captured into its own field above, strip it back out of the free-text
+// address — otherwise it prints twice on the document (once in the dedicated field, once
+// still trailing the address line).
+function stripZipCode(address?: string): string | undefined {
+  return address?.replace(ZIP_CODE_RE, '')
 }
 
 function buildSellDocument(input: {
@@ -428,6 +437,7 @@ function buildSellDocument(input: {
   contactGroup?: 'individual' | 'juristic'
   publishedOn: string
   remarks?: string
+  internalNotes?: string
   items: SellItemInput[]
 }) {
   const items = input.items.map((item) => ({
@@ -447,7 +457,7 @@ function buildSellDocument(input: {
     documentStructureType: 'SimpleDocument',
     contactName: input.contactName,
     contactTaxId: input.contactTaxId,
-    contactAddress: input.contactAddress,
+    contactAddress: stripZipCode(input.contactAddress),
     contactZipCode: extractZipCode(input.contactAddress),
     contactBranch: input.contactBranch,
     contactGroup: input.contactGroup ? CONTACT_GROUP_CODE[input.contactGroup] : undefined,
@@ -460,6 +470,7 @@ function buildSellDocument(input: {
     vatAmount,
     grandTotal,
     remarks: input.remarks ?? '',
+    internalNotes: input.internalNotes ?? '',
     items,
   }
 }
@@ -522,6 +533,7 @@ export interface CreateTaxInvoiceInput {
   contactGroup?: 'individual' | 'juristic'
   publishedOn: string // YYYY-MM-DD
   remarks?: string
+  internalNotes?: string
   items: SellItemInput[]
   payment?: TaxInvoicePayment
 }

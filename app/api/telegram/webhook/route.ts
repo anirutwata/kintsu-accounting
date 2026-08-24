@@ -86,7 +86,7 @@ export async function POST(req: Request) {
       contactBranch: claimed.contact_branch || undefined,
       contactGroup: claimed.contact_group || undefined,
       publishedOn: documentDate,
-      remarks: claimed.description,
+      internalNotes: 'ลูกค้าขอออกใบกำกับภาษีผ่าน Kintsu Account',
       items: [{ name: claimed.description, quantity: 1, unitName: 'รายการ', pricePerUnit: subTotal }],
       payment: resolveTaxInvoicePayment(claimed.payment_method, documentDate, roundingAmount, paymentConfig),
     })
