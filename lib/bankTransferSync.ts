@@ -1,8 +1,16 @@
-import { createApprovedJournal, getChartOfAccounts, voidJournalEntry } from './flowaccount'
+import { createApprovedJournal, getChartOfAccounts, voidJournalEntry, type FlowAccountChartOfAccount } from './flowaccount'
 import { syncBankTransferJournal, type JournalAccount } from './bankTransferJournal'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-const CASH_ACCOUNT_CODE = '11111'
+const CASH_ACCOUNT_CODE = '11112'
+
+export function resolveCashJournalAccount(
+  chart: Array<Pick<FlowAccountChartOfAccount, 'id' | 'code' | 'nameLocal'>>,
+): JournalAccount {
+  const cash = chart.find(account => account.code === CASH_ACCOUNT_CODE)
+  if (!cash) throw new Error(`ไม่พบบัญชี ${CASH_ACCOUNT_CODE} เงินสดคงเหลือใน FlowAccount`)
+  return { chartOfAccountId: cash.id, label: cash.nameLocal }
+}
 
 function normalizedAccountNumber(value: string | null | undefined) {
   return (value ?? '').replace(/\D/g, '')
@@ -40,9 +48,7 @@ async function resolveAccounts(supabase: SupabaseClient, transfer: TransferRow):
     if (bankName.trim().toLowerCase() === 'เงินสด') {
       if (!cashAccount) {
         const chart = await getChartOfAccounts()
-        const cash = chart.find(account => account.code === CASH_ACCOUNT_CODE)
-        if (!cash) throw new Error(`ไม่พบบัญชี ${CASH_ACCOUNT_CODE} เงินสดในมือใน FlowAccount`)
-        cashAccount = { chartOfAccountId: cash.id, label: cash.nameLocal }
+        cashAccount = resolveCashJournalAccount(chart)
       }
       return cashAccount
     }
