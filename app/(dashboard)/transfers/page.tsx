@@ -21,7 +21,7 @@ interface Transfer {
   created_by_name: string | null
   flowaccount_journal_record_id: number | null
   flowaccount_journal_serial: string | null
-  flowaccount_journal_state: 'idle' | 'creating' | 'synced' | 'voiding' | 'void_pending' | 'error'
+  flowaccount_journal_state: 'idle' | 'creating' | 'synced' | 'voiding' | 'void_pending' | 'cleanup_pending' | 'error'
   flowaccount_synced_at: string | null
   flowaccount_sync_error: string | null
 }

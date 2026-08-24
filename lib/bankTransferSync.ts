@@ -19,7 +19,8 @@ interface TransferRow {
   note: string | null
   flowaccount_journal_record_id: number | null
   flowaccount_journal_serial: string | null
-  flowaccount_journal_state: 'idle' | 'creating' | 'synced' | 'voiding' | 'void_pending' | 'error'
+  flowaccount_journal_state: 'idle' | 'creating' | 'synced' | 'voiding' | 'void_pending' | 'cleanup_pending' | 'error'
+  flowaccount_cleanup_record_id: number | null
 }
 
 interface LocalBankMapping {
@@ -80,10 +81,27 @@ export async function syncBankTransferToFlowAccount(supabase: SupabaseClient, id
     return { ok: false as const, error: 'JV เดิมถูก Void แล้ว กรุณาบันทึกการแก้ไขหรือลบรายการนี้ให้เสร็จ' }
   }
 
+  if (transfer.flowaccount_journal_state === 'cleanup_pending') {
+    if (!transfer.flowaccount_cleanup_record_id) {
+      return { ok: false as const, error: 'รายการรอ cleanup แต่ไม่มี FlowAccount record ID กรุณาติดต่อผู้ดูแลระบบ' }
+    }
+    const cleanup = await voidBankTransferJournal(transfer.flowaccount_cleanup_record_id, true)
+    if (!cleanup.ok) return { ok: false as const, error: `ยัง cleanup JV เดิมไม่สำเร็จ: ${cleanup.error}` }
+    const { error: resetError } = await supabase.from('bank_transfers').update({
+      flowaccount_journal_state: 'idle',
+      flowaccount_cleanup_record_id: null,
+      flowaccount_state_changed_at: new Date().toISOString(),
+      flowaccount_sync_error: null,
+    }).eq('id', id).eq('flowaccount_journal_state', 'cleanup_pending')
+    if (resetError) return { ok: false as const, error: `cleanup JV สำเร็จ แต่ reset สถานะ KINTSU ไม่สำเร็จ: ${resetError.message}` }
+    transfer.flowaccount_journal_state = 'idle'
+    transfer.flowaccount_cleanup_record_id = null
+  }
+
   if (!transfer.flowaccount_journal_record_id) {
     const { data: claim, error: claimError } = await supabase
       .from('bank_transfers')
-      .update({ flowaccount_journal_state: 'creating', flowaccount_sync_error: null })
+      .update({ flowaccount_journal_state: 'creating', flowaccount_state_changed_at: new Date().toISOString(), flowaccount_sync_error: null })
       .eq('id', id)
       .eq('is_deleted', false)
       .is('flowaccount_journal_record_id', null)
@@ -118,18 +136,26 @@ export async function syncBankTransferToFlowAccount(supabase: SupabaseClient, id
     }, { createApprovedJournal })
 
     if (result.created) {
-      const { error: updateError } = await supabase.from('bank_transfers').update({
+      const { data: persisted, error: updateError } = await supabase.from('bank_transfers').update({
         flowaccount_journal_record_id: result.recordId,
         flowaccount_journal_serial: result.documentSerial,
         flowaccount_journal_state: 'synced',
+        flowaccount_cleanup_record_id: null,
+        flowaccount_state_changed_at: new Date().toISOString(),
         flowaccount_synced_at: new Date().toISOString(),
         flowaccount_sync_error: null,
-      }).eq('id', id)
-      if (updateError) {
+      }).eq('id', id).eq('is_deleted', false).eq('flowaccount_journal_state', 'creating').select('id').maybeSingle()
+      if (updateError || !persisted) {
         const cleanup = await voidBankTransferJournal(result.recordId)
         const cleanupDetail = cleanup.ok ? 'ระบบ Void เอกสารที่เพิ่งสร้างให้แล้ว' : `ต้อง Void recordId ${result.recordId} ด้วยมือ: ${cleanup.error}`
-        const message = `สร้าง ${result.documentSerial} แล้ว แต่บันทึกเลขเอกสารกลับ KINTSU ไม่สำเร็จ: ${updateError.message} (${cleanupDetail})`
-        await supabase.from('bank_transfers').update({ flowaccount_journal_state: 'error', flowaccount_sync_error: message }).eq('id', id)
+        const persistenceDetail = updateError?.message ?? 'สถานะรายการเปลี่ยนระหว่างส่งข้อมูล'
+        const message = `สร้าง ${result.documentSerial} แล้ว แต่บันทึกเลขเอกสารกลับ KINTSU ไม่สำเร็จ: ${persistenceDetail} (${cleanupDetail})`
+        await supabase.from('bank_transfers').update({
+          flowaccount_journal_state: cleanup.ok ? 'error' : 'cleanup_pending',
+          flowaccount_cleanup_record_id: cleanup.ok ? null : result.recordId,
+          flowaccount_state_changed_at: new Date().toISOString(),
+          flowaccount_sync_error: message,
+        }).eq('id', id)
         return { ok: false as const, error: message, cleanupRequiredRecordId: cleanup.ok ? null : result.recordId }
       }
     }
@@ -137,16 +163,18 @@ export async function syncBankTransferToFlowAccount(supabase: SupabaseClient, id
     return { ok: true as const, ...result }
   } catch (caught) {
     const message = caught instanceof Error ? caught.message : 'ส่งเข้า FlowAccount ไม่สำเร็จ'
-    await supabase.from('bank_transfers').update({ flowaccount_journal_state: 'error', flowaccount_sync_error: message }).eq('id', id)
+    await supabase.from('bank_transfers').update({ flowaccount_journal_state: 'error', flowaccount_state_changed_at: new Date().toISOString(), flowaccount_sync_error: message }).eq('id', id).eq('flowaccount_journal_state', 'creating')
     return { ok: false as const, error: message }
   }
 }
 
-export async function voidBankTransferJournal(recordId: number) {
+export async function voidBankTransferJournal(recordId: number, allowAlreadyVoided = false) {
   try {
     await voidJournalEntry(recordId)
     return { ok: true as const }
   } catch (caught) {
-    return { ok: false as const, error: caught instanceof Error ? caught.message : 'ยกเลิก JV ใน FlowAccount ไม่สำเร็จ' }
+    const message = caught instanceof Error ? caught.message : 'ยกเลิก JV ใน FlowAccount ไม่สำเร็จ'
+    if (allowAlreadyVoided && message.includes('invalid status')) return { ok: true as const }
+    return { ok: false as const, error: message }
   }
 }

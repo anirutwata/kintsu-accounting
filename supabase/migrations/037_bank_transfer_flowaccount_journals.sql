@@ -9,7 +9,9 @@ alter table bank_transfers
   add column if not exists flowaccount_journal_record_id bigint,
   add column if not exists flowaccount_journal_serial text,
   add column if not exists flowaccount_journal_state text not null default 'idle'
-    check (flowaccount_journal_state in ('idle', 'creating', 'synced', 'voiding', 'void_pending', 'error')),
+    check (flowaccount_journal_state in ('idle', 'creating', 'synced', 'voiding', 'void_pending', 'cleanup_pending', 'error')),
+  add column if not exists flowaccount_cleanup_record_id bigint,
+  add column if not exists flowaccount_state_changed_at timestamptz,
   add column if not exists flowaccount_synced_at timestamptz,
   add column if not exists flowaccount_sync_error text,
   add column if not exists is_deleted boolean not null default false,
@@ -19,7 +21,7 @@ alter table bank_transfers
   drop constraint if exists bank_transfers_flowaccount_journal_state_check;
 alter table bank_transfers
   add constraint bank_transfers_flowaccount_journal_state_check
-  check (flowaccount_journal_state in ('idle', 'creating', 'synced', 'voiding', 'void_pending', 'error'));
+  check (flowaccount_journal_state in ('idle', 'creating', 'synced', 'voiding', 'void_pending', 'cleanup_pending', 'error'));
 
 update bank_transfers
 set flowaccount_journal_state = 'synced'
