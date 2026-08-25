@@ -607,6 +607,8 @@ export interface CreateTaxInvoiceInput {
   payment?: TaxInvoicePayment
 }
 
+const TAX_INVOICE_REVENUE_ACCOUNT_CODE = '41210'
+
 // Shared payment-block shape used by both tax-invoices/with-payment and
 // cash-invoices/with-payment — same underlying document engine.
 function buildPaymentFields(payment: TaxInvoicePayment) {
@@ -630,7 +632,13 @@ function buildPaymentFields(payment: TaxInvoicePayment) {
 }
 
 export async function createTaxInvoice(input: CreateTaxInvoiceInput) {
-  const document = buildSellDocument(input)
+  // Customer tax invoices are restaurant service revenue. FlowAccount otherwise defaults
+  // non-inventory lines to 41110 (sales of goods), which is the wrong ledger account here.
+  // Enforce this at the document boundary so every payment channel uses 41210 consistently.
+  const document = buildSellDocument({
+    ...input,
+    items: input.items.map(item => ({ ...item, sellChartOfAccountCode: TAX_INVOICE_REVENUE_ACCOUNT_CODE })),
+  })
   if (!input.payment) {
     return flowAccountFetch('/tax-invoices', { method: 'POST', body: JSON.stringify(document) })
   }
