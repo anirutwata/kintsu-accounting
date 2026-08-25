@@ -229,12 +229,21 @@ export interface DailySales {
   flowaccount_cash_record_id: number | null
   flowaccount_cash_document_serial: string | null
   flowaccount_cash_synced_at: string | null
+  flowaccount_cash_journal_state: 'idle' | 'creating' | 'synced' | 'voiding' | 'cleanup_pending' | 'error'
+  flowaccount_cash_cleanup_record_id: number | null
+  flowaccount_cash_synced_amount_satang: number | null
+  flowaccount_cash_sync_error: string | null
+  flowaccount_cash_state_changed_at: string | null
   flowaccount_transfer_record_id: number | null
   flowaccount_transfer_document_serial: string | null
   flowaccount_transfer_synced_at: string | null
   flowaccount_credit_card_record_id: number | null
   flowaccount_credit_card_document_serial: string | null
   flowaccount_credit_card_synced_at: string | null
+  flowaccount_credit_card_sync_state: 'idle' | 'creating' | 'synced' | 'cleanup_pending' | 'error'
+  flowaccount_credit_card_cleanup_record_id: number | null
+  flowaccount_credit_card_synced_amount_satang: number | null
+  flowaccount_credit_card_sync_error: string | null
 }
 
 export interface VoidRefund {

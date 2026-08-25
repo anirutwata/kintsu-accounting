@@ -103,7 +103,7 @@ export default function SalesPage() {
         rounding: s.rounding_satang ? fmtInput(s.rounding_satang) : '',
         discount: s.discount_satang ? fmtInput(s.discount_satang) : '',
         cash: s.cash_satang ? fmtInput(s.cash_satang) : '',
-        promptpay: '',
+        promptpay: s.promptpay_satang ? fmtInput(s.promptpay_satang) : '',
         company_transfer: s.company_transfer_satang ? fmtInput(s.company_transfer_satang) : '',
         credit_card: s.credit_card_satang ? fmtInput(s.credit_card_satang) : '',
       })
@@ -116,7 +116,7 @@ export default function SalesPage() {
         rounding: s.papaya_rounding_satang ? fmtInput(s.papaya_rounding_satang) : '',
         discount: s.papaya_discount_satang ? fmtInput(s.papaya_discount_satang) : '',
         cash: s.papaya_cash_satang ? fmtInput(s.papaya_cash_satang) : '',
-        promptpay: '',
+        promptpay: s.papaya_promptpay_satang ? fmtInput(s.papaya_promptpay_satang) : '',
         company_transfer: s.papaya_company_transfer_satang ? fmtInput(s.papaya_company_transfer_satang) : '',
         credit_card: s.papaya_credit_card_satang ? fmtInput(s.papaya_credit_card_satang) : '',
       })
@@ -140,6 +140,7 @@ export default function SalesPage() {
   const takeawayRev = toSatang(parseInput(takeawayStr))
   const { gpFeeSatang, netSatang: grabNet } = calcGrabNet(grabGross)
   const totalNet = foodstoryRev + papayaRev + grabNet + takeawayRev
+  const staffPromptPay = toSatang(parseInput(foodstory.promptpay)) + toSatang(parseInput(papaya.promptpay))
 
   async function handleDelete() {
     setDeleting(true)
@@ -259,6 +260,16 @@ export default function SalesPage() {
         <p className="text-xl font-bold" style={{ color: 'var(--charcoal)' }}>
           {existing?.ttb_promptpay_report_id ? formatBaht(existing.ttb_promptpay_satang || 0) : 'ยังไม่มีรายงานของวันนี้'}
         </p>
+        <div className="text-xs space-y-0.5" style={{ color: 'var(--muted-foreground)' }}>
+          <p>พนักงานกรอก: {formatBaht(staffPromptPay)}</p>
+          {existing?.ttb_promptpay_report_id && (
+            <p style={{ color: Math.abs((existing.ttb_promptpay_satang || 0) - staffPromptPay) <= 1 ? '#16A34A' : '#DC2626' }}>
+              {Math.abs((existing.ttb_promptpay_satang || 0) - staffPromptPay) <= 1
+                ? '✅ ยอดตรงกับรายงานธนาคาร'
+                : `⚠️ ยอดต่างกัน ${formatBaht(Math.abs((existing.ttb_promptpay_satang || 0) - staffPromptPay))}`}
+            </p>
+          )}
+        </div>
         {ttbMessage && <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{ttbMessage}</p>}
       </div>
 
@@ -266,13 +277,13 @@ export default function SalesPage() {
         <div className="flex justify-between items-center gap-2">
           <div className="flex flex-col gap-0.5 text-xs" style={{ color: 'var(--muted-foreground)' }}>
             {existing.flowaccount_cash_document_serial && (
-              <span>✅ เงินสด: {existing.flowaccount_cash_document_serial}</span>
+              <span>✅ เงินสด JV: {existing.flowaccount_cash_document_serial}</span>
             )}
             {existing.flowaccount_transfer_document_serial && (
               <span>✅ โอน/พร้อมเพย์: {existing.flowaccount_transfer_document_serial}</span>
             )}
             {existing.flowaccount_credit_card_document_serial && (
-              <span>✅ บัตรเครดิต: {existing.flowaccount_credit_card_document_serial}</span>
+              <span>✅ บัตรเครดิต Cash Sale: {existing.flowaccount_credit_card_document_serial}</span>
             )}
           </div>
           <button onClick={handleSyncFlowAccount} disabled={syncingFa}
@@ -409,6 +420,7 @@ export default function SalesPage() {
 
 const PAYMENT_CHANNELS = [
   { key: 'cash', label: 'เงินสด', icon: '💵' },
+  { key: 'promptpay', label: 'พร้อมเพย์', icon: '📱' },
   { key: 'company_transfer', label: 'โอน (บริษัท)', icon: '🏦' },
   { key: 'credit_card', label: 'บัตรเครดิต', icon: '💳' },
 ]
@@ -535,7 +547,7 @@ function POSSection({ title, logo, accentColor, form, onChange, date }: {
         {/* Payment channels */}
         <div>
           <p className="text-xs font-semibold mb-2" style={{ color: 'var(--charcoal)' }}>ช่องทางชำระเงิน</p>
-          <p className="text-[10px] mb-2" style={{ color: 'var(--muted-foreground)' }}>พร้อมเพย์นำเข้าจากรายงาน TTB อัตโนมัติ ไม่ต้องกรอกที่นี่</p>
+          <p className="text-[10px] mb-2" style={{ color: 'var(--muted-foreground)' }}>กรอกพร้อมเพย์ตามรายงานหน้าร้านเพื่อเทียบกับยอดจริงจาก TTB</p>
           <div className="grid grid-cols-2 gap-2">
             {PAYMENT_CHANNELS.map(({ key, label, icon }) => (
               <div key={key}>

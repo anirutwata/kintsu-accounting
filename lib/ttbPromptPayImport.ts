@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto'
 import { ImapFlow } from 'imapflow'
 import { simpleParser } from 'mailparser'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createCashInvoice, getCashInvoice, voidCashInvoice } from './flowaccount'
+import { createApprovedJournal, getChartOfAccounts, voidJournalEntry } from './flowaccount'
 import { readEncryptedTtbReport } from './ttbPromptPayWorkbook'
+import { syncRevenueJournal, type RevenueJournalAccount } from './revenueJournal'
 
 const REPORT_SENDER = 'ttbsmartshop@digio.co.th'
 const REPORT_SUBJECT = 'ttb smart shop: รายงานการขายประจำวัน (Daily Sales Report)'
@@ -54,18 +55,37 @@ async function resolveConfiguredBank(supabase: SupabaseClient) {
   if (settingsError) throw settingsError
   if (!settings?.ttb_promptpay_bank_account_id) throw new Error('ยังไม่ได้เลือกบัญชี TTB Smart Shop ใน ตั้งค่า > ระบบ')
   const { data: bank, error } = await supabase.from('bank_accounts')
-    .select('id, bank_name, account_number, flowaccount_bank_account_id')
+    .select('id, bank_name, account_number, flowaccount_chart_of_account_id')
     .eq('id', settings.ttb_promptpay_bank_account_id).eq('is_active', true).single()
   if (error || !bank) throw new Error('ไม่พบบัญชี TTB Smart Shop ที่ตั้งค่าไว้')
-  if (!bank.flowaccount_bank_account_id) throw new Error('บัญชี TTB Smart Shop ยังไม่ได้ผูกกับ FlowAccount')
+  if (String(bank.account_number || '').replace(/\D/g, '') !== '7602315983') {
+    throw new Error('บัญชี TTB Smart Shop ต้องเป็น 760-2-31598-3 เท่านั้น')
+  }
+  if (!bank.flowaccount_chart_of_account_id) throw new Error('บัญชี TTB Smart Shop ยังไม่ได้ผูกกับผังบัญชี FlowAccount')
   return bank
 }
 
-async function ensureCashInvoiceVoided(recordId: number) {
-  const response = await getCashInvoice(recordId)
-  const document = response?.list?.[0] ?? response
-  if (String(document?.statusString || '').toLowerCase() === 'void') return
-  await voidCashInvoice(recordId)
+async function ensureJournalVoided(recordId: number) {
+  try {
+    await voidJournalEntry(recordId)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!message.includes('invalid status')) throw error
+  }
+}
+
+async function resolveJournalAccounts(bankChartId: number): Promise<{ debit: RevenueJournalAccount; revenue: RevenueJournalAccount }> {
+  const chart = await getChartOfAccounts()
+  const revenue = chart.find(account => account.code === '41210')
+  if (!revenue) throw new Error('ไม่พบบัญชี 41210 รายได้จากการให้บริการใน FlowAccount')
+  const debit = chart.find(account => account.id === bankChartId)
+  if (!debit || debit.code !== '11122.07') {
+    throw new Error('บัญชี TTB 7602315983 ต้องผูกกับผังบัญชี 11122.07 เท่านั้น')
+  }
+  return {
+    debit: { chartOfAccountId: debit.id, code: debit.code, label: debit.nameLocal },
+    revenue: { chartOfAccountId: revenue.id, code: revenue.code, label: revenue.nameLocal },
+  }
 }
 
 export async function syncTtbReportToFlowAccount(supabase: SupabaseClient, reportId: string) {
@@ -74,7 +94,7 @@ export async function syncTtbReportToFlowAccount(supabase: SupabaseClient, repor
   if (error || !report) return { ok: false as const, error: error?.message || 'ไม่พบรายงาน TTB' }
   if (report.sync_state === 'cleanup_pending' && report.flowaccount_record_id) {
     try {
-      await ensureCashInvoiceVoided(report.flowaccount_record_id)
+      await ensureJournalVoided(report.flowaccount_record_id)
       const { data: cleaned } = await supabase.from('ttb_promptpay_reports').update({
         flowaccount_record_id: null, flowaccount_document_serial: null, flowaccount_synced_at: null,
         sync_state: 'idle', sync_error: null, updated_at: new Date().toISOString(),
@@ -86,6 +106,9 @@ export async function syncTtbReportToFlowAccount(supabase: SupabaseClient, repor
       return { ok: false as const, error: `ยัง Void เอกสาร FlowAccount ที่ค้างไม่สำเร็จ: ${message}` }
     }
   } else if (report.flowaccount_record_id && report.flowaccount_document_serial) {
+    if (String(report.flowaccount_document_serial).startsWith('CA')) {
+      return { ok: false as const, error: 'รายงานนี้ยังผูกกับ Cash Sale เดิม ต้องย้ายเป็น JV ก่อน' }
+    }
     return { ok: true as const, recordId: report.flowaccount_record_id, documentSerial: report.flowaccount_document_serial, created: false }
   }
   const { data: claimed } = await supabase.from('ttb_promptpay_reports').update({ sync_state: 'creating', sync_error: null })
@@ -94,34 +117,35 @@ export async function syncTtbReportToFlowAccount(supabase: SupabaseClient, repor
 
   try {
     const bank = await resolveConfiguredBank(supabase)
-    const totalBaht = report.successful_amount_satang / 100
-    const preVatBaht = Math.round((totalBaht / 1.07) * 100) / 100
-    const result = await createCashInvoice({
-      contactName: 'ลูกค้าทั่วไป', publishedOn: report.report_date,
-      remarks: `TTB Smart Shop PromptPay ${report.report_date} · ${report.successful_count} รายการ`,
-      items: [{
-        name: `รายได้ TTB Smart Shop PromptPay วันที่ ${report.report_date}`,
-        quantity: 1, unitName: 'วัน', pricePerUnit: preVatBaht,
-        sellChartOfAccountCode: '41210',
-      }],
-      payment: { method: 'transfer', bankAccountId: bank.flowaccount_bank_account_id, paymentDate: report.report_date },
-    })
+    const accounts = await resolveJournalAccounts(Number(bank.flowaccount_chart_of_account_id))
+    const result = await syncRevenueJournal({
+      source: 'ttb_promptpay', date: report.report_date,
+      amountSatang: report.successful_amount_satang,
+      debitAccount: { ...accounts.debit, label: `${bank.bank_name} ${bank.account_number}` },
+      revenueAccount: accounts.revenue,
+    }, { createApprovedJournal })
     const { data: saved } = await supabase.from('ttb_promptpay_reports').update({
       flowaccount_record_id: result.recordId, flowaccount_document_serial: result.documentSerial,
       flowaccount_synced_at: new Date().toISOString(), sync_state: 'synced', sync_error: null, updated_at: new Date().toISOString(),
     }).eq('id', reportId).eq('sync_state', 'creating').is('flowaccount_record_id', null).select('id').maybeSingle()
     if (!saved) {
       try {
-        await ensureCashInvoiceVoided(result.recordId)
+        await ensureJournalVoided(result.recordId)
       } catch (cleanupError) {
         const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
-        await supabase.from('ttb_promptpay_reports').update({
+        const { data: cleanupState, error: cleanupStateError } = await supabase.from('ttb_promptpay_reports').update({
           flowaccount_record_id: result.recordId, flowaccount_document_serial: result.documentSerial,
           sync_state: 'cleanup_pending',
           sync_error: `สร้างเอกสารแล้วแต่บันทึกกลับ KINTSU ไม่สำเร็จ และยัง Void ไม่สำเร็จ: ${cleanupMessage}`,
           updated_at: new Date().toISOString(),
-        }).eq('id', reportId).eq('sync_state', 'creating')
-        return { ok: false as const, error: 'มีเอกสาร FlowAccount รอ Void ระบบจะเก็บกวาดก่อนสร้างใหม่ในการลองครั้งถัดไป' }
+        }).eq('id', reportId).eq('sync_state', 'creating').select('id').maybeSingle()
+        return {
+          ok: false as const,
+          error: cleanupStateError || !cleanupState
+            ? `มี JV รอ Void และบันทึกสถานะ cleanup ไม่สำเร็จ: ${cleanupStateError?.message || 'สถานะถูกเปลี่ยน'}`
+            : 'มี JV รอ Void ระบบจะเก็บกวาดก่อนสร้างใหม่ในการลองครั้งถัดไป',
+          cleanupRequiredRecordId: result.recordId,
+        }
       }
       throw new Error('สร้างเอกสารแล้วแต่บันทึกเลขกลับ KINTSU ไม่สำเร็จ และ Void เอกสารสำเร็จแล้ว')
     }

@@ -153,7 +153,7 @@ export async function GET(req: Request) {
     // Foodstory → 4101 (use payment breakdown if filled, else use total revenue)
     const fsPaySum = (s.cash_satang || 0) + (s.company_transfer_satang || 0) + (s.credit_card_satang || 0)
     if (fsPaySum > 0) {
-      push(`fs_cash_${s.date}`,      'Foodstory รายได้ (เงินสด)',     'Foodstory POS', { code: '1101', name: 'เงินสด' }, '4101', 'รายได้ Foodstory (Dine-in)', (s.cash_satang || 0) / 100)
+      push(`fs_cash_${s.date}`,      'Foodstory รายได้ (เงินสด)',     'Foodstory POS', { code: '11112', name: 'เงินสดคงเหลือ' }, '41210', 'รายได้จากการให้บริการ', (s.cash_satang || 0) / 100)
       push(`fs_company_${s.date}`,   'Foodstory รายได้ (โอนบริษัท)', 'Foodstory POS', fsCompanyTransfer, '4101', 'รายได้ Foodstory (Dine-in)', (s.company_transfer_satang || 0) / 100)
       push(`fs_card_${s.date}`,      'Foodstory รายได้ (บัตรเครดิต)','Foodstory POS', fsCreditCard,      '4101', 'รายได้ Foodstory (Dine-in)', (s.credit_card_satang || 0) / 100)
     } else {
@@ -163,7 +163,7 @@ export async function GET(req: Request) {
     // Papaya → 4102
     const ppPaySum = (s.papaya_cash_satang || 0) + (s.papaya_company_transfer_satang || 0) + (s.papaya_credit_card_satang || 0)
     if (ppPaySum > 0) {
-      push(`pp_cash_${s.date}`,      'Papaya รายได้ (เงินสด)',        'Papaya POS', { code: '1101', name: 'เงินสด' }, '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_cash_satang || 0) / 100)
+      push(`pp_cash_${s.date}`,      'Papaya รายได้ (เงินสด)',        'Papaya POS', { code: '11112', name: 'เงินสดคงเหลือ' }, '41210', 'รายได้จากการให้บริการ', (s.papaya_cash_satang || 0) / 100)
       push(`pp_company_${s.date}`,   'Papaya รายได้ (โอนบริษัท)',     'Papaya POS', ppCompanyTransfer, '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_company_transfer_satang || 0) / 100)
       push(`pp_card_${s.date}`,      'Papaya รายได้ (บัตรเครดิต)',    'Papaya POS', ppCreditCard,      '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_credit_card_satang || 0) / 100)
     } else {
