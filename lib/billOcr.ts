@@ -76,15 +76,16 @@ export async function extractVatFromReceipt(imageUrl: string): Promise<Extracted
 }
 
 // Reads a customer-submitted bill photo on the public ขอใบกำกับภาษี form to pre-fill
-// วันที่ในบิล/ยอดก่อน VAT/ยอดชำระจริง — the same three fields staff would otherwise have
-// to read off the photo and type in by hand. The customer can still edit any of these
-// before submitting; the tax-invoice-request API also re-validates them independently
+// วันที่ในบิล/ยอดก่อน VAT/ยอดชำระจริง/ช่องทางชำระเงิน — the same fields staff would otherwise
+// have to read off the photo and type in by hand. The customer can still edit any of these
+// before submitting; the tax-invoice-request API also re-validates the amounts independently
 // (future-date rejection, VAT reconciliation tolerance), so a wrong OCR read here can't
 // itself produce a bad tax invoice — only a form the customer has to correct.
 export interface ExtractedTaxInvoiceBill {
   documentDate: string | null // YYYY-MM-DD (Gregorian), null if not confidently read
   subtotalBaht: number | null // ยอดก่อน VAT
   totalBaht: number | null // ยอดรวมที่ชำระจริง
+  paymentMethod: 'cash' | 'transfer' | 'credit_card' | null
   confidence: number
 }
 
@@ -106,7 +107,7 @@ export async function extractTaxInvoiceFieldsFromBill(imageUrl: string): Promise
         { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
         {
           type: 'text',
-          text: `อ่านบิล/ใบเสร็จนี้ เพื่อดึง 3 ค่า: วันที่บนบิล, ยอดก่อน VAT, ยอดชำระจริงสุทธิ ตอบเป็น JSON เท่านั้น ไม่ต้องมีคำอธิบาย:
+          text: `อ่านบิล/ใบเสร็จนี้ เพื่อดึง 4 ค่า: วันที่บนบิล, ยอดก่อน VAT, ยอดชำระจริงสุทธิ, ช่องทางชำระเงิน ตอบเป็น JSON เท่านั้น ไม่ต้องมีคำอธิบาย:
 {
   "date_found": <true เฉพาะเมื่อเห็นวันที่ระบุตรงๆ บนบิล (เช่น "วันที่", "Date") ห้ามเดา>,
   "document_date": <วันที่บนบิล แปลงเป็นรูปแบบ "YYYY-MM-DD" แบบปีคริสต์ศักราช (ค.ศ.) เท่านั้น — ถ้าปีบนบิลเป็นพุทธศักราช (พ.ศ., ปี 4 หลักที่มากกว่า 2400) ให้ลบ 543 ก่อนแปลง เช่น "15/08/2569" (พ.ศ.) → "2026-08-15" ถ้า date_found เป็น false ให้ใส่ null>,
@@ -114,6 +115,8 @@ export async function extractTaxInvoiceFieldsFromBill(imageUrl: string): Promise
   "subtotal_baht": <ยอดก่อน VAT เป็นบาท ถ้า subtotal_found เป็น false ให้ใส่ 0>,
   "total_found": <true เฉพาะเมื่อเห็นยอดชำระจริงสุทธิระบุตรงๆ บนบิล (เช่น "จำนวนเงินรวมทั้งสิ้น", "ยอดชำระ", "Grand Total" — ยอดสุดท้ายที่ลูกค้าจ่ายจริง รวม VAT แล้ว) ห้ามเดา>,
   "total_baht": <ยอดชำระจริงเป็นบาท ถ้า total_found เป็น false ให้ใส่ 0>,
+  "payment_method_found": <true เฉพาะเมื่อเห็นหลักฐานชัดเจนบนบิลว่าลูกค้าชำระด้วยช่องทางใด (เช่น ช่อง "เงินสด"/"โอนเงิน"/"บัตรเครดิต" ถูกกา, หรือเป็นสลิปโอนเงินจากแอปธนาคาร, หรือมีข้อความจากเครื่องรูดบัตร EDC) ห้ามเดา ถ้าบิลไม่ได้ระบุวิธีชำระเงินไว้ให้ใส่ false>,
+  "payment_method": <"cash" ถ้าเห็นหลักฐานว่าชำระด้วยเงินสด, "transfer" ถ้าเห็นหลักฐานว่าโอนเงินผ่านธนาคาร/แอปธนาคาร, "credit_card" ถ้าเห็นหลักฐานว่าชำระด้วยบัตรเครดิต/เดบิตผ่านเครื่องรูดบัตร (EDC) — ถ้า payment_method_found เป็น false ให้ใส่ null>,
   "confidence": <0.0-1.0 ความมั่นใจโดยรวม>
 }`,
         },
@@ -128,10 +131,12 @@ export async function extractTaxInvoiceFieldsFromBill(imageUrl: string): Promise
     const parsed = JSON.parse(match[0])
     const isoDate: unknown = parsed.document_date
     const validDate = parsed.date_found && typeof isoDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(isoDate) && !isNaN(Date.parse(isoDate))
+    const validPaymentMethod = parsed.payment_method_found && ['cash', 'transfer', 'credit_card'].includes(parsed.payment_method)
     return {
       documentDate: validDate ? (isoDate as string) : null,
       subtotalBaht: parsed.subtotal_found ? Number(parsed.subtotal_baht) || null : null,
       totalBaht: parsed.total_found ? Number(parsed.total_baht) || null : null,
+      paymentMethod: validPaymentMethod ? parsed.payment_method : null,
       confidence: parsed.confidence ?? 0,
     }
   } catch {
