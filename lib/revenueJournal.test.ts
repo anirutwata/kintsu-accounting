@@ -15,7 +15,12 @@ describe('revenue journal', () => {
       reference: 'KINTSU-TTB-20260824',
       bookOfAccounts: [
         { debitCredit: 1, chartOfAccountId: 449281559, value: 19708 },
-        { debitCredit: 3, chartOfAccountId: 12345, value: 19708 },
+        {
+          debitCredit: 3,
+          chartOfAccountId: 12345,
+          value: 19708,
+          description: 'รายรับพร้อมเพย์ TTB Smart Shop วันที่ 2026-08-24',
+        },
       ],
     })
   })
@@ -29,7 +34,12 @@ describe('revenue journal', () => {
       revenueAccount: { chartOfAccountId: 12345, code: '41210', label: 'รายได้จากการให้บริการ' },
     }).bookOfAccounts).toEqual([
       expect.objectContaining({ debitCredit: 1, chartOfAccountId: 209573633, value: 7584 }),
-      expect.objectContaining({ debitCredit: 3, chartOfAccountId: 12345, value: 7584 }),
+      expect.objectContaining({
+        debitCredit: 3,
+        chartOfAccountId: 12345,
+        value: 7584,
+        description: 'รายรับเงินสด วันที่ 2026-08-24',
+      }),
     ])
   })
 

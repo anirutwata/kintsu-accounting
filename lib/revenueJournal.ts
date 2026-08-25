@@ -68,7 +68,9 @@ export function buildRevenueJournal(input: RevenueJournalInput): FlowAccountJour
         debitCredit: 3,
         chartOfAccountId: input.revenueAccount.chartOfAccountId,
         value,
-        description: input.revenueAccount.label,
+        // Keep the source and revenue date visible in the chart-of-account
+        // ledger, where FlowAccount shows this line without opening the JV.
+        description: `${source.title} วันที่ ${input.date}`,
       },
     ],
   }
