@@ -29,6 +29,7 @@ export interface Settings {
   default_transfer_bank_account_id?: string | null
   default_edc_channel_id?: number | null
   default_edc_channel_name?: string | null
+  ttb_promptpay_bank_account_id?: string | null
   updated_at: string
 }
 
@@ -223,6 +224,8 @@ export interface DailySales {
   papaya_promptpay_satang: number
   papaya_company_transfer_satang: number
   papaya_credit_card_satang: number
+  ttb_promptpay_satang: number
+  ttb_promptpay_report_id: string | null
   flowaccount_cash_record_id: number | null
   flowaccount_cash_document_serial: string | null
   flowaccount_cash_synced_at: string | null

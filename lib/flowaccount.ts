@@ -472,6 +472,7 @@ interface SellItemInput {
   quantity: number
   unitName: string
   pricePerUnit: number
+  sellChartOfAccountCode?: string
 }
 
 // FlowAccount's contactGroup is an integer, not the string this app uses internally:
@@ -514,6 +515,7 @@ function buildSellDocument(input: {
     unitName: item.unitName,
     pricePerUnit: item.pricePerUnit,
     total: round2(item.quantity * item.pricePerUnit),
+    sellChartOfAccountCode: item.sellChartOfAccountCode,
   }))
   const subTotal = round2(items.reduce((sum, i) => sum + i.total, 0))
   const vatAmount = round2(subTotal * 0.07)
@@ -700,6 +702,14 @@ export async function createCashInvoice(input: CreateCashInvoiceInput) {
       collected,
     }),
   })
+}
+
+export async function voidCashInvoice(recordId: number) {
+  return flowAccountFetch(`/cash-invoices/${recordId}/status/void`, { method: 'POST' })
+}
+
+export async function getCashInvoice(recordId: number) {
+  return flowAccountFetch(`/cash-invoices/${recordId}`)
 }
 
 function round2(n: number): number {

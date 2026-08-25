@@ -65,7 +65,9 @@ export async function POST(req: Request) {
     rounding_satang: foodstory?.rounding_satang || 0,
     discount_satang: foodstory?.discount_satang || 0,
     cash_satang: foodstory?.cash_satang || 0,
-    promptpay_satang: foodstory?.promptpay_satang || 0,
+    // PromptPay is authoritative from the encrypted TTB Smart Shop email report.
+    // Never accept the employee-entered value here.
+    promptpay_satang: 0,
     company_transfer_satang: foodstory?.company_transfer_satang || 0,
     credit_card_satang: foodstory?.credit_card_satang || 0,
     // Papaya POS
@@ -77,7 +79,7 @@ export async function POST(req: Request) {
     papaya_rounding_satang: papaya?.rounding_satang || 0,
     papaya_discount_satang: papaya?.discount_satang || 0,
     papaya_cash_satang: papaya?.cash_satang || 0,
-    papaya_promptpay_satang: papaya?.promptpay_satang || 0,
+    papaya_promptpay_satang: 0,
     papaya_company_transfer_satang: papaya?.company_transfer_satang || 0,
     papaya_credit_card_satang: papaya?.credit_card_satang || 0,
     // GrabFood

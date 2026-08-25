@@ -32,6 +32,7 @@ export default function SystemSettingsPage() {
   const [ppCreditCardBankId, setPpCreditCardBankId] = useState('')
   const [defaultTransferBankId, setDefaultTransferBankId] = useState('')
   const [defaultEdcChannelId, setDefaultEdcChannelId] = useState('')
+  const [ttbPromptpayBankId, setTtbPromptpayBankId] = useState('')
 
   useEffect(() => {
     load()
@@ -63,6 +64,7 @@ export default function SystemSettingsPage() {
       setPpCreditCardBankId(s.pp_credit_card_bank_id || '')
       setDefaultTransferBankId(s.default_transfer_bank_account_id || '')
       setDefaultEdcChannelId(s.default_edc_channel_id ? String(s.default_edc_channel_id) : '')
+      setTtbPromptpayBankId(s.ttb_promptpay_bank_account_id || '')
     }
     setLoading(false)
   }
@@ -92,6 +94,7 @@ export default function SystemSettingsPage() {
         default_transfer_bank_account_id: defaultTransferBankId || null,
         default_edc_channel_id: defaultEdcChannelId ? Number(defaultEdcChannelId) : null,
         default_edc_channel_name: edcChannels.find(c => String(c.id) === defaultEdcChannelId)?.name || null,
+        ttb_promptpay_bank_account_id: ttbPromptpayBankId || null,
       }),
     })
     setSaving(false)
@@ -114,6 +117,7 @@ export default function SystemSettingsPage() {
       setPpCreditCardBankId(s.pp_credit_card_bank_id || '')
       setDefaultTransferBankId(s.default_transfer_bank_account_id || '')
       setDefaultEdcChannelId(s.default_edc_channel_id ? String(s.default_edc_channel_id) : '')
+      setTtbPromptpayBankId(s.ttb_promptpay_bank_account_id || '')
     } else {
       const d = await res.json()
       setSaveError(d.error || 'บันทึกไม่สำเร็จ')
@@ -167,6 +171,16 @@ export default function SystemSettingsPage() {
         {/* Income bank accounts */}
         <div className="bg-white rounded-2xl border p-4 space-y-4" style={{ borderColor: 'var(--border)' }}>
           <p className="text-xs font-semibold" style={{ color: 'var(--charcoal)' }}>บัญชีรับรายได้</p>
+
+          <div className="space-y-2 rounded-xl p-3" style={{ background: '#EFF6FF' }}>
+            <p className="text-xs font-semibold" style={{ color: '#1D4ED8' }}>พร้อมเพย์อัตโนมัติจาก TTB Smart Shop</p>
+            <p className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>ยอดจากรายงานอีเมลทุกวัน 03:00 น. และใช้บัญชีนี้รับชำระใน FlowAccount</p>
+            <select value={ttbPromptpayBankId} onChange={e => setTtbPromptpayBankId(e.target.value)}
+              className="w-full border rounded-xl px-3 py-2 text-xs" style={{ borderColor: 'var(--border)' }}>
+              <option value="">-- เลือกบัญชี TTB 7602315983 --</option>
+              {banks.map(b => <option key={b.id} value={b.id}>{b.bank_name} {b.account_number} · {b.account_name}</option>)}
+            </select>
+          </div>
 
           {/* Foodstory */}
           <div className="space-y-2">

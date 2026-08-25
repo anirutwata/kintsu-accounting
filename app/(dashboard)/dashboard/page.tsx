@@ -215,7 +215,7 @@ function DailyView({ sale, date }: { sale: DailySales | null; date: string }) {
 
   const payments = [
     { label: 'เงินสด', value: (sale.cash_satang || 0) + (sale.papaya_cash_satang || 0) },
-    { label: 'พร้อมเพย์', value: (sale.promptpay_satang || 0) + (sale.papaya_promptpay_satang || 0) },
+    { label: 'พร้อมเพย์ TTB (จากธนาคาร)', value: sale.ttb_promptpay_satang || 0 },
     { label: 'โอน (บริษัท)', value: (sale.company_transfer_satang || 0) + (sale.papaya_company_transfer_satang || 0) },
     { label: 'บัตรเครดิต', value: (sale.credit_card_satang || 0) + (sale.papaya_credit_card_satang || 0) },
   ].filter(p => p.value > 0)
@@ -310,7 +310,7 @@ function RangeView({ sales, from, to }: { sales: DailySales[]; from: string; to:
 
   const channels = [
     { label: 'เงินสด', value: sum('cash_satang') + sum('papaya_cash_satang') },
-    { label: 'พร้อมเพย์', value: sum('promptpay_satang') + sum('papaya_promptpay_satang') },
+    { label: 'พร้อมเพย์ TTB (จากธนาคาร)', value: sum('ttb_promptpay_satang') },
     { label: 'โอน (บริษัท)', value: sum('company_transfer_satang') + sum('papaya_company_transfer_satang') },
     { label: 'บัตรเครดิต', value: sum('credit_card_satang') + sum('papaya_credit_card_satang') },
   ].filter(p => p.value > 0)

@@ -102,12 +102,11 @@ export async function GET(req: Request) {
     return bankMap.get(id) ?? defaultBank
   }
 
-  const fsPromptpay      = resolveBankId(settingsRow?.fs_promptpay_bank_id)
   const fsCompanyTransfer = resolveBankId(settingsRow?.fs_company_transfer_bank_id)
   const fsCreditCard     = resolveBankId(settingsRow?.fs_credit_card_bank_id)
-  const ppPromptpay      = resolveBankId(settingsRow?.pp_promptpay_bank_id)
   const ppCompanyTransfer = resolveBankId(settingsRow?.pp_company_transfer_bank_id)
   const ppCreditCard     = resolveBankId(settingsRow?.pp_credit_card_bank_id)
+  const ttbPromptpay     = resolveBankId(settingsRow?.ttb_promptpay_bank_account_id)
   const grabBankAccount  = resolveBankId(settingsRow?.grab_bank_account_id) ?? defaultGrab
 
   // 1. Expenses — filter by document_date (P&L date, not payment date)
@@ -140,7 +139,7 @@ export async function GET(req: Request) {
   // 2. Daily Sales
   const { data: sales } = await supabase
     .from('daily_sales')
-    .select('date, dine_in_revenue_satang, cash_satang, promptpay_satang, company_transfer_satang, credit_card_satang, papaya_revenue_satang, papaya_cash_satang, papaya_promptpay_satang, papaya_company_transfer_satang, papaya_credit_card_satang, grabfood_gross_satang, grabfood_net_satang, takeaway_revenue_satang')
+    .select('date, dine_in_revenue_satang, cash_satang, company_transfer_satang, credit_card_satang, papaya_revenue_satang, papaya_cash_satang, papaya_company_transfer_satang, papaya_credit_card_satang, ttb_promptpay_satang, grabfood_gross_satang, grabfood_net_satang, takeaway_revenue_satang')
     .gte('date', startDate)
     .lt('date', nextMonth)
     .order('date')
@@ -152,10 +151,9 @@ export async function GET(req: Request) {
     }
 
     // Foodstory → 4101 (use payment breakdown if filled, else use total revenue)
-    const fsPaySum = (s.cash_satang || 0) + (s.promptpay_satang || 0) + (s.company_transfer_satang || 0) + (s.credit_card_satang || 0)
+    const fsPaySum = (s.cash_satang || 0) + (s.company_transfer_satang || 0) + (s.credit_card_satang || 0)
     if (fsPaySum > 0) {
       push(`fs_cash_${s.date}`,      'Foodstory รายได้ (เงินสด)',     'Foodstory POS', { code: '1101', name: 'เงินสด' }, '4101', 'รายได้ Foodstory (Dine-in)', (s.cash_satang || 0) / 100)
-      push(`fs_promptpay_${s.date}`, 'Foodstory รายได้ (พร้อมเพย์)',  'Foodstory POS', fsPromptpay,       '4101', 'รายได้ Foodstory (Dine-in)', (s.promptpay_satang || 0) / 100)
       push(`fs_company_${s.date}`,   'Foodstory รายได้ (โอนบริษัท)', 'Foodstory POS', fsCompanyTransfer, '4101', 'รายได้ Foodstory (Dine-in)', (s.company_transfer_satang || 0) / 100)
       push(`fs_card_${s.date}`,      'Foodstory รายได้ (บัตรเครดิต)','Foodstory POS', fsCreditCard,      '4101', 'รายได้ Foodstory (Dine-in)', (s.credit_card_satang || 0) / 100)
     } else {
@@ -163,15 +161,16 @@ export async function GET(req: Request) {
     }
 
     // Papaya → 4102
-    const ppPaySum = (s.papaya_cash_satang || 0) + (s.papaya_promptpay_satang || 0) + (s.papaya_company_transfer_satang || 0) + (s.papaya_credit_card_satang || 0)
+    const ppPaySum = (s.papaya_cash_satang || 0) + (s.papaya_company_transfer_satang || 0) + (s.papaya_credit_card_satang || 0)
     if (ppPaySum > 0) {
       push(`pp_cash_${s.date}`,      'Papaya รายได้ (เงินสด)',        'Papaya POS', { code: '1101', name: 'เงินสด' }, '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_cash_satang || 0) / 100)
-      push(`pp_promptpay_${s.date}`, 'Papaya รายได้ (พร้อมเพย์)',     'Papaya POS', ppPromptpay,       '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_promptpay_satang || 0) / 100)
       push(`pp_company_${s.date}`,   'Papaya รายได้ (โอนบริษัท)',     'Papaya POS', ppCompanyTransfer, '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_company_transfer_satang || 0) / 100)
       push(`pp_card_${s.date}`,      'Papaya รายได้ (บัตรเครดิต)',    'Papaya POS', ppCreditCard,      '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_credit_card_satang || 0) / 100)
     } else {
       push(`pp_total_${s.date}`, 'Papaya POS รายได้', 'Papaya POS', defaultBank, '4102', 'รายได้ Papaya POS (Dine-in)', (s.papaya_revenue_satang || 0) / 100)
     }
+
+    push(`ttb_promptpay_${s.date}`, 'TTB Smart Shop รายได้ (พร้อมเพย์)', 'รายงานธนาคาร TTB', ttbPromptpay, '41210', 'รายได้จากการให้บริการ', (s.ttb_promptpay_satang || 0) / 100)
 
     // Grab → 4103
     const grabGross = (s.grabfood_gross_satang || 0) / 100

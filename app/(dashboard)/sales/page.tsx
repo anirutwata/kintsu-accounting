@@ -42,6 +42,25 @@ export default function SalesPage() {
   const [deleteError, setDeleteError] = useState('')
   const [syncingFa, setSyncingFa] = useState(false)
   const [syncFaError, setSyncFaError] = useState('')
+  const [syncingTtb, setSyncingTtb] = useState(false)
+  const [ttbMessage, setTtbMessage] = useState('')
+
+  async function handleSyncTtb() {
+    setSyncingTtb(true); setTtbMessage('')
+    try {
+      const res = await fetch('/api/ttb-promptpay/sync', { method: 'POST' })
+      const json = await res.json()
+      const failed = Array.isArray(json.results) ? json.results.find((item: { sync?: { ok?: boolean; error?: string } }) => item.sync?.ok === false) : null
+      setTtbMessage(
+        !res.ok ? `❌ ${json.error || 'Sync ไม่สำเร็จ'}`
+          : failed ? `❌ ${failed.sync.error || 'ส่งเข้า FlowAccount ไม่สำเร็จ'}`
+            : `ตรวจอีเมลแล้ว ${json.scanned || 0} ฉบับ`,
+      )
+      if (res.ok) await loadSales()
+    } catch (error) {
+      setTtbMessage(`❌ ${error instanceof Error ? error.message : 'เชื่อมต่อระบบตรวจอีเมลไม่สำเร็จ'}`)
+    } finally { setSyncingTtb(false) }
+  }
 
   async function handleSyncFlowAccount() {
     setSyncingFa(true)
@@ -84,7 +103,7 @@ export default function SalesPage() {
         rounding: s.rounding_satang ? fmtInput(s.rounding_satang) : '',
         discount: s.discount_satang ? fmtInput(s.discount_satang) : '',
         cash: s.cash_satang ? fmtInput(s.cash_satang) : '',
-        promptpay: s.promptpay_satang ? fmtInput(s.promptpay_satang) : '',
+        promptpay: '',
         company_transfer: s.company_transfer_satang ? fmtInput(s.company_transfer_satang) : '',
         credit_card: s.credit_card_satang ? fmtInput(s.credit_card_satang) : '',
       })
@@ -97,7 +116,7 @@ export default function SalesPage() {
         rounding: s.papaya_rounding_satang ? fmtInput(s.papaya_rounding_satang) : '',
         discount: s.papaya_discount_satang ? fmtInput(s.papaya_discount_satang) : '',
         cash: s.papaya_cash_satang ? fmtInput(s.papaya_cash_satang) : '',
-        promptpay: s.papaya_promptpay_satang ? fmtInput(s.papaya_promptpay_satang) : '',
+        promptpay: '',
         company_transfer: s.papaya_company_transfer_satang ? fmtInput(s.papaya_company_transfer_satang) : '',
         credit_card: s.papaya_credit_card_satang ? fmtInput(s.papaya_credit_card_satang) : '',
       })
@@ -225,6 +244,23 @@ export default function SalesPage() {
           <button onClick={() => setSyncFaError('')} className="text-red-400 ml-2">✕</button>
         </div>
       )}
+
+      <div className="rounded-2xl border p-4 space-y-2" style={{ borderColor: '#93C5FD', background: '#EFF6FF' }}>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold" style={{ color: '#1D4ED8' }}>พร้อมเพย์ TTB Smart Shop</p>
+            <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ยอดจริงจากรายงานธนาคาร · อัตโนมัติทุกวัน 03:00 น.</p>
+          </div>
+          <button type="button" onClick={handleSyncTtb} disabled={syncingTtb}
+            className="px-3 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#2563EB' }}>
+            {syncingTtb ? 'กำลังตรวจ...' : '🔄 ตรวจอีเมลตอนนี้'}
+          </button>
+        </div>
+        <p className="text-xl font-bold" style={{ color: 'var(--charcoal)' }}>
+          {existing?.ttb_promptpay_report_id ? formatBaht(existing.ttb_promptpay_satang || 0) : 'ยังไม่มีรายงานของวันนี้'}
+        </p>
+        {ttbMessage && <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{ttbMessage}</p>}
+      </div>
 
       {existing && (
         <div className="flex justify-between items-center gap-2">
@@ -373,7 +409,6 @@ export default function SalesPage() {
 
 const PAYMENT_CHANNELS = [
   { key: 'cash', label: 'เงินสด', icon: '💵' },
-  { key: 'promptpay', label: 'พร้อมเพย์', icon: '📱' },
   { key: 'company_transfer', label: 'โอน (บริษัท)', icon: '🏦' },
   { key: 'credit_card', label: 'บัตรเครดิต', icon: '💳' },
 ]
@@ -417,20 +452,11 @@ function POSSection({ title, logo, accentColor, form, onChange, date }: {
   const beforeVat = toSatang(parseInput(form.sales_before_vat))
   const vatAmt = toSatang(parseInput(form.vat_amount))
   const rounding = toSatang(parseInput(form.rounding))
-  const cash = toSatang(parseInput(form.cash))
-  const promptpay = toSatang(parseInput(form.promptpay))
-  const companyTransfer = toSatang(parseInput(form.company_transfer))
-  const creditCard = toSatang(parseInput(form.credit_card))
-
   const isRoundDown = date >= ROUND_DOWN_DATE
   const vatSum = beforeVat + vatAmt + rounding   // rounding is negative for round-down (auto-negated)
-  const paySum = cash + promptpay + companyTransfer + creditCard
-
   const hasVatData = beforeVat > 0 || vatAmt > 0 || rounding !== 0
-  const hasPayData = cash > 0 || promptpay > 0 || companyTransfer > 0 || creditCard > 0
 
   const vatMismatch = rev > 0 && hasVatData && Math.abs(vatSum - rev) > 1
-  const payMismatch = rev > 0 && hasPayData && Math.abs(paySum - rev) > 1
 
   return (
     <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
@@ -509,6 +535,7 @@ function POSSection({ title, logo, accentColor, form, onChange, date }: {
         {/* Payment channels */}
         <div>
           <p className="text-xs font-semibold mb-2" style={{ color: 'var(--charcoal)' }}>ช่องทางชำระเงิน</p>
+          <p className="text-[10px] mb-2" style={{ color: 'var(--muted-foreground)' }}>พร้อมเพย์นำเข้าจากรายงาน TTB อัตโนมัติ ไม่ต้องกรอกที่นี่</p>
           <div className="grid grid-cols-2 gap-2">
             {PAYMENT_CHANNELS.map(({ key, label, icon }) => (
               <div key={key}>
@@ -520,15 +547,6 @@ function POSSection({ title, logo, accentColor, form, onChange, date }: {
             ))}
           </div>
         </div>
-        {payMismatch && (
-          <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2">
-            ⚠️ ยอดชำระไม่ตรง: {formatBaht(paySum)} ≠ {formatBaht(rev)}
-            {' '}(ต่าง {formatBaht(Math.abs(paySum - rev))})
-          </p>
-        )}
-        {!payMismatch && hasPayData && rev > 0 && (
-          <p className="text-xs text-green-600 bg-green-50 rounded-xl px-3 py-2">✅ ยอดชำระถูกต้อง</p>
-        )}
       </div>
     </div>
   )

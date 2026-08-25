@@ -249,15 +249,15 @@ async function getSystemEntries(supabase: Awaited<ReturnType<typeof createClient
   // Daily sales (money in — electronic payments → income bank)
   const { data: sales } = await supabase
     .from('daily_sales')
-    .select('date, promptpay_satang, company_transfer_satang, credit_card_satang, papaya_promptpay_satang, papaya_company_transfer_satang, papaya_credit_card_satang, cash_satang, papaya_cash_satang')
+    .select('date, ttb_promptpay_satang, company_transfer_satang, credit_card_satang, papaya_company_transfer_satang, papaya_credit_card_satang, cash_satang, papaya_cash_satang')
     .gte('date', startDate)
     .lte('date', endDate)
     .order('date')
 
   for (const s of sales || []) {
     const electronic = (
-      (s.promptpay_satang || 0) + (s.company_transfer_satang || 0) + (s.credit_card_satang || 0) +
-      (s.papaya_promptpay_satang || 0) + (s.papaya_company_transfer_satang || 0) + (s.papaya_credit_card_satang || 0)
+      (s.ttb_promptpay_satang || 0) + (s.company_transfer_satang || 0) + (s.credit_card_satang || 0) +
+      (s.papaya_company_transfer_satang || 0) + (s.papaya_credit_card_satang || 0)
     ) / 100
     const cash = ((s.cash_satang || 0) + (s.papaya_cash_satang || 0)) / 100
 

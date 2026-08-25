@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/flowaccount-payment-slips",
       "schedule": "30 23 * * *"
+    },
+    {
+      "path": "/api/cron/ttb-promptpay",
+      "schedule": "0 20 * * *"
     }
   ]
 }

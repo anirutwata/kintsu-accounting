@@ -40,9 +40,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ date: 
   const amountByChannel: Record<string, number> = {
     cash: (day.cash_satang || 0) + (day.papaya_cash_satang || 0),
     transfer:
-      (day.promptpay_satang || 0) +
       (day.company_transfer_satang || 0) +
-      (day.papaya_promptpay_satang || 0) +
       (day.papaya_company_transfer_satang || 0),
     credit_card: (day.credit_card_satang || 0) + (day.papaya_credit_card_satang || 0),
   }
