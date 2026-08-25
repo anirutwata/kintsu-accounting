@@ -132,7 +132,7 @@ export default function TaxInvoiceRequestPage() {
     }
   }
 
-  // Reads วันที่/ยอดก่อน VAT/ยอดชำระจริง straight off the bill photo so the customer
+  // Reads วันที่/ยอดก่อน VAT/ยอดชำระจริง/ช่องทางชำระเงิน straight off the bill photo so the customer
   // doesn't have to hunt for and retype numbers already printed in front of them — every
   // field OCR fills in stays a normal editable input, and re-uploading a photo (เปลี่ยนรูป)
   // re-scans and overwrites with the new bill's numbers.
@@ -154,6 +154,7 @@ export default function TaxInvoiceRequestPage() {
           document_date: documentDate,
           subtotal_baht: json.subtotalBaht != null ? String(json.subtotalBaht) : f.subtotal_baht,
           total_baht: json.totalBaht != null ? String(json.totalBaht) : f.total_baht,
+          payment_method: json.paymentMethod || f.payment_method,
         }
       })
     } catch {

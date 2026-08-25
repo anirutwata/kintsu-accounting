@@ -7,7 +7,7 @@ export async function POST(req: Request) {
 
   try {
     const result = await extractTaxInvoiceFieldsFromBill(url)
-    return NextResponse.json(result ?? { documentDate: null, subtotalBaht: null, totalBaht: null, confidence: 0 })
+    return NextResponse.json(result ?? { documentDate: null, subtotalBaht: null, totalBaht: null, paymentMethod: null, confidence: 0 })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'OCR ล้มเหลว'
     return NextResponse.json({ error: message }, { status: 500 })
