@@ -160,12 +160,26 @@ export async function syncTtbReportToFlowAccount(supabase: SupabaseClient, repor
 
 async function importAttachment(supabase: SupabaseClient, input: { messageId: string; attachmentName: string; content: Buffer }) {
   const sha256 = createHash('sha256').update(input.content).digest('hex')
+  // Validate the bank document on every run, including legacy rows imported
+  // before filename/summary cross-checking existed. Nothing may repair KINTSU
+  // or reach FlowAccount until the current attachment passes all date checks.
+  const report = await readEncryptedTtbReport(
+    input.content,
+    requiredEnv('TTB_SMARTSHOP_REPORT_PASSWORD'),
+    input.attachmentName,
+  )
+  if (report.reportDate !== yesterdayBkk()) {
+    return { imported: false, skipped: true, reportDate: report.reportDate, reason: `รอเฉพาะรายงาน D-1 (${yesterdayBkk()})` }
+  }
   const { data: existingByMessage } = await supabase.from('ttb_promptpay_reports').select('id, report_date, successful_amount_satang')
     .eq('gmail_message_id', input.messageId).eq('is_deleted', false).maybeSingle()
   const { data: existingByHash } = existingByMessage ? { data: null } : await supabase.from('ttb_promptpay_reports').select('id, report_date, successful_amount_satang')
     .eq('attachment_sha256', sha256).eq('is_deleted', false).maybeSingle()
   const existing = existingByMessage ?? existingByHash
   if (existing) {
+    if (existing.report_date !== report.reportDate || Number(existing.successful_amount_satang) !== report.successfulAmountSatang) {
+      throw new Error('ข้อมูลรายงาน TTB เดิมใน KINTSU ไม่ตรงกับไฟล์ธนาคาร กรุณาตรวจสอบก่อน Sync')
+    }
     const { error: repairError } = await supabase.from('daily_sales').upsert({
       id: existing.report_date, date: existing.report_date,
       ttb_promptpay_satang: existing.successful_amount_satang,
@@ -175,10 +189,6 @@ async function importAttachment(supabase: SupabaseClient, input: { messageId: st
     return { imported: false, reportId: existing.id, reportDate: existing.report_date }
   }
 
-  const report = await readEncryptedTtbReport(input.content, requiredEnv('TTB_SMARTSHOP_REPORT_PASSWORD'))
-  if (report.reportDate !== yesterdayBkk()) {
-    return { imported: false, skipped: true, reportDate: report.reportDate, reason: `รอเฉพาะรายงาน D-1 (${yesterdayBkk()})` }
-  }
   const bank = await resolveConfiguredBank(supabase)
   const { data: inserted, error } = await supabase.from('ttb_promptpay_reports').insert({
     report_date: report.reportDate, gmail_message_id: input.messageId, attachment_sha256: sha256,

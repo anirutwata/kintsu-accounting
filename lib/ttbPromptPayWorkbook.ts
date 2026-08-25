@@ -1,8 +1,8 @@
 import ExcelJS from 'exceljs'
 import officeCrypto from 'officecrypto-tool'
-import { parseTtbSmartShopRows, type ReportCell, type TtbPromptPayReport } from './ttbPromptPayReport'
+import { assertTtbFilenameMatchesReportDate, parseTtbSmartShopRows, type ReportCell, type TtbPromptPayReport } from './ttbPromptPayReport'
 
-export async function readEncryptedTtbReport(buffer: Buffer, password: string): Promise<TtbPromptPayReport> {
+export async function readEncryptedTtbReport(buffer: Buffer, password: string, attachmentName: string): Promise<TtbPromptPayReport> {
   // officecrypto-tool bundles an older @types/node Buffer declaration; runtime value is
   // the same Node Buffer, so bridge the declaration mismatch at this boundary.
   const decrypted = await officeCrypto.decrypt(buffer as never, { password })
@@ -15,5 +15,7 @@ export async function readEncryptedTtbReport(buffer: Buffer, password: string): 
     const values = Array.isArray(row.values) ? row.values.slice(1) : []
     rows.push(values.map(value => value instanceof Date || typeof value === 'string' || typeof value === 'number' ? value : value == null ? null : String(value)))
   })
-  return parseTtbSmartShopRows(rows)
+  const report = parseTtbSmartShopRows(rows)
+  assertTtbFilenameMatchesReportDate(attachmentName, report.reportDate)
+  return report
 }

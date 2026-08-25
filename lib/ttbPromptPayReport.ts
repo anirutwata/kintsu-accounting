@@ -31,6 +31,19 @@ function thaiReportDate(value: ReportCell): string {
   return `${match[3]}-${match[2]}-${match[1]}`
 }
 
+export function reportDateFromTtbFilename(filename: string): string {
+  const match = filename.trim().match(/^Report_Kintsu-(\d{2})-(\d{2})-(\d{4})\.xlsx$/i)
+  if (!match) throw new Error(`ชื่อไฟล์รายงาน TTB ไม่ถูกต้อง: ${filename || '(ว่าง)'}`)
+  return thaiReportDate(`${match[1]}/${match[2]}/${match[3]}`)
+}
+
+export function assertTtbFilenameMatchesReportDate(filename: string, reportDate: string): void {
+  const filenameDate = reportDateFromTtbFilename(filename)
+  if (filenameDate !== reportDate) {
+    throw new Error(`วันที่ชื่อไฟล์ TTB ไม่ตรงกับวันที่รับเงิน: ชื่อไฟล์ ${filenameDate} แต่รายการ ${reportDate}`)
+  }
+}
+
 function number(value: ReportCell, label: string): number {
   const result = typeof value === 'number' ? value : Number(text(value).replace(/,/g, ''))
   if (!Number.isFinite(result)) throw new Error(`${label} ในรายงาน TTB ไม่ใช่ตัวเลข`)
@@ -73,6 +86,15 @@ export function parseTtbSmartShopRows(rows: ReportCell[][]): TtbPromptPayReport 
   if (transactions.length === 0) throw new Error('รายงาน TTB ไม่มีรายการ Success')
   const reportDates = new Set(transactions.map(item => item.paymentDate))
   if (reportDates.size !== 1) throw new Error('รายงาน TTB มีรายการ Success มากกว่าหนึ่งวัน')
+  const transactionDate = transactions[0].paymentDate
+
+  const summaryDateCell = rows.flat().map(text).find(value => value.includes('สรุปรายการสำหรับวันที่'))
+  const summaryDateMatch = summaryDateCell?.match(/สรุปรายการสำหรับวันที่\s*(\d{2}\/\d{2}\/\d{4})/)
+  if (!summaryDateMatch) throw new Error('ไม่พบวันที่สรุปในรายงาน TTB')
+  const summaryDate = thaiReportDate(summaryDateMatch[1])
+  if (summaryDate !== transactionDate) {
+    throw new Error(`วันที่สรุปในรายงาน TTB ไม่ตรงกับวันที่รับเงิน: สรุป ${summaryDate} แต่รายการ ${transactionDate}`)
+  }
 
   const successfulCount = Math.round(number(summaryCountRow[1], 'จำนวนรายการสำเร็จ'))
   const successfulAmountSatang = Math.round(number(summaryAmountRow[1], 'ยอดเงินรายการสำเร็จ') * 100)
@@ -85,7 +107,7 @@ export function parseTtbSmartShopRows(rows: ReportCell[][]): TtbPromptPayReport 
   }
 
   return {
-    reportDate: transactions[0].paymentDate,
+    reportDate: transactionDate,
     merchantId,
     successfulCount,
     successfulAmountSatang,
