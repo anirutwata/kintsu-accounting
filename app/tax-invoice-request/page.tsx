@@ -51,6 +51,7 @@ export default function TaxInvoiceRequestPage() {
   const [billPreview, setBillPreview] = useState('')
   const [uploadingBill, setUploadingBill] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  const [billOcring, setBillOcring] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
   const [showWarning, setShowWarning] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -123,10 +124,42 @@ export default function TaxInvoiceRequestPage() {
         return
       }
       set('bill_image_url', json.url)
+      scanBillFields(json.url)
     } catch (err: any) {
       setUploadError(`อัปโหลดรูปไม่สำเร็จ กรุณาลองใหม่${err?.message ? ` (${err.message})` : ''}`)
     } finally {
       setUploadingBill(false)
+    }
+  }
+
+  // Reads วันที่/ยอดก่อน VAT/ยอดชำระจริง straight off the bill photo so the customer
+  // doesn't have to hunt for and retype numbers already printed in front of them — every
+  // field OCR fills in stays a normal editable input, and re-uploading a photo (เปลี่ยนรูป)
+  // re-scans and overwrites with the new bill's numbers.
+  async function scanBillFields(billUrl: string) {
+    setBillOcring(true)
+    try {
+      const res = await fetch('/api/ocr/tax-invoice-bill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: billUrl }),
+      })
+      const json = await res.json()
+      if (!res.ok) return
+      setForm(f => {
+        const todayIso = getTodayBKK()
+        const documentDate = json.documentDate && json.documentDate <= todayIso ? json.documentDate : f.document_date
+        return {
+          ...f,
+          document_date: documentDate,
+          subtotal_baht: json.subtotalBaht != null ? String(json.subtotalBaht) : f.subtotal_baht,
+          total_baht: json.totalBaht != null ? String(json.totalBaht) : f.total_baht,
+        }
+      })
+    } catch {
+      // Best-effort — the customer can always fill these in by hand.
+    } finally {
+      setBillOcring(false)
     }
   }
 
@@ -191,7 +224,8 @@ export default function TaxInvoiceRequestPage() {
                 <span className="text-sm text-gray-500">📷 แตะเพื่อถ่ายรูปหรือเลือกรูปบิล</span>
               )}
               {uploadingBill && <p className="text-xs text-gray-400 mt-1">กำลังอัปโหลด...</p>}
-              {form.bill_image_url && !uploadingBill && <p className="text-xs text-green-600 mt-1">✓ แนบรูปแล้ว (แตะเพื่อเปลี่ยนรูป)</p>}
+              {billOcring && <p className="text-xs text-gray-400 mt-1">🔍 กำลังอ่านวันที่/ยอดเงินจากบิล...</p>}
+              {form.bill_image_url && !uploadingBill && !billOcring && <p className="text-xs text-green-600 mt-1">✓ แนบรูปแล้ว (แตะเพื่อเปลี่ยนรูป)</p>}
             </label>
             {uploadError && <p className="text-xs text-red-500">❌ {uploadError}</p>}
           </Field>
@@ -277,13 +311,13 @@ export default function TaxInvoiceRequestPage() {
             <input required type="number" min="0" step="0.01" value={form.subtotal_baht}
               onChange={e => set('subtotal_baht', e.target.value)}
               className="w-full border rounded-xl px-3 py-2 text-sm" placeholder="0.00" />
-            <p className="text-[10px] text-gray-400 mt-1">ดูจากบรรทัด &quot;รวมเป็นเงิน&quot; หรือ &quot;Before VAT&quot; บนบิล (ก่อนบวก VAT 7%)</p>
+            <p className="text-[10px] text-gray-400 mt-1">ดูจากบรรทัด &quot;รวมเป็นเงิน&quot; หรือ &quot;Before VAT&quot; บนบิล (ก่อนบวก VAT 7%) — ระบบกรอกให้อัตโนมัติจากรูปบิล กรุณาตรวจสอบอีกครั้ง</p>
           </Field>
           <Field label="ยอดเงินรวมที่ชำระจริง (บาท, รวม VAT) *">
             <input required type="number" min="0" step="0.01" value={form.total_baht}
               onChange={e => set('total_baht', e.target.value)}
               className="w-full border rounded-xl px-3 py-2 text-sm" placeholder="0.00" />
-            <p className="text-[10px] text-gray-400 mt-1">ยอดที่จ่ายจริงท้ายบิล (หลังปัดเศษ ถ้ามี)</p>
+            <p className="text-[10px] text-gray-400 mt-1">ยอดที่จ่ายจริงท้ายบิล (หลังปัดเศษ ถ้ามี) — ระบบกรอกให้อัตโนมัติจากรูปบิล กรุณาตรวจสอบอีกครั้ง</p>
           </Field>
           <Field label="ช่องทางชำระเงิน *">
             <div className="grid grid-cols-3 gap-2">
@@ -304,7 +338,7 @@ export default function TaxInvoiceRequestPage() {
 
           {error && <p className="text-xs text-red-500">❌ {error}</p>}
 
-          <button type="submit" disabled={loading || !form.payment_method || uploadingBill}
+          <button type="submit" disabled={loading || !form.payment_method || uploadingBill || billOcring}
             className="w-full py-3 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
             style={{ background: '#D33F22' }}>
             {loading ? 'กำลังส่งคำขอ...' : 'ส่งคำขอใบกำกับภาษี'}
