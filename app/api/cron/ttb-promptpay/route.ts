@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { importTtbPromptPayFromGmail } from '@/lib/ttbPromptPayImport'
+import { expectedTtbReportDate, importTtbPromptPayFromGmail } from '@/lib/ttbPromptPayImport'
+import { buildTtbPromptPayFailureAlert } from '@/lib/ttbPromptPayAlert'
+import { sendTelegram } from '@/lib/telegram'
 
 export const maxDuration = 60
 
@@ -12,7 +14,13 @@ async function run(req: Request) {
   try {
     return NextResponse.json(await importTtbPromptPayFromGmail(await createClient()))
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 })
+    const message = error instanceof Error ? error.message : String(error)
+    const telegramAlertSent = await sendTelegram(
+      buildTtbPromptPayFailureAlert(expectedTtbReportDate(), message),
+      'sales',
+    )
+    if (!telegramAlertSent) console.error('TTB cron failed and Telegram alert delivery also failed')
+    return NextResponse.json({ error: message, telegramAlertSent }, { status: 500 })
   }
 }
 

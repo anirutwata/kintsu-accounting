@@ -9,7 +9,7 @@ import { syncRevenueJournal, type RevenueJournalAccount } from './revenueJournal
 const REPORT_SENDER = 'ttbsmartshop@digio.co.th'
 const REPORT_SUBJECT = 'ttb smart shop: รายงานการขายประจำวัน (Daily Sales Report)'
 
-function yesterdayBkk(): string {
+export function expectedTtbReportDate(): string {
   const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' })
   return formatter.format(new Date(Date.now() - 86_400_000))
 }
@@ -168,8 +168,8 @@ async function importAttachment(supabase: SupabaseClient, input: { messageId: st
     requiredEnv('TTB_SMARTSHOP_REPORT_PASSWORD'),
     input.attachmentName,
   )
-  if (report.reportDate !== yesterdayBkk()) {
-    return { imported: false, skipped: true, reportDate: report.reportDate, reason: `รอเฉพาะรายงาน D-1 (${yesterdayBkk()})` }
+  if (report.reportDate !== expectedTtbReportDate()) {
+    return { imported: false, skipped: true, reportDate: report.reportDate, reason: `รอเฉพาะรายงาน D-1 (${expectedTtbReportDate()})` }
   }
   const { data: existingByMessage } = await supabase.from('ttb_promptpay_reports').select('id, report_date, successful_amount_satang')
     .eq('gmail_message_id', input.messageId).eq('is_deleted', false).maybeSingle()
@@ -237,7 +237,7 @@ export async function importTtbPromptPayFromGmail(supabase: SupabaseClient) {
     const sync = await syncTtbReportToFlowAccount(supabase, imported.reportId)
     results.push({ ...imported, sync })
   }
-  const expectedDate = yesterdayBkk()
+  const expectedDate = expectedTtbReportDate()
   const expected = results.find(result => result.reportDate === expectedDate && !('skipped' in result && result.skipped))
   if (!expected) throw new Error(`ไม่พบรายงาน TTB Smart Shop ของวันที่ ${expectedDate}`)
   if ('sync' in expected && expected.sync && !expected.sync.ok) throw new Error(expected.sync.error)

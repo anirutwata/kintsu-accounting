@@ -18,9 +18,9 @@ export const TELEGRAM_TOPICS = {
 } as const
 
 export async function sendTelegram(message: string, topic?: keyof typeof TELEGRAM_TOPICS) {
-  if (!BOT_TOKEN || !CHAT_ID) return
+  if (!BOT_TOKEN || !CHAT_ID) return false
   try {
-    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -30,8 +30,19 @@ export async function sendTelegram(message: string, topic?: keyof typeof TELEGRA
         ...(topic ? { message_thread_id: TELEGRAM_TOPICS[topic] } : {}),
       }),
     })
+    if (!response.ok) {
+      console.error(`Telegram sendMessage failed: HTTP ${response.status}`)
+      return false
+    }
+    const result = await response.json()
+    if (!result.ok) {
+      console.error('Telegram sendMessage rejected the message')
+      return false
+    }
+    return true
   } catch (err) {
     console.error('Telegram failed:', err)
+    return false
   }
 }
 
