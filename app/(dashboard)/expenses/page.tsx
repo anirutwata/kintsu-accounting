@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { formatBaht, toSatang } from '@/lib/money'
 import { getTodayBKK, getMonthKey, formatThaiMonth } from '@/lib/utils'
 import { compressImageFile } from '@/lib/compressImage'
+import { ThaiDateSelect } from '@/components/ThaiDateSelect'
 import type { Expense, BankAccount, OcrData, ExpenseItem } from '@/types'
 
 const BANK_OPTIONS = ['KBANK','SCB','KTB','BBL','TTB','GSB','BAY','BAAC','GHB','CIMB','UOB','KKP','LH BANK']
@@ -919,10 +920,8 @@ export default function ExpensesPage() {
                 <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--charcoal)' }}>
                   วันที่เอกสาร <span className="font-normal text-xs">(ใช้คำนวณ P&L)</span> *
                 </label>
-                <input type="date" required value={form.document_date}
-                  onChange={e => setForm(f => ({ ...f, document_date: e.target.value }))}
-                  className="w-full border-2 rounded-xl px-3 py-2.5 text-sm"
-                  style={{ borderColor: 'var(--flame-red)' }} />
+                <ThaiDateSelect required accent value={form.document_date}
+                  onChange={document_date => setForm(f => ({ ...f, document_date }))} />
                 {form.document_date && (
                   <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
                     {new Date(form.document_date + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
@@ -932,19 +931,18 @@ export default function ExpensesPage() {
               </div>
 
               {/* Payment Date + Time */}
-              <div className="flex gap-3">
-                <div className="flex-1">
+              <div className="space-y-3">
+                <div>
                   <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>วันที่ชำระ</label>
-                  <input type="date" value={form.date}
-                    onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                    className="w-full border rounded-xl px-3 py-2.5 text-sm" style={{ borderColor: 'var(--border)' }} />
+                  <ThaiDateSelect value={form.date}
+                    onChange={date => setForm(f => ({ ...f, date }))} />
                   {form.date && form.date !== form.document_date && (
                     <p className="text-xs mt-1 text-amber-600">
                       ชำระคนละวันกับเอกสาร
                     </p>
                   )}
                 </div>
-                <div className="flex-1">
+                <div>
                   <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--muted-foreground)' }}>เวลาโอน</label>
                   <input type="time" value={form.transfer_time}
                     onChange={e => setForm(f => ({ ...f, transfer_time: e.target.value }))}
