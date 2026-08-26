@@ -159,6 +159,7 @@ export default function SalesPage() {
   const { gpFeeSatang, netSatang: grabNet } = calcGrabNet(grabGross)
   const totalNet = foodstoryRev + papayaRev + grabNet + takeawayRev
   const staffPromptPay = toSatang(parseInput(foodstory.promptpay)) + toSatang(parseInput(papaya.promptpay))
+  const staffCreditCard = toSatang(parseInput(foodstory.credit_card)) + toSatang(parseInput(papaya.credit_card))
 
   async function handleDelete() {
     setDeleting(true)
@@ -301,6 +302,19 @@ export default function SalesPage() {
             className="px-3 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#16A34A' }}>
             {syncingEdc ? 'กำลังตรวจ...' : '🔄 ตรวจอีเมลตอนนี้'}
           </button>
+        </div>
+        <p className="text-xl font-bold" style={{ color: 'var(--charcoal)' }}>
+          {existing?.linepay_edc_report_id ? formatBaht(existing.linepay_edc_gross_satang || 0) : 'ยังไม่มีรายงานของวันนี้'}
+        </p>
+        <div className="text-xs space-y-0.5" style={{ color: 'var(--muted-foreground)' }}>
+          <p>พนักงานกรอก: {formatBaht(staffCreditCard)}</p>
+          {existing?.linepay_edc_report_id && (
+            <p style={{ color: Math.abs((existing.linepay_edc_gross_satang || 0) - staffCreditCard) <= 1 ? '#16A34A' : '#DC2626' }}>
+              {Math.abs((existing.linepay_edc_gross_satang || 0) - staffCreditCard) <= 1
+                ? '✅ ยอดตรงกับรายงาน EDC'
+                : `⚠️ ยอดต่างกัน ${formatBaht(Math.abs((existing.linepay_edc_gross_satang || 0) - staffCreditCard))}`}
+            </p>
+          )}
         </div>
         {edcMessage && <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{edcMessage}</p>}
       </div>

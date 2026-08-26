@@ -289,6 +289,12 @@ async function importAttachment(supabase: SupabaseClient, input: { messageId: st
       || Number(existing.net_amount_satang) !== report.netAmountSatang) {
       throw new Error('รายงาน EDC เดิมใน KINTSU ไม่ตรงกับไฟล์ LINE Pay')
     }
+    const { error: repairError } = await supabase.from('daily_sales').upsert({
+      id: existing.revenue_date, date: existing.revenue_date,
+      linepay_edc_gross_satang: existing.gross_amount_satang,
+      linepay_edc_report_id: existing.id, updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' })
+    if (repairError) throw repairError
     return { imported: false, reportId: existing.id, revenueDate: existing.revenue_date, settlementDate: existing.settlement_date }
   }
   const { data: inserted, error } = await supabase.from('linepay_edc_reports').insert({
@@ -312,6 +318,17 @@ async function importAttachment(supabase: SupabaseClient, input: { messageId: st
     const deletedAt = new Date().toISOString()
     await supabase.from('linepay_edc_reports').update({ is_deleted: true, deleted_at: deletedAt }).eq('id', inserted.id)
     throw transactionError
+  }
+  const { error: salesError } = await supabase.from('daily_sales').upsert({
+    id: report.revenueDate, date: report.revenueDate, linepay_edc_gross_satang: report.grossAmountSatang,
+    linepay_edc_report_id: inserted.id, updated_at: new Date().toISOString(),
+  }, { onConflict: 'id' })
+  if (salesError) {
+    const deletedAt = new Date().toISOString()
+    await supabase.from('linepay_edc_transactions').update({ is_deleted: true, deleted_at: deletedAt })
+      .eq('report_id', inserted.id).eq('is_deleted', false)
+    await supabase.from('linepay_edc_reports').update({ is_deleted: true, deleted_at: deletedAt }).eq('id', inserted.id)
+    throw salesError
   }
   return { imported: true, reportId: inserted.id, revenueDate: report.revenueDate, settlementDate: report.settlementDate }
 }
