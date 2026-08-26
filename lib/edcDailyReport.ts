@@ -112,9 +112,15 @@ export function parseEdcDailyReport(source: string, filename: string): EdcDailyR
   if (filenameDate !== first.settlementDate) {
     throw new Error(`วันที่ชื่อไฟล์ EDC ไม่ตรงกับ Settlement: ชื่อไฟล์ ${filenameDate} แต่รายการ ${first.settlementDate}`)
   }
-  const terminalIds = new Set(transactions.map(item => item.terminalId))
-  if (terminalIds.size !== 1) throw new Error('รายงาน EDC มีหลาย Terminal ID')
-  if (first.terminalId !== LINEPAY_EDC_POLICY.terminalId) throw new Error(`Terminal ID EDC ไม่ถูกต้อง: ${first.terminalId || '(ว่าง)'}`)
+  // The physical EDC device reports under two terminal IDs — the primary one for
+  // Visa/Mastercard/UnionPay, a second for JCB (see edcPolicy.ts) — so more than one
+  // terminal ID appearing is expected, as long as every one of them is one of these two.
+  const knownTerminalIds: string[] = [LINEPAY_EDC_POLICY.terminalId, LINEPAY_EDC_POLICY.jcbTerminalId]
+  const unknownTerminalIds = [...new Set(transactions.map(item => item.terminalId))]
+    .filter(id => !knownTerminalIds.includes(id))
+  if (unknownTerminalIds.length > 0) {
+    throw new Error(`Terminal ID EDC ไม่ถูกต้อง: ${unknownTerminalIds.join(', ') || '(ว่าง)'}`)
+  }
   if (new Set(transactions.map(item => item.merchantId)).size !== 1
     || new Set(transactions.map(item => item.merchantName)).size !== 1) {
     throw new Error('รายงาน EDC มีข้อมูลร้านค้ามากกว่าหนึ่งราย')
@@ -138,7 +144,7 @@ export function parseEdcDailyReport(source: string, filename: string): EdcDailyR
   if (new Set(transactionIds).size !== transactionIds.length) throw new Error('Transaction ID EDC ซ้ำในไฟล์เดียวกัน')
   for (const transaction of transactions) {
     if (transaction.serviceGroupName !== 'EDC'
-      || !['CREDIT_CARD_LOCAL', 'CREDIT_CARD_INTER'].includes(transaction.serviceName)) {
+      || !['CREDIT_CARD_LOCAL', 'CREDIT_CARD_INTER', 'JCB_CARD'].includes(transaction.serviceName)) {
       throw new Error(`ประเภทรายการ EDC ไม่รองรับ: ${transaction.serviceName || '(ว่าง)'}`)
     }
     if (transaction.amountSatang <= 0 || transaction.feeAmountSatang < 0 || transaction.feeVatSatang < 0
@@ -159,7 +165,11 @@ export function parseEdcDailyReport(source: string, filename: string): EdcDailyR
     settlementDate: first.settlementDate,
     merchantId: first.merchantId,
     merchantName: first.merchantName,
-    terminalId: first.terminalId,
+    // Not first.terminalId — with two valid terminal IDs now possible in one report
+    // (see knownTerminalIds above), "whichever row happened to come first" isn't a
+    // meaningful value to store. The primary device ID stays a stable identifier for
+    // this one physical EDC terminal regardless of the card-scheme mix that day.
+    terminalId: LINEPAY_EDC_POLICY.terminalId,
     transactionCount: transactions.length,
     grossAmountSatang,
     feeAmountSatang,
