@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { calcGrabNet } from '@/lib/money'
 import { sendTelegram, buildSalesMessage } from '@/lib/telegram'
+import { syncCashRevenueToFlowAccount } from '@/lib/cashRevenueSync'
 
 export async function GET(req: Request) {
   const supabase = await createClient()
@@ -104,11 +105,9 @@ export async function POST(req: Request) {
     updated_at: new Date().toISOString(),
   }
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('daily_sales')
     .upsert(record, { onConflict: 'id' })
-    .select()
-    .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
@@ -141,5 +140,16 @@ export async function POST(req: Request) {
     takeawayRev,
   }), 'sales')
 
-  return NextResponse.json(data)
+  // Cash revenue is accounting-authoritative once the daily sales record is saved.
+  // Sync it in the same user action so a separate button cannot leave days behind.
+  const cashSync = await syncCashRevenueToFlowAccount(supabase, date)
+  const { data: updated, error: reloadError } = await supabase.from('daily_sales').select('*').eq('id', date).single()
+  if (reloadError) return NextResponse.json({ error: reloadError.message }, { status: 500 })
+  if (!cashSync.ok) {
+    return NextResponse.json({
+      ...updated,
+      partialErrors: { cash: cashSync.error },
+    }, { status: 207 })
+  }
+  return NextResponse.json(updated)
 }

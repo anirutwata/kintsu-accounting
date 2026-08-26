@@ -217,8 +217,12 @@ export default function SalesPage() {
         }),
       })
       if (res.ok) {
+        const result = await res.json()
+        if (result.partialErrors?.cash) {
+          setSaveError(`บันทึกยอดแล้ว แต่ส่งเงินสดเข้า FlowAccount ไม่สำเร็จ: ${result.partialErrors.cash}`)
+        }
+        await loadSales()
         setSaved(true)
-        loadSales()
       } else {
         const err = await res.json()
         setSaveError(err.error || 'บันทึกไม่สำเร็จ')
