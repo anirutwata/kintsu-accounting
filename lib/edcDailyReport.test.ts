@@ -31,26 +31,32 @@ describe('LINE Pay EDC daily report', () => {
       .toThrow('วันที่ชื่อไฟล์ EDC ไม่ตรงกับ Settlement')
   })
 
-  it('rejects transactions from an unrecognized terminal or transaction date', () => {
+  it('rejects transactions from another transaction date, regardless of terminal ID', () => {
+    // terminal_id varies by card scheme (Visa/Mastercard vs. JCB) on the same physical
+    // device, so a differing terminal_id alone is not a rejection reason.
     const otherTerminal = sample.replace(',88122653,EDC,CREDIT_CARD_INTER', ',99999999,EDC,CREDIT_CARD_INTER')
-    expect(() => parseEdcDailyReport(otherTerminal, 'EDC_DailyReport_20260825.csv'))
-      .toThrow('Terminal ID EDC ไม่ถูกต้อง: 99999999')
+    expect(() => parseEdcDailyReport(otherTerminal, 'EDC_DailyReport_20260825.csv')).not.toThrow()
 
     const otherDate = sample.replace('2026-08-24 21:24:49', '2026-08-23 21:24:49')
     expect(() => parseEdcDailyReport(otherDate, 'EDC_DailyReport_20260825.csv'))
       .toThrow('รายงาน EDC มีธุรกรรมมากกว่าหนึ่งวัน')
   })
 
-  it('accepts the store\'s second (JCB) terminal ID alongside the primary one', () => {
+  it('accepts JCB transactions alongside Visa/Mastercard ones, under a different terminal_id', () => {
     const withJcb = [
       header,
       ...rows,
       '59IlGmY3YE2dsy1aUflYJI8WDrpyoA,คินสึ ยากินิคุ เซ็นทรัล ขอนแก่น แคมปัส,19912876,EDC,JCB_CARD,994,0.03,29.82,2.09,962.09,2026-08-25,2026-08-24 18:44:44,tx-jcb',
     ].join('\n')
     const report = parseEdcDailyReport(withJcb, 'EDC_DailyReport_20260825.csv')
-    expect(report.terminalId).toBe('88122653') // the stable primary device ID, not whichever row came first
     expect(report.transactionCount).toBe(3)
     expect(report.grossAmountSatang).toBe(945_100 + 99_400)
+  })
+
+  it('rejects a report for a different store, even with a familiar terminal_id', () => {
+    const wrongMerchant = sample.replaceAll('คินสึ ยากินิคุ เซ็นทรัล ขอนแก่น แคมปัส', 'ร้านอื่น')
+    expect(() => parseEdcDailyReport(wrongMerchant, 'EDC_DailyReport_20260825.csv'))
+      .toThrow('รายงาน EDC ไม่ใช่ร้าน KINTSU Central Khon Kaen Campus')
   })
 
   it('requires settlement on the calendar day after the transaction date', () => {

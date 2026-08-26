@@ -112,15 +112,10 @@ export function parseEdcDailyReport(source: string, filename: string): EdcDailyR
   if (filenameDate !== first.settlementDate) {
     throw new Error(`วันที่ชื่อไฟล์ EDC ไม่ตรงกับ Settlement: ชื่อไฟล์ ${filenameDate} แต่รายการ ${first.settlementDate}`)
   }
-  // The physical EDC device reports under two terminal IDs — the primary one for
-  // Visa/Mastercard/UnionPay, a second for JCB (see edcPolicy.ts) — so more than one
-  // terminal ID appearing is expected, as long as every one of them is one of these two.
-  const knownTerminalIds: string[] = [LINEPAY_EDC_POLICY.terminalId, LINEPAY_EDC_POLICY.jcbTerminalId]
-  const unknownTerminalIds = [...new Set(transactions.map(item => item.terminalId))]
-    .filter(id => !knownTerminalIds.includes(id))
-  if (unknownTerminalIds.length > 0) {
-    throw new Error(`Terminal ID EDC ไม่ถูกต้อง: ${unknownTerminalIds.join(', ') || '(ว่าง)'}`)
-  }
+  // terminal_id on LINE Pay's report varies with the customer's card scheme (Visa/
+  // Mastercard vs. JCB use different terminal IDs on the same physical device) — it does
+  // not identify which store the report belongs to, so it isn't validated here at all.
+  // merchant_id/merchant_name below are the actual, reliable identity check.
   if (new Set(transactions.map(item => item.merchantId)).size !== 1
     || new Set(transactions.map(item => item.merchantName)).size !== 1) {
     throw new Error('รายงาน EDC มีข้อมูลร้านค้ามากกว่าหนึ่งราย')
@@ -165,10 +160,10 @@ export function parseEdcDailyReport(source: string, filename: string): EdcDailyR
     settlementDate: first.settlementDate,
     merchantId: first.merchantId,
     merchantName: first.merchantName,
-    // Not first.terminalId — with two valid terminal IDs now possible in one report
-    // (see knownTerminalIds above), "whichever row happened to come first" isn't a
-    // meaningful value to store. The primary device ID stays a stable identifier for
-    // this one physical EDC terminal regardless of the card-scheme mix that day.
+    // Not first.terminalId — terminal_id varies by card scheme within the same report
+    // (see the comment above), so "whichever row happened to come first" isn't a
+    // meaningful value to store. This is purely a human-readable label for the one
+    // physical EDC device the store has; it plays no role in validation.
     terminalId: LINEPAY_EDC_POLICY.terminalId,
     transactionCount: transactions.length,
     grossAmountSatang,
