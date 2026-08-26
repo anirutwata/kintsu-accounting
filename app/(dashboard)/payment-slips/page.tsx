@@ -217,7 +217,11 @@ export default function PaymentSlipsPage() {
                         onChange={event => { const file = event.target.files?.[0]; if (file) uploadSlip(file) }}
                         disabled={uploadingSlip} />
                       <label htmlFor={`payment-slip-${group.serial}`}
-                        className={`mt-1 flex min-h-24 cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed px-4 text-center text-base font-medium transition-colors ${paymentForm.slip_image_url ? 'border-green-400 bg-green-50 text-green-700' : 'border-[#d8ccb7] bg-white text-[#766a58]'} ${uploadingSlip ? 'pointer-events-none opacity-60' : ''}`}>
+                        className={`mt-1 flex min-h-24 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-3 text-center text-base font-medium transition-colors ${paymentForm.slip_image_url ? 'border-green-400 bg-green-50 text-green-700' : 'border-[#d8ccb7] bg-white text-[#766a58]'} ${uploadingSlip ? 'pointer-events-none opacity-60' : ''}`}>
+                        {paymentForm.slip_image_url && !uploadingSlip && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={paymentForm.slip_image_url} alt="สลิปการโอน" className="max-h-48 rounded-lg object-contain" />
+                        )}
                         {uploadingSlip
                           ? '⏳ กำลังอัปโหลดสลิป...'
                           : paymentForm.slip_image_url
