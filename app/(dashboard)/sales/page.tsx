@@ -56,7 +56,7 @@ export default function SalesPage() {
       setTtbMessage(
         !res.ok ? `❌ ${json.error || 'Sync ไม่สำเร็จ'}`
           : failed ? `❌ ${failed.sync.error || 'ส่งเข้า FlowAccount ไม่สำเร็จ'}`
-            : `ตรวจอีเมลแล้ว ${json.scanned || 0} ฉบับ`,
+            : '', // success is already visible in the amount above — no need to report the scan count too
       )
       if (res.ok) await loadSales()
     } catch (error) {
@@ -73,8 +73,9 @@ export default function SalesPage() {
       setEdcMessage(
         !res.ok ? `❌ ${json.error || 'Sync ไม่สำเร็จ'}`
           : failed ? `❌ ${failed.sync.error || 'ส่งเข้า FlowAccount ไม่สำเร็จ'}`
-            : `ตรวจอีเมลแล้ว ${json.scanned || 0} ฉบับ`,
+            : '', // success is already visible in the amount above — no need to report the scan count too
       )
+      if (res.ok) await loadSales()
     } catch (error) {
       setEdcMessage(`❌ ${error instanceof Error ? error.message : 'เชื่อมต่อระบบตรวจอีเมลไม่สำเร็จ'}`)
     } finally { setSyncingEdc(false) }
