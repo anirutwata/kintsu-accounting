@@ -44,6 +44,8 @@ export default function SalesPage() {
   const [syncFaError, setSyncFaError] = useState('')
   const [syncingTtb, setSyncingTtb] = useState(false)
   const [ttbMessage, setTtbMessage] = useState('')
+  const [syncingEdc, setSyncingEdc] = useState(false)
+  const [edcMessage, setEdcMessage] = useState('')
 
   async function handleSyncTtb() {
     setSyncingTtb(true); setTtbMessage('')
@@ -60,6 +62,22 @@ export default function SalesPage() {
     } catch (error) {
       setTtbMessage(`❌ ${error instanceof Error ? error.message : 'เชื่อมต่อระบบตรวจอีเมลไม่สำเร็จ'}`)
     } finally { setSyncingTtb(false) }
+  }
+
+  async function handleSyncEdc() {
+    setSyncingEdc(true); setEdcMessage('')
+    try {
+      const res = await fetch('/api/linepay-edc/sync', { method: 'POST' })
+      const json = await res.json()
+      const failed = Array.isArray(json.results) ? json.results.find((item: { sync?: { ok?: boolean; error?: string } }) => item.sync?.ok === false) : null
+      setEdcMessage(
+        !res.ok ? `❌ ${json.error || 'Sync ไม่สำเร็จ'}`
+          : failed ? `❌ ${failed.sync.error || 'ส่งเข้า FlowAccount ไม่สำเร็จ'}`
+            : `ตรวจอีเมลแล้ว ${json.scanned || 0} ฉบับ`,
+      )
+    } catch (error) {
+      setEdcMessage(`❌ ${error instanceof Error ? error.message : 'เชื่อมต่อระบบตรวจอีเมลไม่สำเร็จ'}`)
+    } finally { setSyncingEdc(false) }
   }
 
   async function handleSyncFlowAccount() {
@@ -273,6 +291,20 @@ export default function SalesPage() {
         {ttbMessage && <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{ttbMessage}</p>}
       </div>
 
+      <div className="rounded-2xl border p-4 space-y-2" style={{ borderColor: '#86EFAC', background: '#F0FDF4' }}>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold" style={{ color: '#15803D' }}>บัตรเครดิต LINE Pay EDC</p>
+            <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>ยอดจริงจาก CSV · อัตโนมัติทุกวัน 12:00 น. · ยอดพนักงานใช้ตรวจสอบเท่านั้น</p>
+          </div>
+          <button type="button" onClick={handleSyncEdc} disabled={syncingEdc}
+            className="px-3 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50" style={{ background: '#16A34A' }}>
+            {syncingEdc ? 'กำลังตรวจ...' : '🔄 ตรวจอีเมลตอนนี้'}
+          </button>
+        </div>
+        {edcMessage && <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{edcMessage}</p>}
+      </div>
+
       {existing && (
         <div className="flex justify-between items-center gap-2">
           <div className="flex flex-col gap-0.5 text-xs" style={{ color: 'var(--muted-foreground)' }}>
@@ -283,13 +315,13 @@ export default function SalesPage() {
               <span>✅ โอน/พร้อมเพย์: {existing.flowaccount_transfer_document_serial}</span>
             )}
             {existing.flowaccount_credit_card_document_serial && (
-              <span>✅ บัตรเครดิต Cash Sale: {existing.flowaccount_credit_card_document_serial}</span>
+              <span>ℹ️ บัตรเครดิต Cash Sale ระบบเดิม: {existing.flowaccount_credit_card_document_serial}</span>
             )}
           </div>
           <button onClick={handleSyncFlowAccount} disabled={syncingFa}
             className="px-3 py-1.5 rounded-xl text-xs font-semibold border-2 disabled:opacity-50"
             style={{ borderColor: '#2563EB', color: '#2563EB' }}>
-            {syncingFa ? 'กำลังส่ง...' : existing.flowaccount_cash_document_serial || existing.flowaccount_transfer_document_serial || existing.flowaccount_credit_card_document_serial ? '🔁 ส่งอีกครั้ง' : '📤 ส่งเข้า FlowAccount'}
+            {syncingFa ? 'กำลังส่ง...' : existing.flowaccount_cash_document_serial ? '🔁 ส่งเงินสดอีกครั้ง' : '📤 ส่งเงินสดเข้า FlowAccount'}
           </button>
         </div>
       )}

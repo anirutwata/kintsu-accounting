@@ -115,6 +115,10 @@ export async function voidJournalEntry(recordId: number) {
   return flowAccountFetch(`/journal-entries/${recordId}/void`, { method: 'POST' })
 }
 
+export async function getJournalEntry(recordId: number) {
+  return flowAccountFetch(`/journal-entries/${recordId}`)
+}
+
 // FlowAccount has no PAY/payment-slip collection in its public OpenAPI. A paid
 // payment slip is exposed through its source EXP documents instead: status=6,
 // referencedToMe contains the PAY serial, and payments contains the batch's
