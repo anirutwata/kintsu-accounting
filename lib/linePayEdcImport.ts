@@ -295,7 +295,10 @@ async function importAttachment(supabase: SupabaseClient, input: { messageId: st
       linepay_edc_report_id: existing.id, updated_at: new Date().toISOString(),
     }, { onConflict: 'id' })
     if (repairError) throw repairError
-    return { imported: false, reportId: existing.id, revenueDate: existing.revenue_date, settlementDate: existing.settlement_date }
+    return {
+      imported: false, reportId: existing.id, revenueDate: existing.revenue_date,
+      settlementDate: existing.settlement_date, grossAmountSatang: existing.gross_amount_satang,
+    }
   }
   const { data: inserted, error } = await supabase.from('linepay_edc_reports').insert({
     revenue_date: report.revenueDate, settlement_date: report.settlementDate,
@@ -330,7 +333,10 @@ async function importAttachment(supabase: SupabaseClient, input: { messageId: st
     await supabase.from('linepay_edc_reports').update({ is_deleted: true, deleted_at: deletedAt }).eq('id', inserted.id)
     throw salesError
   }
-  return { imported: true, reportId: inserted.id, revenueDate: report.revenueDate, settlementDate: report.settlementDate }
+  return {
+    imported: true, reportId: inserted.id, revenueDate: report.revenueDate,
+    settlementDate: report.settlementDate, grossAmountSatang: report.grossAmountSatang,
+  }
 }
 
 export async function importLinePayEdcFromGmail(supabase: SupabaseClient) {
@@ -353,5 +359,5 @@ export async function importLinePayEdcFromGmail(supabase: SupabaseClient) {
   if (!('sync' in current) || !current.sync.ok) {
     throw new Error('sync' in current ? current.sync.error : 'รายงาน EDC รอบปัจจุบันยังไม่ได้ Sync')
   }
-  return { scanned: messages.length, results }
+  return { scanned: messages.length, results, current }
 }

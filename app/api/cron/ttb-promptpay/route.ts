@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { expectedTtbReportDate, importTtbPromptPayFromGmail } from '@/lib/ttbPromptPayImport'
-import { buildTtbPromptPayFailureAlert } from '@/lib/ttbPromptPayAlert'
+import { buildTtbPromptPayFailureAlert, buildTtbPromptPaySuccessAlert } from '@/lib/ttbPromptPayAlert'
 import { sendTelegram } from '@/lib/telegram'
 
 export const maxDuration = 60
@@ -12,7 +12,14 @@ async function run(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   try {
-    return NextResponse.json(await importTtbPromptPayFromGmail(await createClient()))
+    const result = await importTtbPromptPayFromGmail(await createClient())
+    if (result.current) {
+      await sendTelegram(
+        buildTtbPromptPaySuccessAlert(result.current.reportDate, result.current.amountSatang, result.current.sync.documentSerial),
+        'sales',
+      )
+    }
+    return NextResponse.json(result)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     const telegramAlertSent = await sendTelegram(

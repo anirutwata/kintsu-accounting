@@ -186,7 +186,7 @@ async function importAttachment(supabase: SupabaseClient, input: { messageId: st
       ttb_promptpay_report_id: existing.id, updated_at: new Date().toISOString(),
     }, { onConflict: 'id' })
     if (repairError) throw repairError
-    return { imported: false, reportId: existing.id, reportDate: existing.report_date }
+    return { imported: false, reportId: existing.id, reportDate: existing.report_date, amountSatang: existing.successful_amount_satang }
   }
 
   const bank = await resolveConfiguredBank(supabase)
@@ -222,7 +222,7 @@ async function importAttachment(supabase: SupabaseClient, input: { messageId: st
     }).eq('id', inserted.id)
     throw salesError
   }
-  return { imported: true, reportId: inserted.id, reportDate: report.reportDate }
+  return { imported: true, reportId: inserted.id, reportDate: report.reportDate, amountSatang: report.successfulAmountSatang }
 }
 
 export async function importTtbPromptPayFromGmail(supabase: SupabaseClient) {
@@ -241,5 +241,5 @@ export async function importTtbPromptPayFromGmail(supabase: SupabaseClient) {
   const expected = results.find(result => result.reportDate === expectedDate && !('skipped' in result && result.skipped))
   if (!expected) throw new Error(`ไม่พบรายงาน TTB Smart Shop ของวันที่ ${expectedDate}`)
   if ('sync' in expected && expected.sync && !expected.sync.ok) throw new Error(expected.sync.error)
-  return { scanned: messages.length, results }
+  return { scanned: messages.length, results, current: 'sync' in expected ? expected : undefined }
 }

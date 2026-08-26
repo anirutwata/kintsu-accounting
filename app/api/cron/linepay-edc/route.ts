@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { expectedEdcDates, importLinePayEdcFromGmail } from '@/lib/linePayEdcImport'
-import { buildLinePayEdcFailureAlert } from '@/lib/linePayEdcAlert'
+import { buildLinePayEdcFailureAlert, buildLinePayEdcSuccessAlert } from '@/lib/linePayEdcAlert'
 import { sendTelegram } from '@/lib/telegram'
 
 export const maxDuration = 60
@@ -12,7 +12,17 @@ async function run(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   try {
-    return NextResponse.json(await importLinePayEdcFromGmail(await createClient()))
+    const result = await importLinePayEdcFromGmail(await createClient())
+    if (result.current) {
+      await sendTelegram(
+        buildLinePayEdcSuccessAlert(
+          result.current.revenueDate, result.current.settlementDate, result.current.grossAmountSatang,
+          result.current.sync.cashSale.documentSerial, result.current.sync.settlement.documentSerial,
+        ),
+        'sales',
+      )
+    }
+    return NextResponse.json(result)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     const dates = expectedEdcDates()
