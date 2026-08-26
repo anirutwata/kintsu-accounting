@@ -26,14 +26,21 @@ interface StoredEdcReport {
   fee_amount_satang: number
   fee_vat_satang: number
   net_amount_satang: number
-  cash_sale_record_id: number | null
-  cash_sale_document_serial: string | null
-  cash_sale_sync_state: 'idle' | 'creating' | 'synced' | 'cleanup_pending' | 'error'
-  cash_sale_cleanup_record_id: number | null
   settlement_record_id: number | null
   settlement_document_serial: string | null
   settlement_sync_state: 'idle' | 'creating' | 'synced' | 'cleanup_pending' | 'error'
   settlement_cleanup_record_id: number | null
+}
+
+interface StoredEdcRevenueDay {
+  id: string
+  revenue_date: string
+  gross_amount_satang: number
+  cash_sale_record_id: number | null
+  cash_sale_document_serial: string | null
+  cash_sale_synced_amount_satang: number | null
+  cash_sale_sync_state: 'idle' | 'creating' | 'synced' | 'replacing' | 'cleanup_pending' | 'error'
+  cash_sale_cleanup_record_id: number | null
 }
 
 export function expectedEdcDates(now = Date.now()): { revenueDate: string; settlementDate: string } {
@@ -44,10 +51,11 @@ export function expectedEdcDates(now = Date.now()): { revenueDate: string; settl
 }
 
 export function isExpectedEdcReport(
-  report: { revenueDate: string; settlementDate: string },
+  report: { revenueDate: string; revenueDays?: Array<{ revenueDate: string }>; settlementDate: string },
   expected = expectedEdcDates(),
 ): boolean {
-  return report.revenueDate === expected.revenueDate && report.settlementDate === expected.settlementDate
+  const revenueDates = report.revenueDays?.map(day => day.revenueDate) ?? [report.revenueDate]
+  return revenueDates.includes(expected.revenueDate) && report.settlementDate === expected.settlementDate
 }
 
 function requiredEnv(name: string): string {
@@ -156,50 +164,60 @@ async function ensureJournalVoided(recordId: number): Promise<void> {
   if (!isFlowAccountDocumentVoided(document)) throw new Error(`JV ${recordId} ยังไม่เป็น Void หลังสั่ง cleanup`)
 }
 
-async function syncCashSale(supabase: SupabaseClient, report: StoredEdcReport) {
-  if (report.cash_sale_sync_state === 'cleanup_pending' && report.cash_sale_cleanup_record_id) {
-    await ensureCashSaleVoided(report.cash_sale_cleanup_record_id)
-    const { data: reset } = await supabase.from('linepay_edc_reports').update({
-      cash_sale_sync_state: 'idle', cash_sale_cleanup_record_id: null, cash_sale_sync_error: null,
-    }).eq('id', report.id).eq('cash_sale_sync_state', 'cleanup_pending').select('id').maybeSingle()
+async function syncCashSale(supabase: SupabaseClient, revenueDay: StoredEdcRevenueDay) {
+  let current = revenueDay
+  if ((current.cash_sale_sync_state === 'replacing' || current.cash_sale_sync_state === 'cleanup_pending')
+    && current.cash_sale_cleanup_record_id) {
+    await ensureCashSaleVoided(current.cash_sale_cleanup_record_id)
+    const { data: reset } = await supabase.from('linepay_edc_revenue_days').update({
+      cash_sale_record_id: null, cash_sale_document_serial: null, cash_sale_synced_amount_satang: null,
+      cash_sale_synced_at: null, cash_sale_sync_state: 'idle', cash_sale_cleanup_record_id: null,
+      cash_sale_sync_error: null, updated_at: new Date().toISOString(),
+    }).eq('id', current.id).in('cash_sale_sync_state', ['replacing','cleanup_pending'])
+      .select('*').maybeSingle()
     if (!reset) throw new Error('Void Cash Sale EDC ค้างสำเร็จแต่ reset KINTSU ไม่สำเร็จ')
-  } else if (report.cash_sale_record_id && report.cash_sale_document_serial) {
-    return { recordId: report.cash_sale_record_id, documentSerial: report.cash_sale_document_serial, created: false }
+    current = reset as StoredEdcRevenueDay
+  } else if (current.cash_sale_record_id && current.cash_sale_document_serial
+    && current.cash_sale_synced_amount_satang === current.gross_amount_satang) {
+    return { revenueDate: current.revenue_date, recordId: current.cash_sale_record_id, documentSerial: current.cash_sale_document_serial, created: false }
+  } else if (current.cash_sale_record_id || current.cash_sale_document_serial) {
+    throw new Error(`Cash Sale EDC วันที่ ${current.revenue_date} มียอดหรือ state ไม่ตรง ต้องตรวจ FlowAccount`)
   }
-  const { data: claimed } = await supabase.from('linepay_edc_reports').update({
+  const { data: claimed } = await supabase.from('linepay_edc_revenue_days').update({
     cash_sale_sync_state: 'creating', cash_sale_sync_error: null,
-  }).eq('id', report.id).is('cash_sale_record_id', null)
+  }).eq('id', current.id).is('cash_sale_record_id', null)
     .in('cash_sale_sync_state', ['idle','error']).select('id').maybeSingle()
   if (!claimed) throw new Error('Cash Sale EDC กำลังสร้างหรือสร้างแล้ว')
   try {
     const channel = await resolveEdcChannel(supabase)
     const created = await createCashInvoice(buildEdcCashSale({
-      revenueDate: report.revenue_date, grossAmountSatang: report.gross_amount_satang,
+      revenueDate: current.revenue_date, grossAmountSatang: current.gross_amount_satang,
       edcChannelId: channel.id, edcChannelName: channel.name,
     }))
-    const { data: saved } = await supabase.from('linepay_edc_reports').update({
+    const { data: saved } = await supabase.from('linepay_edc_revenue_days').update({
       cash_sale_record_id: created.recordId, cash_sale_document_serial: created.documentSerial,
+      cash_sale_synced_amount_satang: current.gross_amount_satang,
       cash_sale_synced_at: new Date().toISOString(), cash_sale_sync_state: 'synced', cash_sale_sync_error: null,
       updated_at: new Date().toISOString(),
-    }).eq('id', report.id).eq('cash_sale_sync_state', 'creating')
+    }).eq('id', current.id).eq('cash_sale_sync_state', 'creating')
       .is('cash_sale_record_id', null).select('id').maybeSingle()
     if (!saved) {
       try {
         await ensureCashSaleVoided(created.recordId)
       } catch (cleanupError) {
-        await supabase.from('linepay_edc_reports').update({
+        await supabase.from('linepay_edc_revenue_days').update({
           cash_sale_sync_state: 'cleanup_pending', cash_sale_cleanup_record_id: created.recordId,
           cash_sale_sync_error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
-        }).eq('id', report.id).eq('cash_sale_sync_state', 'creating')
+        }).eq('id', current.id).eq('cash_sale_sync_state', 'creating')
         throw new Error(`มี Cash Sale EDC รอ Void: ${created.recordId}`)
       }
       throw new Error('สร้าง Cash Sale EDC แล้วแต่บันทึกกลับ KINTSU ไม่สำเร็จ และ Void แล้ว')
     }
-    return { ...created, created: true }
+    return { revenueDate: current.revenue_date, ...created, created: true }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    await supabase.from('linepay_edc_reports').update({ cash_sale_sync_state: 'error', cash_sale_sync_error: message })
-      .eq('id', report.id).eq('cash_sale_sync_state', 'creating')
+    await supabase.from('linepay_edc_revenue_days').update({ cash_sale_sync_state: 'error', cash_sale_sync_error: message })
+      .eq('id', current.id).eq('cash_sale_sync_state', 'creating')
     throw error
   }
 }
@@ -259,19 +277,36 @@ export async function syncEdcReportToFlowAccount(supabase: SupabaseClient, repor
   if (error || !report) return { ok: false as const, error: error?.message || 'ไม่พบรายงาน EDC' }
   try {
     const storedReport = report as StoredEdcReport
-    const cashSale = await syncCashSale(supabase, storedReport)
+    const { data: contributions, error: contributionsError } = await supabase.from('linepay_edc_report_revenue_days')
+      .select('revenue_day_id').eq('report_id', reportId).eq('is_deleted', false)
+    if (contributionsError || !contributions?.length) {
+      throw contributionsError || new Error('ไม่พบวันขายในรายงาน EDC')
+    }
+    const { data: revenueDays, error: revenueDaysError } = await supabase.from('linepay_edc_revenue_days')
+      .select('*').in('id', contributions.map(item => item.revenue_day_id))
+      .eq('is_deleted', false).order('revenue_date')
+    if (revenueDaysError || !revenueDays?.length) throw revenueDaysError || new Error('ไม่พบยอดรวมวันขาย EDC')
+    const cashSales = []
+    for (const revenueDay of revenueDays as StoredEdcRevenueDay[]) {
+      cashSales.push(await syncCashSale(supabase, revenueDay))
+    }
     const settlement = await syncSettlement(supabase, storedReport)
-    return { ok: true as const, cashSale, settlement }
+    return { ok: true as const, cashSales, settlement }
   } catch (syncError) {
     return { ok: false as const, error: syncError instanceof Error ? syncError.message : String(syncError) }
   }
 }
 
-async function importAttachment(supabase: SupabaseClient, input: { messageId: string; attachmentName: string; content: Buffer }) {
+export async function importLinePayEdcAttachment(
+  supabase: SupabaseClient,
+  input: { messageId: string; attachmentName: string; content: Buffer },
+  options: { enforceExpected?: boolean } = {},
+) {
   const report = parseEdcDailyReport(input.content.toString('utf8'), input.attachmentName)
-  if (!isExpectedEdcReport(report)) {
+  if (options.enforceExpected !== false && !isExpectedEdcReport(report)) {
     return {
       imported: false, skipped: true, revenueDate: report.revenueDate,
+      revenueDates: report.revenueDays.map(day => day.revenueDate),
       settlementDate: report.settlementDate, reason: 'ไม่ใช่รายงานรอบปัจจุบัน',
     }
   }
@@ -289,52 +324,51 @@ async function importAttachment(supabase: SupabaseClient, input: { messageId: st
       || Number(existing.net_amount_satang) !== report.netAmountSatang) {
       throw new Error('รายงาน EDC เดิมใน KINTSU ไม่ตรงกับไฟล์ LINE Pay')
     }
-    const { error: repairError } = await supabase.from('daily_sales').upsert({
-      id: existing.revenue_date, date: existing.revenue_date,
-      linepay_edc_gross_satang: existing.gross_amount_satang,
-      linepay_edc_report_id: existing.id, updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' })
-    if (repairError) throw repairError
+    const { data: storedDays, error: storedDaysError } = await supabase.from('linepay_edc_report_revenue_days')
+      .select('revenue_date,gross_amount_satang,fee_amount_satang,fee_vat_satang,net_amount_satang')
+      .eq('report_id', existing.id).eq('is_deleted', false).order('revenue_date')
+    if (storedDaysError || !storedDays) throw storedDaysError || new Error('ไม่พบวันขายในรายงาน EDC เดิม')
+    const storedShape = storedDays.map(day => [
+      day.revenue_date, Number(day.gross_amount_satang), Number(day.fee_amount_satang),
+      Number(day.fee_vat_satang), Number(day.net_amount_satang),
+    ])
+    const parsedShape = report.revenueDays.map(day => [
+      day.revenueDate, day.grossAmountSatang, day.feeAmountSatang, day.feeVatSatang, day.netAmountSatang,
+    ])
+    if (JSON.stringify(storedShape) !== JSON.stringify(parsedShape)) {
+      throw new Error('วันขายในรายงาน EDC เดิมไม่ตรงกับไฟล์ LINE Pay')
+    }
     return {
       imported: false, reportId: existing.id, revenueDate: existing.revenue_date,
+      revenueDates: report.revenueDays.map(day => day.revenueDate),
       settlementDate: existing.settlement_date, grossAmountSatang: existing.gross_amount_satang,
     }
   }
-  const { data: inserted, error } = await supabase.from('linepay_edc_reports').insert({
-    revenue_date: report.revenueDate, settlement_date: report.settlementDate,
-    gmail_message_id: input.messageId, attachment_sha256: sha256, attachment_name: input.attachmentName,
-    merchant_id: report.merchantId, merchant_name: report.merchantName, terminal_id: report.terminalId,
-    transaction_count: report.transactionCount, gross_amount_satang: report.grossAmountSatang,
-    fee_amount_satang: report.feeAmountSatang, fee_vat_satang: report.feeVatSatang,
-    net_amount_satang: report.netAmountSatang,
-  }).select('id').single()
-  if (error || !inserted) throw error || new Error('บันทึกรายงาน EDC ไม่สำเร็จ')
-  const rows = report.transactions.map(transaction => ({
-    report_id: inserted.id, transaction_id: transaction.transactionId,
-    transaction_time: `${transaction.transactionTime}+07:00`, service_name: transaction.serviceName,
-    amount_satang: transaction.amountSatang, fee_rate: transaction.feeRate,
-    fee_amount_satang: transaction.feeAmountSatang, fee_vat_satang: transaction.feeVatSatang,
-    net_amount_satang: transaction.netAmountSatang,
-  }))
-  const { error: transactionError } = await supabase.from('linepay_edc_transactions').insert(rows)
-  if (transactionError) {
-    const deletedAt = new Date().toISOString()
-    await supabase.from('linepay_edc_reports').update({ is_deleted: true, deleted_at: deletedAt }).eq('id', inserted.id)
-    throw transactionError
-  }
-  const { error: salesError } = await supabase.from('daily_sales').upsert({
-    id: report.revenueDate, date: report.revenueDate, linepay_edc_gross_satang: report.grossAmountSatang,
-    linepay_edc_report_id: inserted.id, updated_at: new Date().toISOString(),
-  }, { onConflict: 'id' })
-  if (salesError) {
-    const deletedAt = new Date().toISOString()
-    await supabase.from('linepay_edc_transactions').update({ is_deleted: true, deleted_at: deletedAt })
-      .eq('report_id', inserted.id).eq('is_deleted', false)
-    await supabase.from('linepay_edc_reports').update({ is_deleted: true, deleted_at: deletedAt }).eq('id', inserted.id)
-    throw salesError
-  }
+  const { data: insertedId, error } = await supabase.rpc('import_linepay_edc_report', {
+    p_report: {
+      revenue_date: report.revenueDate, settlement_date: report.settlementDate,
+      gmail_message_id: input.messageId, attachment_sha256: sha256, attachment_name: input.attachmentName,
+      merchant_id: report.merchantId, merchant_name: report.merchantName, terminal_id: report.terminalId,
+      transaction_count: report.transactionCount, gross_amount_satang: report.grossAmountSatang,
+      fee_amount_satang: report.feeAmountSatang, fee_vat_satang: report.feeVatSatang,
+      net_amount_satang: report.netAmountSatang,
+    },
+    p_revenue_days: report.revenueDays.map(day => ({
+      revenue_date: day.revenueDate, transaction_count: day.transactionCount,
+      gross_amount_satang: day.grossAmountSatang, fee_amount_satang: day.feeAmountSatang,
+      fee_vat_satang: day.feeVatSatang, net_amount_satang: day.netAmountSatang,
+    })),
+    p_transactions: report.transactions.map(transaction => ({
+      transaction_id: transaction.transactionId, transaction_time: `${transaction.transactionTime}+07:00`,
+      service_name: transaction.serviceName, amount_satang: transaction.amountSatang,
+      fee_rate: transaction.feeRate, fee_amount_satang: transaction.feeAmountSatang,
+      fee_vat_satang: transaction.feeVatSatang, net_amount_satang: transaction.netAmountSatang,
+    })),
+  })
+  if (error || !insertedId) throw error || new Error('บันทึกรายงาน EDC ไม่สำเร็จ')
   return {
-    imported: true, reportId: inserted.id, revenueDate: report.revenueDate,
+    imported: true, reportId: String(insertedId), revenueDate: report.revenueDate,
+    revenueDates: report.revenueDays.map(day => day.revenueDate),
     settlementDate: report.settlementDate, grossAmountSatang: report.grossAmountSatang,
   }
 }
@@ -343,7 +377,7 @@ export async function importLinePayEdcFromGmail(supabase: SupabaseClient) {
   const messages = await findReportMessages()
   const results = []
   for (const message of messages) {
-    const imported = await importAttachment(supabase, message)
+    const imported = await importLinePayEdcAttachment(supabase, message)
     if ('skipped' in imported && imported.skipped) {
       results.push(imported)
       continue
@@ -353,7 +387,7 @@ export async function importLinePayEdcFromGmail(supabase: SupabaseClient) {
   }
   const expected = expectedEdcDates()
   const current = results.find(result => !('skipped' in result && result.skipped)
-    && result.revenueDate === expected.revenueDate
+    && result.revenueDates.includes(expected.revenueDate)
     && result.settlementDate === expected.settlementDate)
   if (!current) throw new Error(`ไม่พบรายงาน LINE Pay EDC ของวันขาย ${expected.revenueDate}`)
   if (!('sync' in current) || !current.sync.ok) {

@@ -1,6 +1,7 @@
 export const LINEPAY_EDC_POLICY = {
   merchantId: '59IlGmY3YE2dsy1aUflYJI8WDrpyoA',
   merchantNameIncludes: ['คินสึ ยากินิคุ', 'เซ็นทรัล ขอนแก่น แคมปัส'],
+  merchantLegacyNames: ['คิตสุ ยากินิคุ'],
   // The physical EDC device's label in FlowAccount's chart of accounts is keyed to this
   // ID. LINE Pay's own daily settlement report uses a *different* terminal_id per card
   // scheme on this same device (e.g. JCB reports under a different ID than Visa/

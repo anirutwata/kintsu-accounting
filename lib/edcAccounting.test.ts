@@ -26,6 +26,18 @@ describe('LINE Pay EDC accounting', () => {
     })
   })
 
+  it('uses a one-satang receipt rounding when the VAT-inclusive gross is not exactly representable', () => {
+    const cashSale = buildEdcCashSale({
+      revenueDate: '2026-08-13',
+      grossAmountSatang: 1_062_900,
+      edcChannelId: 434479632,
+      edcChannelName: 'เครื่องรูดบัตรเครดิต (EDC) - 88122653',
+    })
+
+    expect(cashSale.items[0].pricePerUnit).toBe(9_933.65)
+    expect(cashSale.payment?.roundingAmount).toBe(0.01)
+  })
+
   it('builds a balanced settlement JV using the required chart accounts', () => {
     const journal = buildEdcSettlementJournal({
       settlementDate: '2026-08-25', grossAmountSatang: 945_100,

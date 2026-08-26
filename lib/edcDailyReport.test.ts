@@ -14,6 +14,9 @@ describe('LINE Pay EDC daily report', () => {
 
     expect(report).toMatchObject({
       revenueDate: '2026-08-24',
+      revenueDays: [{
+        revenueDate: '2026-08-24', transactionCount: 2, grossAmountSatang: 945_100,
+      }],
       settlementDate: '2026-08-25',
       merchantName: 'คินสึ ยากินิคุ เซ็นทรัล ขอนแก่น แคมปัส',
       terminalId: '88122653',
@@ -31,15 +34,17 @@ describe('LINE Pay EDC daily report', () => {
       .toThrow('วันที่ชื่อไฟล์ EDC ไม่ตรงกับ Settlement')
   })
 
-  it('rejects transactions from another transaction date, regardless of terminal ID', () => {
+  it('groups multiple transaction dates while ignoring terminal ID differences', () => {
     // terminal_id varies by card scheme (Visa/Mastercard vs. JCB) on the same physical
     // device, so a differing terminal_id alone is not a rejection reason.
     const otherTerminal = sample.replace(',88122653,EDC,CREDIT_CARD_INTER', ',99999999,EDC,CREDIT_CARD_INTER')
     expect(() => parseEdcDailyReport(otherTerminal, 'EDC_DailyReport_20260825.csv')).not.toThrow()
 
     const otherDate = sample.replace('2026-08-24 21:24:49', '2026-08-23 21:24:49')
-    expect(() => parseEdcDailyReport(otherDate, 'EDC_DailyReport_20260825.csv'))
-      .toThrow('รายงาน EDC มีธุรกรรมมากกว่าหนึ่งวัน')
+    expect(parseEdcDailyReport(otherDate, 'EDC_DailyReport_20260825.csv').revenueDays).toEqual([
+      expect.objectContaining({ revenueDate: '2026-08-23', transactionCount: 1, grossAmountSatang: 253_400 }),
+      expect.objectContaining({ revenueDate: '2026-08-24', transactionCount: 1, grossAmountSatang: 691_700 }),
+    ])
   })
 
   it('accepts JCB transactions alongside Visa/Mastercard ones, under a different terminal_id', () => {
@@ -53,16 +58,38 @@ describe('LINE Pay EDC daily report', () => {
     expect(report.grossAmountSatang).toBe(945_100 + 99_400)
   })
 
+  it('accepts debit card and LINE Pay QR PromptPay transactions in the same settlement', () => {
+    const mixedServices = [
+      header,
+      ...rows,
+      '59IlGmY3YE2dsy1aUflYJI8WDrpyoA,คินสึ ยากินิคุ เซ็นทรัล ขอนแก่น แคมปัส,19912876,EDC,DEBIT_CARD,100,0.023,2.30,0.16,97.54,2026-08-25,2026-08-23 18:44:44,tx-debit',
+      '59IlGmY3YE2dsy1aUflYJI8WDrpyoA,คินสึ ยากินิคุ เซ็นทรัล ขอนแก่น แคมปัส,19912876,EDC,QR_PROMPTPAY,50,0,0,0,50,2026-08-25,2026-08-23 19:44:44,tx-qr',
+      '59IlGmY3YE2dsy1aUflYJI8WDrpyoA,คินสึ ยากินิคุ เซ็นทรัล ขอนแก่น แคมปัส,19912876,EDC,UPI_CARD,100,0.023,2.30,0.16,97.54,2026-08-25,2026-08-23 20:44:44,tx-upi',
+    ].join('\n')
+
+    const report = parseEdcDailyReport(mixedServices, 'EDC_DailyReport_20260825.csv')
+    expect(report.transactions.map(item => item.serviceName)).toEqual([
+      'CREDIT_CARD_LOCAL', 'CREDIT_CARD_INTER', 'DEBIT_CARD', 'QR_PROMPTPAY', 'UPI_CARD',
+    ])
+    expect(report.revenueDays[0]).toMatchObject({
+      revenueDate: '2026-08-23', transactionCount: 3, grossAmountSatang: 25_000,
+    })
+  })
+
+  it('accepts the confirmed legacy spelling for the same merchant ID', () => {
+    const legacyName = sample.replaceAll('คินสึ ยากินิคุ เซ็นทรัล ขอนแก่น แคมปัส', 'คิตสุ ยากินิคุ')
+    expect(() => parseEdcDailyReport(legacyName, 'EDC_DailyReport_20260825.csv')).not.toThrow()
+  })
+
   it('rejects a report for a different store, even with a familiar terminal_id', () => {
     const wrongMerchant = sample.replaceAll('คินสึ ยากินิคุ เซ็นทรัล ขอนแก่น แคมปัส', 'ร้านอื่น')
     expect(() => parseEdcDailyReport(wrongMerchant, 'EDC_DailyReport_20260825.csv'))
       .toThrow('รายงาน EDC ไม่ใช่ร้าน KINTSU Central Khon Kaen Campus')
   })
 
-  it('requires settlement on the calendar day after the transaction date', () => {
+  it('allows delayed settlement after the transaction date', () => {
     const delayedSettlement = sample.replaceAll('2026-08-25', '2026-08-26')
-    expect(() => parseEdcDailyReport(delayedSettlement, 'EDC_DailyReport_20260826.csv'))
-      .toThrow('Settlement EDC ต้องเป็นวันถัดจากวันขาย')
+    expect(() => parseEdcDailyReport(delayedSettlement, 'EDC_DailyReport_20260826.csv')).not.toThrow()
   })
 
   it('rejects duplicate transaction IDs and unreconciled net amounts', () => {

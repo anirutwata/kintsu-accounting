@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { importLinePayEdcFromGmail } from '@/lib/linePayEdcImport'
 
 export const maxDuration = 60
@@ -11,7 +11,7 @@ export async function POST() {
     if (!cookieStore.get('kintsu_acc_user_id')?.value) {
       return NextResponse.json({ error: 'กรุณาเข้าสู่ระบบ' }, { status: 401 })
     }
-    return NextResponse.json(await importLinePayEdcFromGmail(await createClient()))
+    return NextResponse.json(await importLinePayEdcFromGmail(createAdminClient()))
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 })
   }

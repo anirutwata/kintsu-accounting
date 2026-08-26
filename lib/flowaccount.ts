@@ -710,6 +710,9 @@ export async function createCashInvoice(input: CreateCashInvoiceInput) {
     body: JSON.stringify({
       ...document,
       ...paymentFields,
+      useReceiptDeduction: (payment.roundingAmount ?? 0) > 0,
+      documentDeductionType: (payment.roundingAmount ?? 0) > 0 ? 7 : 0,
+      documentDeductionAmount: payment.roundingAmount ?? 0,
       paymentDate: payment.paymentDate,
       collected,
     }),

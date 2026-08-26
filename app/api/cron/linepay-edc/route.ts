@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { expectedEdcDates, importLinePayEdcFromGmail } from '@/lib/linePayEdcImport'
 import { buildLinePayEdcFailureAlert, buildLinePayEdcSuccessAlert } from '@/lib/linePayEdcAlert'
 import { sendTelegram } from '@/lib/telegram'
@@ -12,12 +12,14 @@ async function run(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   try {
-    const result = await importLinePayEdcFromGmail(await createClient())
+    const result = await importLinePayEdcFromGmail(createAdminClient())
     if (result.current) {
+      const sync = result.current.sync
+      if (!sync.ok) throw new Error(sync.error)
       await sendTelegram(
         buildLinePayEdcSuccessAlert(
-          result.current.revenueDate, result.current.settlementDate, result.current.grossAmountSatang,
-          result.current.sync.cashSale.documentSerial, result.current.sync.settlement.documentSerial,
+          result.current.revenueDates, result.current.settlementDate, result.current.grossAmountSatang,
+          sync.cashSales.map(item => item.documentSerial), sync.settlement.documentSerial,
         ),
         'sales',
       )

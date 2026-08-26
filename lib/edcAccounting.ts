@@ -31,18 +31,27 @@ function assertPositiveSatang(value: number, label: string): void {
   if (!Number.isInteger(value) || value <= 0) throw new Error(`${label}ต้องมากกว่า 0 บาท`)
 }
 
-function priceBeforeVat(grossAmountSatang: number): number {
+function priceAndRoundingBeforeVat(grossAmountSatang: number): { price: number; rounding: number } {
   const estimate = Math.round((grossAmountSatang * 100) / 107)
   for (const candidate of [estimate, estimate - 1, estimate + 1]) {
-    if (candidate + Math.round(candidate * 0.07) === grossAmountSatang) return candidate / 100
+    const documentGross = candidate + Math.round(candidate * 0.07)
+    if (documentGross === grossAmountSatang) return { price: candidate / 100, rounding: 0 }
   }
-  throw new Error('ไม่สามารถแยก VAT 7% จากยอด EDC ได้พอดี')
+  // Some VAT-inclusive satang totals cannot be represented by a two-decimal taxable
+  // price plus rounded 7% VAT. Prefer a one-satang receipt deduction so the paid and
+  // clearing amounts still equal the authoritative report exactly.
+  const roundedUp = [estimate, estimate + 1, estimate + 2]
+    .map(candidate => ({ candidate, documentGross: candidate + Math.round(candidate * 0.07) }))
+    .find(({ documentGross }) => documentGross > grossAmountSatang && documentGross - grossAmountSatang <= 1)
+  if (!roundedUp) throw new Error('ไม่สามารถแยก VAT 7% จากยอด EDC ได้พอดี')
+  return { price: roundedUp.candidate / 100, rounding: (roundedUp.documentGross - grossAmountSatang) / 100 }
 }
 
 export function buildEdcCashSale(input: EdcCashSaleInput): CreateCashInvoiceInput {
   assertPositiveSatang(input.grossAmountSatang, 'ยอดขาย EDC')
   if (!input.edcChannelId || !input.edcChannelName.trim()) throw new Error('ยังไม่ได้ตั้งค่าช่องทาง EDC ใน FlowAccount')
   const description = `รายได้ EDC LINE Pay วันที่ ${input.revenueDate}`
+  const { price, rounding } = priceAndRoundingBeforeVat(input.grossAmountSatang)
   return {
     contactName: 'Cash Sale / ขายเงินสด',
     publishedOn: input.revenueDate,
@@ -51,7 +60,7 @@ export function buildEdcCashSale(input: EdcCashSaleInput): CreateCashInvoiceInpu
       name: description,
       quantity: 1,
       unitName: 'วัน',
-      pricePerUnit: priceBeforeVat(input.grossAmountSatang),
+      pricePerUnit: price,
       sellChartOfAccountCode: LINEPAY_EDC_POLICY.accountCodes.revenue,
     }],
     payment: {
@@ -60,7 +69,7 @@ export function buildEdcCashSale(input: EdcCashSaleInput): CreateCashInvoiceInpu
       otherChannelId: input.edcChannelId,
       otherChannelType: 5,
       otherChannelName: input.edcChannelName,
-      roundingAmount: 0,
+      roundingAmount: rounding,
     },
   }
 }

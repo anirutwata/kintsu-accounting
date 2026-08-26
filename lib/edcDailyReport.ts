@@ -18,6 +18,7 @@ export interface EdcTransaction {
 
 export interface EdcDailyReport {
   revenueDate: string
+  revenueDays: EdcRevenueDay[]
   settlementDate: string
   merchantId: string
   merchantName: string
@@ -28,6 +29,15 @@ export interface EdcDailyReport {
   feeVatSatang: number
   netAmountSatang: number
   transactions: EdcTransaction[]
+}
+
+export interface EdcRevenueDay {
+  revenueDate: string
+  transactionCount: number
+  grossAmountSatang: number
+  feeAmountSatang: number
+  feeVatSatang: number
+  netAmountSatang: number
 }
 
 function parseCsvRows(source: string): string[][] {
@@ -108,7 +118,6 @@ export function parseEdcDailyReport(source: string, filename: string): EdcDailyR
   if (transactions.length === 0) throw new Error('รายงาน EDC ไม่มีรายการ')
 
   const first = transactions[0]
-  const revenueDate = first.transactionTime.slice(0, 10)
   if (filenameDate !== first.settlementDate) {
     throw new Error(`วันที่ชื่อไฟล์ EDC ไม่ตรงกับ Settlement: ชื่อไฟล์ ${filenameDate} แต่รายการ ${first.settlementDate}`)
   }
@@ -120,26 +129,23 @@ export function parseEdcDailyReport(source: string, filename: string): EdcDailyR
     || new Set(transactions.map(item => item.merchantName)).size !== 1) {
     throw new Error('รายงาน EDC มีข้อมูลร้านค้ามากกว่าหนึ่งราย')
   }
-  if (first.merchantId !== LINEPAY_EDC_POLICY.merchantId
-    || !LINEPAY_EDC_POLICY.merchantNameIncludes.every(part => first.merchantName.includes(part))) {
+  const currentNameMatches = LINEPAY_EDC_POLICY.merchantNameIncludes.every(part => first.merchantName.includes(part))
+  const legacyNameMatches = LINEPAY_EDC_POLICY.merchantLegacyNames.some(name => name === first.merchantName)
+  if (first.merchantId !== LINEPAY_EDC_POLICY.merchantId || (!currentNameMatches && !legacyNameMatches)) {
     throw new Error('รายงาน EDC ไม่ใช่ร้าน KINTSU Central Khon Kaen Campus')
   }
-  const transactionDates = new Set(transactions.map(item => item.transactionTime.slice(0, 10)))
-  if (transactionDates.size !== 1) throw new Error('รายงาน EDC มีธุรกรรมมากกว่าหนึ่งวัน')
   if (new Set(transactions.map(item => item.settlementDate)).size !== 1) {
     throw new Error('รายงาน EDC มี Settlement Date มากกว่าหนึ่งวัน')
   }
-  const expectedSettlementDate = new Date(`${revenueDate}T00:00:00Z`)
-  expectedSettlementDate.setUTCDate(expectedSettlementDate.getUTCDate() + 1)
-  if (first.settlementDate !== expectedSettlementDate.toISOString().slice(0, 10)) {
-    throw new Error(`Settlement EDC ต้องเป็นวันถัดจากวันขาย: วันขาย ${revenueDate} แต่ Settlement ${first.settlementDate}`)
+  if (transactions.some(item => item.transactionTime.slice(0, 10) >= first.settlementDate)) {
+    throw new Error('Settlement EDC ต้องอยู่หลังวันขายทุกรายการ')
   }
   const transactionIds = transactions.map(item => item.transactionId)
   if (transactionIds.some(id => !id)) throw new Error('รายงาน EDC มีรายการที่ไม่มี Transaction ID')
   if (new Set(transactionIds).size !== transactionIds.length) throw new Error('Transaction ID EDC ซ้ำในไฟล์เดียวกัน')
   for (const transaction of transactions) {
     if (transaction.serviceGroupName !== 'EDC'
-      || !['CREDIT_CARD_LOCAL', 'CREDIT_CARD_INTER', 'JCB_CARD'].includes(transaction.serviceName)) {
+      || !['CREDIT_CARD_LOCAL', 'CREDIT_CARD_INTER', 'JCB_CARD', 'DEBIT_CARD', 'QR_PROMPTPAY', 'UPI_CARD'].includes(transaction.serviceName)) {
       throw new Error(`ประเภทรายการ EDC ไม่รองรับ: ${transaction.serviceName || '(ว่าง)'}`)
     }
     if (transaction.amountSatang <= 0 || transaction.feeAmountSatang < 0 || transaction.feeVatSatang < 0
@@ -154,9 +160,23 @@ export function parseEdcDailyReport(source: string, filename: string): EdcDailyR
   const feeAmountSatang = transactions.reduce((sum, item) => sum + item.feeAmountSatang, 0)
   const feeVatSatang = transactions.reduce((sum, item) => sum + item.feeVatSatang, 0)
   const netAmountSatang = transactions.reduce((sum, item) => sum + item.netAmountSatang, 0)
+  const revenueDays = Array.from(new Set(transactions.map(item => item.transactionTime.slice(0, 10))))
+    .sort()
+    .map((date): EdcRevenueDay => {
+      const items = transactions.filter(item => item.transactionTime.slice(0, 10) === date)
+      return {
+        revenueDate: date,
+        transactionCount: items.length,
+        grossAmountSatang: items.reduce((sum, item) => sum + item.amountSatang, 0),
+        feeAmountSatang: items.reduce((sum, item) => sum + item.feeAmountSatang, 0),
+        feeVatSatang: items.reduce((sum, item) => sum + item.feeVatSatang, 0),
+        netAmountSatang: items.reduce((sum, item) => sum + item.netAmountSatang, 0),
+      }
+    })
 
   return {
-    revenueDate,
+    revenueDate: revenueDays[0].revenueDate,
+    revenueDays,
     settlementDate: first.settlementDate,
     merchantId: first.merchantId,
     merchantName: first.merchantName,
