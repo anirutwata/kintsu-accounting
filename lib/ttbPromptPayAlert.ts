@@ -1,4 +1,12 @@
 import { escapeHtml } from './telegram'
+import { formatBaht } from './money'
+
+export function buildTtbPromptPaySuccessAlert(reportDate: string, amountSatang: number, documentSerial: string): string {
+  return `✅ <b>TTB Smart Shop: Sync กับ FlowAccount สำเร็จ</b>
+📅 รายงานวันที่ <b>${escapeHtml(reportDate)}</b>
+💰 ยอด ${formatBaht(amountSatang)}
+📄 ${escapeHtml(documentSerial)}`
+}
 
 export function buildTtbPromptPayFailureAlert(expectedDate: string, error: string): string {
   return `🚨 <b>TTB Smart Shop: ไม่สามารถยืนยันการ Sync กับ FlowAccount</b>

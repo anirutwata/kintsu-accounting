@@ -1,4 +1,16 @@
 import { escapeHtml } from './telegram'
+import { formatBaht } from './money'
+
+export function buildLinePayEdcSuccessAlert(
+  revenueDate: string, settlementDate: string, grossAmountSatang: number,
+  cashSaleSerial: string, settlementSerial: string,
+): string {
+  return `✅ <b>LINE Pay EDC: Sync กับ FlowAccount สำเร็จ</b>
+📅 วันที่ขาย <b>${escapeHtml(revenueDate)}</b>
+🏦 Settlement <b>${escapeHtml(settlementDate)}</b>
+💰 ยอด ${formatBaht(grossAmountSatang)}
+📄 ${escapeHtml(cashSaleSerial)} · ${escapeHtml(settlementSerial)}`
+}
 
 export function buildLinePayEdcFailureAlert(revenueDate: string, settlementDate: string, error: string): string {
   return `🚨 <b>LINE Pay EDC: ไม่สามารถยืนยันการ Sync กับ FlowAccount</b>

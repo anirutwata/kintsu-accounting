@@ -226,6 +226,8 @@ export interface DailySales {
   papaya_credit_card_satang: number
   ttb_promptpay_satang: number
   ttb_promptpay_report_id: string | null
+  linepay_edc_gross_satang: number
+  linepay_edc_report_id: string | null
   flowaccount_cash_record_id: number | null
   flowaccount_cash_document_serial: string | null
   flowaccount_cash_synced_at: string | null

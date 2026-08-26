@@ -289,7 +289,16 @@ async function importAttachment(supabase: SupabaseClient, input: { messageId: st
       || Number(existing.net_amount_satang) !== report.netAmountSatang) {
       throw new Error('รายงาน EDC เดิมใน KINTSU ไม่ตรงกับไฟล์ LINE Pay')
     }
-    return { imported: false, reportId: existing.id, revenueDate: existing.revenue_date, settlementDate: existing.settlement_date }
+    const { error: repairError } = await supabase.from('daily_sales').upsert({
+      id: existing.revenue_date, date: existing.revenue_date,
+      linepay_edc_gross_satang: existing.gross_amount_satang,
+      linepay_edc_report_id: existing.id, updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' })
+    if (repairError) throw repairError
+    return {
+      imported: false, reportId: existing.id, revenueDate: existing.revenue_date,
+      settlementDate: existing.settlement_date, grossAmountSatang: existing.gross_amount_satang,
+    }
   }
   const { data: inserted, error } = await supabase.from('linepay_edc_reports').insert({
     revenue_date: report.revenueDate, settlement_date: report.settlementDate,
@@ -313,7 +322,21 @@ async function importAttachment(supabase: SupabaseClient, input: { messageId: st
     await supabase.from('linepay_edc_reports').update({ is_deleted: true, deleted_at: deletedAt }).eq('id', inserted.id)
     throw transactionError
   }
-  return { imported: true, reportId: inserted.id, revenueDate: report.revenueDate, settlementDate: report.settlementDate }
+  const { error: salesError } = await supabase.from('daily_sales').upsert({
+    id: report.revenueDate, date: report.revenueDate, linepay_edc_gross_satang: report.grossAmountSatang,
+    linepay_edc_report_id: inserted.id, updated_at: new Date().toISOString(),
+  }, { onConflict: 'id' })
+  if (salesError) {
+    const deletedAt = new Date().toISOString()
+    await supabase.from('linepay_edc_transactions').update({ is_deleted: true, deleted_at: deletedAt })
+      .eq('report_id', inserted.id).eq('is_deleted', false)
+    await supabase.from('linepay_edc_reports').update({ is_deleted: true, deleted_at: deletedAt }).eq('id', inserted.id)
+    throw salesError
+  }
+  return {
+    imported: true, reportId: inserted.id, revenueDate: report.revenueDate,
+    settlementDate: report.settlementDate, grossAmountSatang: report.grossAmountSatang,
+  }
 }
 
 export async function importLinePayEdcFromGmail(supabase: SupabaseClient) {
@@ -336,5 +359,5 @@ export async function importLinePayEdcFromGmail(supabase: SupabaseClient) {
   if (!('sync' in current) || !current.sync.ok) {
     throw new Error('sync' in current ? current.sync.error : 'รายงาน EDC รอบปัจจุบันยังไม่ได้ Sync')
   }
-  return { scanned: messages.length, results }
+  return { scanned: messages.length, results, current }
 }
