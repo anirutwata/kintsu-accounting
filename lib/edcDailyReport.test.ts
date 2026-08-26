@@ -31,14 +31,26 @@ describe('LINE Pay EDC daily report', () => {
       .toThrow('วันที่ชื่อไฟล์ EDC ไม่ตรงกับ Settlement')
   })
 
-  it('rejects transactions from another terminal or transaction date', () => {
+  it('rejects transactions from an unrecognized terminal or transaction date', () => {
     const otherTerminal = sample.replace(',88122653,EDC,CREDIT_CARD_INTER', ',99999999,EDC,CREDIT_CARD_INTER')
     expect(() => parseEdcDailyReport(otherTerminal, 'EDC_DailyReport_20260825.csv'))
-      .toThrow('รายงาน EDC มีหลาย Terminal ID')
+      .toThrow('Terminal ID EDC ไม่ถูกต้อง: 99999999')
 
     const otherDate = sample.replace('2026-08-24 21:24:49', '2026-08-23 21:24:49')
     expect(() => parseEdcDailyReport(otherDate, 'EDC_DailyReport_20260825.csv'))
       .toThrow('รายงาน EDC มีธุรกรรมมากกว่าหนึ่งวัน')
+  })
+
+  it('accepts the store\'s second (JCB) terminal ID alongside the primary one', () => {
+    const withJcb = [
+      header,
+      ...rows,
+      '59IlGmY3YE2dsy1aUflYJI8WDrpyoA,คินสึ ยากินิคุ เซ็นทรัล ขอนแก่น แคมปัส,19912876,EDC,JCB_CARD,994,0.03,29.82,2.09,962.09,2026-08-25,2026-08-24 18:44:44,tx-jcb',
+    ].join('\n')
+    const report = parseEdcDailyReport(withJcb, 'EDC_DailyReport_20260825.csv')
+    expect(report.terminalId).toBe('88122653') // the stable primary device ID, not whichever row came first
+    expect(report.transactionCount).toBe(3)
+    expect(report.grossAmountSatang).toBe(945_100 + 99_400)
   })
 
   it('requires settlement on the calendar day after the transaction date', () => {
