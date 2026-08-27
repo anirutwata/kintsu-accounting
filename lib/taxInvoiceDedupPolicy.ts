@@ -40,7 +40,10 @@ export function planTaxInvoiceDedup(input: TaxInvoiceDedupInput): {
   action: TaxInvoiceDedupAction
   remainingSatang: number | null
 } {
-  if (input.authoritativeSatang === null && input.documentDate === input.today) {
+  if (input.authoritativeSatang === null && daysBetween(input.documentDate, input.today) <= 1) {
+    // Matches reserve_tax_invoice_revenue_v3's window: not just requests made the same
+    // day as the sale, but also the day after (e.g. a request made after midnight for
+    // yesterday's receipt, before that day's cash/TTB source has landed).
     if (input.paymentMethod === 'cash') return { action: 'pending_cash_sales', remainingSatang: null }
     if (input.paymentMethod === 'transfer') return { action: 'pending_ttb_report', remainingSatang: null }
   }
