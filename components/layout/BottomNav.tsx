@@ -9,6 +9,7 @@ const navItems = [
   { href: '/dashboard', label: 'หน้าหลัก', icon: '📊', roles: ['owner', 'manager'] },
   { href: '/expenses',  label: 'รายจ่าย',  icon: '🧾', roles: ['owner', 'manager', 'purchasing'] },
   { href: '/sales',     label: 'รายรับ',   icon: '💰', roles: ['owner', 'manager', 'cashier'] },
+  { href: '/tax-invoice-requests', label: 'ใบกำกับภาษี', icon: '📋', roles: ['owner', 'manager'] },
   { href: '/transfers', label: 'โอนเงิน',  icon: '🔄', roles: ['owner', 'manager'] },
   { href: '/journal',        label: 'สมุดรายวัน',  icon: '📔', roles: ['owner', 'manager'] },
   { href: '/manual-journal', label: 'ปรับปรุงบัญชี', icon: '✏️', roles: ['owner'] },

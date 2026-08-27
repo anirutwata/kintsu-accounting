@@ -269,6 +269,36 @@ export function buildAssetDeleteMessage(name: string) {
 🕐 ${thaiNow()}`
 }
 
+const TAX_INVOICE_CONTACT_GROUP_LABELS: Record<string, string> = { individual: 'บุคคลธรรมดา', juristic: 'นิติบุคคล' }
+const TAX_INVOICE_PAYMENT_LABELS: Record<string, string> = { cash: 'เงินสด', transfer: 'โอนเงิน', credit_card: 'บัตรเครดิต (EDC)' }
+
+// Everything the customer filled in on the public tax-invoice-request form. Shared by
+// the initial Telegram notification and every later caption edit (approval failure,
+// manual review) so staff never lose the original submission behind a terser status line.
+export function buildTaxInvoiceRequestDetails(request: {
+  document_date: string
+  contact_name: string
+  contact_group?: string | null
+  contact_tax_id?: string | null
+  contact_branch?: string | null
+  contact_email: string
+  contact_address?: string | null
+  description: string
+  subtotal_satang: number
+  total_satang: number
+  payment_method: string
+}): string {
+  const groupLabel = request.contact_group ? TAX_INVOICE_CONTACT_GROUP_LABELS[request.contact_group] : ''
+  const paymentLabel = TAX_INVOICE_PAYMENT_LABELS[request.payment_method] || request.payment_method
+  const subtotalBaht = (request.subtotal_satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2 })
+  const totalBaht = (request.total_satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2 })
+  return `📅 วันที่ในบิล: ${request.document_date}
+👤 ${escapeHtml(request.contact_name)}${groupLabel ? ` (${groupLabel})` : ''}${request.contact_tax_id ? `\n🪪 ${escapeHtml(request.contact_tax_id)}` : ''}${request.contact_branch ? `\n🏢 สาขา: ${escapeHtml(request.contact_branch)}` : ''}
+📧 ${escapeHtml(request.contact_email)}${request.contact_address ? `\n📍 ${escapeHtml(request.contact_address)}` : ''}
+📝 ${escapeHtml(request.description)}
+💰 ก่อน VAT ${subtotalBaht} → รวม ${totalBaht} บาท (${paymentLabel})`
+}
+
 // Expense recorded with slip
 export function buildExpenseMessage(data: {
   category: string

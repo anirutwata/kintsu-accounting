@@ -308,6 +308,33 @@ export interface Asset {
   updated_at: string | null
 }
 
+export interface TaxInvoiceRequest {
+  id: string
+  document_date: string
+  contact_group: 'individual' | 'juristic' | null
+  contact_name: string
+  contact_tax_id: string | null
+  contact_address: string | null
+  contact_branch: string | null
+  contact_email: string
+  description: string
+  subtotal_satang: number
+  total_satang: number
+  payment_method: 'cash' | 'transfer' | 'credit_card' | null
+  bill_image_url: string | null
+  status: string
+  reviewed_by: string | null
+  reviewed_at: string | null
+  emailed_at: string | null
+  error_message: string | null
+  flowaccount_record_id: number | null
+  flowaccount_document_serial: string | null
+  dedup_state: string
+  dedup_action: string | null
+  dedup_error: string | null
+  created_at: string
+}
+
 export interface SessionUser {
   id: string
   name: string

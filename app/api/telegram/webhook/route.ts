@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { exportTaxInvoicePdfBase64, attachTaxInvoiceFiles } from '@/lib/flowaccount'
 import { sendTaxInvoiceEmail } from '@/lib/email'
-import { sendTelegram, editTelegramCaption, answerCallbackQuery, escapeHtml } from '@/lib/telegram'
+import { sendTelegram, editTelegramCaption, answerCallbackQuery, escapeHtml, buildTaxInvoiceRequestDetails } from '@/lib/telegram'
 import { getTodayBKK } from '@/lib/utils'
 import { processApprovedTaxInvoice } from '@/lib/taxInvoiceApprovalService'
 
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
       if (messageId) {
         await editTelegramCaption(
           messageId,
-          `⏸️ <b>ยกเลิกอัตโนมัติไม่ได้</b>\n👤 ${safeName}\n\nรายการเริ่มสร้างเอกสารหรือจองยอดแล้ว กรุณาให้ผู้ทำบัญชีตรวจสอบ`,
+          `⏸️ <b>ยกเลิกอัตโนมัติไม่ได้</b>\n\n${buildTaxInvoiceRequestDetails(claimed)}\n\nรายการเริ่มสร้างเอกสารหรือจองยอดแล้ว กรุณาให้ผู้ทำบัญชีตรวจสอบ`,
         )
       }
       return NextResponse.json({ ok: true, manualReview: true })
@@ -96,7 +96,7 @@ export async function POST(req: Request) {
       if (messageId) {
         await editTelegramCaption(
           messageId,
-          `⏸️ <b>รอตรวจสอบบัญชี/ภาษี</b>\n👤 ${safeName}\n📅 ${documentDate}\n\nยังไม่ได้สร้างใบกำกับภาษีใน FlowAccount`,
+          `⏸️ <b>รอตรวจสอบบัญชี/ภาษี</b>\n\n${buildTaxInvoiceRequestDetails(claimed)}\n\nยังไม่ได้สร้างใบกำกับภาษีใน FlowAccount`,
         )
       }
       return NextResponse.json({ ok: true, manualReview: true })
@@ -160,7 +160,7 @@ export async function POST(req: Request) {
     if (messageId) {
       await editTelegramCaption(
         messageId,
-        `❌ <b>ออกใบกำกับภาษี/ปรับรายได้ยังไม่สำเร็จ</b>\n👤 ${safeName}\nโดย ${escapeHtml(approver)}\n\nError: ${escapeHtml(message)}\n\nตรวจ FlowAccount ก่อนลองใหม่`,
+        `❌ <b>ออกใบกำกับภาษี/ปรับรายได้ยังไม่สำเร็จ</b>\nโดย ${escapeHtml(approver)}\n\n${buildTaxInvoiceRequestDetails(claimed)}\n\nError: ${escapeHtml(message)}\n\nตรวจ FlowAccount ก่อนลองใหม่`,
         [[{ text: '🔄 ลองอีกครั้ง', callback_data: `tir:approve:${requestId}` }]],
       )
     }

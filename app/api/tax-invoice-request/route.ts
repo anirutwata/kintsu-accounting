@@ -1,13 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { sendTelegramPhoto, sendTelegram, escapeHtml } from '@/lib/telegram'
+import { sendTelegramPhoto, sendTelegram, escapeHtml, buildTaxInvoiceRequestDetails } from '@/lib/telegram'
 import { getTodayBKK } from '@/lib/utils'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PAYMENT_METHODS = ['cash', 'transfer', 'credit_card'] as const
-const PAYMENT_LABELS: Record<string, string> = { cash: 'เงินสด', transfer: 'โอนเงิน', credit_card: 'บัตรเครดิต (EDC)' }
 const CONTACT_GROUPS = ['individual', 'juristic'] as const
-const CONTACT_GROUP_LABELS: Record<string, string> = { individual: 'บุคคลธรรมดา', juristic: 'นิติบุคคล' }
 // Fixed line-item description — not customer-editable, so every invoice reads the same way.
 const FIXED_DESCRIPTION = 'ค่าอาหาร และเครื่องดื่ม'
 
@@ -77,11 +75,12 @@ export async function POST(req: Request) {
 
   const caption = `🧾 <b>คำขอใบกำกับภาษีใหม่ — รอตรวจสอบ</b>
 
-📅 วันที่ในบิล: ${documentDate}
-👤 ${escapeHtml(contactName)} (${CONTACT_GROUP_LABELS[contactGroup]})${contactTaxId ? `\n🪪 ${contactTaxId}` : ''}${contactBranch ? `\n🏢 สาขา: ${escapeHtml(contactBranch)}` : ''}
-📧 ${escapeHtml(contactEmail)}${contactAddress ? `\n📍 ${escapeHtml(contactAddress)}` : ''}
-📝 ${escapeHtml(description)}
-💰 ก่อน VAT ${subtotalBaht.toLocaleString('th-TH', { minimumFractionDigits: 2 })} → รวม ${totalBaht.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท (${PAYMENT_LABELS[paymentMethod]})
+${buildTaxInvoiceRequestDetails({
+    document_date: documentDate, contact_name: contactName, contact_group: contactGroup,
+    contact_tax_id: contactTaxId, contact_branch: contactBranch, contact_email: contactEmail,
+    contact_address: contactAddress, description, subtotal_satang: subtotalSatang,
+    total_satang: totalSatang, payment_method: paymentMethod,
+  })}
 
 กรุณาตรวจสอบรูปบิลก่อนกดอนุมัติ`
 
