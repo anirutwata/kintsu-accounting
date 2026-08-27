@@ -124,10 +124,13 @@ export async function POST(req: Request) {
         .update({ status: 'emailed', emailed_at: new Date().toISOString() })
         .eq('id', requestId)
 
+      const pendingNote = accounting.pendingReconciliation
+        ? '\n\n⏳ ยังไม่มีรายงาน LINE Pay EDC ของวันนี้ ระบบจะปรับยอดกันรายได้ซ้ำอัตโนมัติพรุ่งนี้'
+        : ''
       if (messageId) {
         await editTelegramCaption(
           messageId,
-          `✅ <b>อนุมัติแล้ว</b>\n👤 ${safeName}\n📄 ${invoice.documentSerial}\nโดย ${escapeHtml(approver)}`,
+          `✅ <b>อนุมัติแล้ว</b>\n👤 ${safeName}\n📄 ${invoice.documentSerial}\nโดย ${escapeHtml(approver)}${pendingNote}`,
         )
       }
       await sendTelegram(`📧 ส่งอีเมลใบกำกับภาษี ${invoice.documentSerial} ให้ลูกค้าแล้ว (${escapeHtml(claimed.contact_email)})`, 'taxInvoice')

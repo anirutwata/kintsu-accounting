@@ -409,6 +409,15 @@ export async function importLinePayEdcAttachment(
   }
 }
 
+// Finishes any 'pending_edc_report' full tax invoices for this revenue date now
+// that the settlement report has arrived. Must run before syncEdcReportToFlowAccount
+// so the day's Cash Sale is created net of what these invoices already carved out.
+export async function reconcilePendingEdcTaxInvoices(supabase: SupabaseClient, revenueDate: string) {
+  const { data, error } = await supabase.rpc('reconcile_pending_edc_tax_invoices', { p_revenue_date: revenueDate })
+  if (error) throw error
+  return data as { completed_ids: string[]; manual_review_ids: string[] }
+}
+
 export async function importLinePayEdcFromGmail(supabase: SupabaseClient) {
   const messages = await findReportMessages()
   const results = []
@@ -418,8 +427,12 @@ export async function importLinePayEdcFromGmail(supabase: SupabaseClient) {
       results.push(imported)
       continue
     }
+    const reconciliations = []
+    for (const revenueDate of imported.revenueDates) {
+      reconciliations.push(await reconcilePendingEdcTaxInvoices(supabase, revenueDate))
+    }
     const sync = await syncEdcReportToFlowAccount(supabase, imported.reportId)
-    results.push({ ...imported, sync })
+    results.push({ ...imported, sync, manualReviewTaxInvoiceIds: reconciliations.flatMap(item => item.manual_review_ids) })
   }
   const expected = expectedEdcDates()
   const current = results.find(result => !('skipped' in result && result.skipped)

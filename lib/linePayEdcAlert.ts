@@ -12,6 +12,14 @@ export function buildLinePayEdcSuccessAlert(
 📄 ${escapeHtml(cashSaleSerials.join(', '))} · ${escapeHtml(settlementSerial)}`
 }
 
+export function buildLinePayEdcManualReviewAlert(revenueDate: string, requestIds: string[]): string {
+  return `⚠️ <b>LINE Pay EDC: ใบกำกับภาษีเต็มรูปแบบเกินยอด authoritative</b>
+📅 วันที่ขาย <b>${escapeHtml(revenueDate)}</b>
+📄 คำขอ ${escapeHtml(requestIds.join(', '))}
+
+ยอด EDC ที่ยืนยันจริงน้อยกว่าใบกำกับภาษีที่ออกไปแล้วสำหรับวันนี้ กรุณาให้ผู้ทำบัญชีตรวจสอบและปรับรายการด้วยตนเอง`
+}
+
 export function buildLinePayEdcFailureAlert(revenueDate: string, settlementDate: string, error: string): string {
   return `🚨 <b>LINE Pay EDC: ไม่สามารถยืนยันการ Sync กับ FlowAccount</b>
 📅 วันที่ขาย <b>${escapeHtml(revenueDate)}</b>

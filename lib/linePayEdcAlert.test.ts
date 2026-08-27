@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildLinePayEdcFailureAlert, buildLinePayEdcSuccessAlert } from './linePayEdcAlert'
+import { buildLinePayEdcFailureAlert, buildLinePayEdcManualReviewAlert, buildLinePayEdcSuccessAlert } from './linePayEdcAlert'
 
 describe('LINE Pay EDC success alert', () => {
   it('shows both dates, the amount, and both FlowAccount document serials', () => {
@@ -11,6 +11,14 @@ describe('LINE Pay EDC success alert', () => {
     expect(alert).toContain('CA2026080009')
     expect(alert).toContain('CA2026080010')
     expect(alert).toContain('JV2026080020')
+  })
+})
+
+describe('LINE Pay EDC manual review alert', () => {
+  it('names the revenue date and the affected tax invoice requests', () => {
+    const alert = buildLinePayEdcManualReviewAlert('2026-08-27', ['req-1', 'req-2'])
+    expect(alert).toContain('วันที่ขาย <b>2026-08-27</b>')
+    expect(alert).toContain('req-1, req-2')
   })
 })
 

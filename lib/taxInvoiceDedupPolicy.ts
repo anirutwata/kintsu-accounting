@@ -6,13 +6,15 @@ export type TaxInvoiceDedupAction =
   | 'reduce_future_edc_cash_sale'
   | 'replace_edc_cash_sale'
   | 'manual_review_closed_vat_period'
+  | 'pending_edc_report'
 
 export interface TaxInvoiceDedupInput {
   paymentMethod: TaxInvoicePaymentMethod
   documentDate: string
   today: string
   totalSatang: number
-  authoritativeSatang: number
+  // null when the LINE Pay EDC settlement report for documentDate hasn't been imported yet.
+  authoritativeSatang: number | null
   allocatedSatang: number
   sourceRevenueJournalExists: boolean
   edcCashSaleExists: boolean
@@ -24,11 +26,27 @@ const PAYMENT_LABEL: Record<TaxInvoicePaymentMethod, string> = {
   credit_card: 'EDC',
 }
 
+function daysBetween(from: string, to: string): number {
+  const toUtcDays = (date: string) => {
+    const [year, month, day] = date.split('-').map(Number)
+    return Date.UTC(year, month - 1, day) / 86_400_000
+  }
+  return toUtcDays(to) - toUtcDays(from)
+}
+
 export function planTaxInvoiceDedup(input: TaxInvoiceDedupInput): {
   action: TaxInvoiceDedupAction
-  remainingSatang: number
+  remainingSatang: number | null
 } {
-  const remainingSatang = input.authoritativeSatang - input.allocatedSatang - input.totalSatang
+  if (input.paymentMethod === 'credit_card' && !input.authoritativeSatang
+    && daysBetween(input.documentDate, input.today) <= 1) {
+    // The settlement report always lags a day behind the sale — this is not a
+    // missing-data error, just the normal gap before it arrives.
+    return { action: 'pending_edc_report', remainingSatang: null }
+  }
+
+  const authoritativeSatang = input.authoritativeSatang ?? 0
+  const remainingSatang = authoritativeSatang - input.allocatedSatang - input.totalSatang
   if (remainingSatang < 0) {
     throw new Error(`ยอดใบกำกับภาษีรวมเกินยอด${PAYMENT_LABEL[input.paymentMethod]}ของวันที่ ${input.documentDate}`)
   }

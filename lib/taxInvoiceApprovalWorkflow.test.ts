@@ -83,6 +83,19 @@ describe('runTaxInvoiceApprovalAccounting', () => {
     expect(deps.replaceEdcCashSale).not.toHaveBeenCalled()
   })
 
+  it('issues the invoice but defers completion when the EDC settlement report has not arrived yet', async () => {
+    const row = request({ payment_method: 'credit_card', dedup_action: 'pending_edc_report' })
+    const deps = dependencies(row)
+
+    await expect(runTaxInvoiceApprovalAccounting(row.id, deps)).resolves.toMatchObject({
+      ok: true, invoice: { documentSerial: 'INV-1' }, correction: null, pendingReconciliation: true,
+    })
+    expect(deps.createReversal).not.toHaveBeenCalled()
+    expect(deps.replaceEdcCashSale).not.toHaveBeenCalled()
+    expect(deps.markComplete).not.toHaveBeenCalled()
+    expect(row.dedup_state).toBe('invoice_created')
+  })
+
   it('voids a newly-created invoice if its record cannot be saved for idempotent retry', async () => {
     const row = request()
     const deps = dependencies(row)

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { expectedEdcDates, importLinePayEdcFromGmail } from '@/lib/linePayEdcImport'
-import { buildLinePayEdcFailureAlert, buildLinePayEdcSuccessAlert } from '@/lib/linePayEdcAlert'
+import { buildLinePayEdcFailureAlert, buildLinePayEdcManualReviewAlert, buildLinePayEdcSuccessAlert } from '@/lib/linePayEdcAlert'
 import { sendTelegram } from '@/lib/telegram'
 
 export const maxDuration = 60
@@ -23,6 +23,12 @@ async function run(req: Request) {
         ),
         'sales',
       )
+      if (result.current.manualReviewTaxInvoiceIds?.length) {
+        await sendTelegram(
+          buildLinePayEdcManualReviewAlert(result.current.revenueDates[0], result.current.manualReviewTaxInvoiceIds),
+          'sales',
+        )
+      }
     }
     return NextResponse.json(result)
   } catch (error) {

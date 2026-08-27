@@ -5,7 +5,7 @@ export interface TaxInvoiceApprovalRecord {
   document_date: string
   payment_method: TaxInvoicePaymentMethod
   total_satang: number
-  dedup_action: TaxInvoiceDedupAction | 'manual_review_historical_documents' | null
+  dedup_action: TaxInvoiceDedupAction | 'manual_review_historical_documents' | 'manual_review_edc_pool_exceeded' | null
   dedup_state: string
   flowaccount_record_id: number | null
   flowaccount_document_serial: string | null
@@ -56,7 +56,7 @@ export async function runTaxInvoiceApprovalAccounting(
   const storedCorrection = existingCorrection(request)
   if (request.dedup_state === 'complete') {
     if (!storedInvoice) throw new Error('สถานะใบกำกับภาษี complete แต่ไม่มี FlowAccount record ID')
-    return { ok: true as const, invoice: storedInvoice, correction: storedCorrection, created: false }
+    return { ok: true as const, invoice: storedInvoice, correction: storedCorrection, created: false, pendingReconciliation: false }
   }
 
   let invoice = storedInvoice
@@ -71,6 +71,11 @@ export async function runTaxInvoiceApprovalAccounting(
   }
 
   let correction = storedCorrection
+  // The LINE Pay EDC settlement report always lags a day behind the sale, so a
+  // credit_card invoice requested before it arrives has no pool to reconcile
+  // against yet. The invoice still ships to the customer now; reconcile_pending_edc_tax_invoices
+  // finishes the allocation once the report lands, so this action does not mark complete.
+  const pendingReconciliation = request.dedup_action === 'pending_edc_report'
   if (!correction && request.dedup_action === 'reversal_journal') {
     correction = await dependencies.createReversal(request, invoice)
     try {
@@ -82,13 +87,14 @@ export async function runTaxInvoiceApprovalAccounting(
   } else if (!correction && request.dedup_action === 'replace_edc_cash_sale') {
     correction = await dependencies.replaceEdcCashSale(request)
     if (correction) await dependencies.saveCorrection(request.id, correction)
-  } else if (request.dedup_action !== 'reduce_future_edc_cash_sale'
+  } else if (!pendingReconciliation
+    && request.dedup_action !== 'reduce_future_edc_cash_sale'
     && request.dedup_action !== 'reduce_future_revenue_journal'
     && request.dedup_action !== 'reversal_journal'
     && request.dedup_action !== 'replace_edc_cash_sale') {
     throw new Error(`ไม่รู้จักวิธีป้องกันรายได้ซ้ำ: ${request.dedup_action}`)
   }
 
-  await dependencies.markComplete(request.id)
-  return { ok: true as const, invoice, correction, created: !storedInvoice }
+  if (!pendingReconciliation) await dependencies.markComplete(request.id)
+  return { ok: true as const, invoice, correction, created: !storedInvoice, pendingReconciliation }
 }
