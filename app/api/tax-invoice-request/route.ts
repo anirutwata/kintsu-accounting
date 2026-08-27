@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { sendTelegramPhoto, sendTelegram, escapeHtml, buildTaxInvoiceRequestDetails } from '@/lib/telegram'
 import { getTodayBKK } from '@/lib/utils'
+import {
+  DUPLICATE_TAX_INVOICE_REQUEST_MESSAGE,
+  isDuplicateTaxInvoiceRequest,
+} from '@/lib/taxInvoiceRequestDuplicate'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PAYMENT_METHODS = ['cash', 'transfer', 'credit_card'] as const
@@ -31,6 +35,7 @@ export async function POST(req: Request) {
   if (!contactGroup) return NextResponse.json({ error: 'กรุณาเลือกประเภทผู้เสียภาษี' }, { status: 400 })
   if (!contactName) return NextResponse.json({ error: 'กรุณากรอกชื่อลูกค้า/บริษัท' }, { status: 400 })
   if (!contactEmail || !EMAIL_RE.test(contactEmail)) return NextResponse.json({ error: 'กรุณากรอกอีเมลให้ถูกต้อง' }, { status: 400 })
+  if (contactGroup === 'juristic' && !contactTaxId) return NextResponse.json({ error: 'นิติบุคคลต้องระบุเลขผู้เสียภาษี 13 หลัก' }, { status: 400 })
   if (contactTaxId && contactTaxId.length !== 13) return NextResponse.json({ error: 'เลขผู้เสียภาษีต้องมี 13 หลัก' }, { status: 400 })
   if (!subtotalBaht || subtotalBaht <= 0) return NextResponse.json({ error: 'กรุณากรอกยอดก่อน VAT ให้ถูกต้อง' }, { status: 400 })
   if (!totalBaht || totalBaht <= 0) return NextResponse.json({ error: 'กรุณากรอกยอดเงินให้ถูกต้อง' }, { status: 400 })
@@ -49,6 +54,31 @@ export async function POST(req: Request) {
   const supabase = await createClient()
   const subtotalSatang = Math.round(subtotalBaht * 100)
   const totalSatang = Math.round(totalBaht * 100)
+
+  const { data: sameDateAndAmount, error: duplicateLookupError } = await supabase
+    .from('tax_invoice_requests')
+    .select('document_date, contact_tax_id, contact_name, total_satang, status')
+    .eq('document_date', documentDate)
+    .eq('total_satang', totalSatang)
+    .eq('is_deleted', false)
+  if (duplicateLookupError) {
+    return NextResponse.json({ error: 'ตรวจสอบคำขอเดิมไม่สำเร็จ กรุณาลองใหม่' }, { status: 500 })
+  }
+  const incomingKey = {
+    documentDate, contactTaxId, contactName, totalSatang,
+  }
+  const duplicate = sameDateAndAmount?.some(candidate =>
+    !['rejected', 'failed'].includes(candidate.status)
+    && isDuplicateTaxInvoiceRequest({
+      documentDate: candidate.document_date,
+      contactTaxId: candidate.contact_tax_id,
+      contactName: candidate.contact_name,
+      totalSatang: Number(candidate.total_satang),
+    }, incomingKey),
+  )
+  if (duplicate) {
+    return NextResponse.json({ error: DUPLICATE_TAX_INVOICE_REQUEST_MESSAGE }, { status: 409 })
+  }
 
   const { data: request, error: insertError } = await supabase
     .from('tax_invoice_requests')
@@ -70,6 +100,9 @@ export async function POST(req: Request) {
     .select()
     .single()
   if (insertError || !request) {
+    if (insertError?.code === '23505') {
+      return NextResponse.json({ error: DUPLICATE_TAX_INVOICE_REQUEST_MESSAGE }, { status: 409 })
+    }
     return NextResponse.json({ error: insertError?.message || 'บันทึกคำขอไม่สำเร็จ' }, { status: 500 })
   }
 

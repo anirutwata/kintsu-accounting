@@ -1,23 +1,23 @@
-# Handoff — KINTSU Accounting (2026-08-27)
+# Handoff — KINTSU Accounting (2026-08-28)
 
-> ฉบับนี้อัปเดตล่าสุดวันที่ 2026-08-27 หลัง deploy ระบบป้องกันรายได้ซ้ำจากใบกำกับภาษีเต็มรูปแบบ
+> ฉบับนี้อัปเดตล่าสุดวันที่ 2026-08-28 หลัง reconcile ใบกำกับภาษีย้อนหลังและเพิ่ม duplicate-request guard
 
 ## SESSION RESTART SNAPSHOT — CURRENT — อ่านส่วนนี้ก่อน
 - Repo: `/Users/anirut/Documents/kintsu-accounting`; live: https://kintsu-accounting.vercel.app; branch `main`.
-- local `main` = `origin/main` = `4f7a9cb` (`Prevent duplicate revenue from full tax invoices`). Vercel Production deployment `dpl_3nwSdmVHmGpAoiYvsbFNVuVzQEGM` Ready และ live alias ชี้ deployment นี้; deploy จาก GitHub auto-deploy เท่านั้น.
-- Supabase Production apply migration `045_tax_invoice_revenue_dedup.sql` แล้ว นอกเหนือจาก migration 042–044 เดิม.
+- local `main` มี commit duplicate-request guard ต่อจาก `origin/main = a9b13ac`; ยังไม่ push ตามกติกาต้องขอผู้ใช้ก่อน. ชุด mobile ล่าสุดเรียง `edb339b` → `4350418` → `23aa6fb` → `a9b13ac`. Vercel Production deployment `dpl_84M66y4x4scA7hLbAnGRxFJzYu6L` Ready และ live alias ยังชี้ code ที่ `a9b13ac`; deploy จาก GitHub auto-deploy เท่านั้น.
+- Supabase Production apply migrations `047_tax_invoice_request_duplicate_guard.sql` และ `048_tax_invoice_juristic_tax_id_required.sql` แล้ว นอกเหนือจาก migration 042–046 เดิม. ยืนยัน RPC `reconcile_pending_edc_tax_invoices(date)` execute = anon false / authenticated false / service_role true.
 - ระบบใบกำกับภาษีเต็มรูปแบบป้องกันรายได้ซ้ำด้วย authoritative match `วันที่ใบเสร็จ + ยอดรวม + ช่องทางชำระ`; รูปใบเสร็จบังคับแนบและผู้ดูแลตรวจ/อนุมัติผ่าน Telegram ก่อน mutation.
 - เงินสด/TTB ถ้า JV รายวันลงแล้ว: ออก paid tax invoice แล้วสร้าง reversal JV Dr 41210 / Cr 11112 หรือ 11122.07 เท่ายอดเต็มใบเสร็จ. ถ้ายังไม่ลง JV: เก็บ allocation แล้วให้ JV ในอนาคตลงเฉพาะยอดสุทธิหลังหักใบกำกับภาษีเต็มรูป.
 - EDC ภายในเดือนปัจจุบัน: Cash Sale รายวันต้องเหลือ gross authoritative ลบยอดใบกำกับภาษีเต็มรูป; ถ้ามี Cash Sale แล้วระบบ Void/verify และสร้างใบสุทธิใหม่. Settlement JV ยังคงใช้ gross/fee/VAT/net จาก CSV เต็มจำนวน ไม่เปลี่ยน.
 - EDC ต่างเดือนหรือพบเอกสาร/สถานะกำกวม: `manual_review` เท่านั้น ห้ามแก้ VAT document อัตโนมัติ. ใช้เดือนปฏิทินเป็น conservative cutoff ตามที่ผู้ใช้ยืนยัน.
 - RPC mutation `reserve_tax_invoice_revenue` และ `record_tax_invoice_created` จำกัด `service_role`; Telegram webhook ใช้ server-side admin client. Allocation ถูก activate พร้อมการบันทึก invoice และ lock source rows เพื่อป้องกัน race กับ cash/TTB/EDC sync.
 - Retry ใช้ FlowAccount IDs ที่บันทึกแล้ว ไม่สร้าง INV/JV/Cash Sale ซ้ำ; ถ้าบันทึก DB หลังสร้างเอกสารล้มเหลวจะ Void ชดเชย. ส่งอีเมลหลัง accounting complete เท่านั้น. คำขอที่เริ่มจองยอด/สร้างเอกสารแล้วห้าม reject อัตโนมัติและจะส่ง `accounting_review`.
-- Existing historical issued tax invoices ถูก quarantine เป็น `historical_review` โดยไม่ Void/แก้ย้อนหลังอัตโนมัติ. รายการใหม่ที่เกิดระหว่าง rollout คือ TTB `INV2026080034`, วันที่ 2026-08-25; อยู่ `historical_review` และยังต้องให้ผู้ทำบัญชี reconcile ภายหลัง — ห้ามสร้างหรือแก้เอกสารซ้ำเอง.
+- Historical issued tax invoices เดือนสิงหาคม reconcile แล้วเมื่อ 2026-08-27: 10 requests ที่ FlowAccount INV ถูก Void/ลบอยู่ก่อนแล้วถูก soft-delete พร้อม audit note; 3 paid transfer INV วันที่ 22–23 ส.ค. คง `manual_review` เพราะไม่มี authoritative TTB report/source JV ให้ย้อน; 3 paid EDC INV วันที่ 21/23 ส.ค. เป็น `complete` หลังปรับ Cash Sale ตามยอดสุทธิ. `INV2026080034` ตรวจพบว่า FlowAccount INV ถูกลบอยู่ก่อนแล้ว จึง soft-delete request พร้อม audit และไม่ได้สร้าง reversal/correction.
 - Production verification: RPC execute = anon false / authenticated false / service_role true; active Codex tax-dedup test rows = 0, cleaned soft-deleted rows = 7. Live test รอบสุดท้ายหลัง revoke หยุดก่อนสร้าง FlowAccount เพราะ `.env.local` มี service-role placeholder; ไม่มีเอกสารทดสอบใหม่ค้าง. Live test ก่อนหน้าเคยสร้าง/retry/Void INV+JV สำเร็จและ cleanup แล้ว.
 - Verification commit `4f7a9cb`: Vitest 67 passed / 3 skipped, `tsc --noEmit`, targeted ESLint และ Next Production build ผ่าน; Spec/Standards review blockers เรื่อง source JV, service-role permission, zero-net TTB/EDC และ race condition ถูกแก้แล้ว.
 - Working tree ของผู้ใช้ที่ห้ามแตะ/stage/commit: modified `.gitignore`; untracked `.claude/`, `notes/flowaccount-journal-attachment-research-2026-08-25.md`, `supabase/.temp/`, `รหัส-fixed.gs`. ไฟล์ `รหัส-fixed.gs` มี secret ฝังอยู่ ห้าม `git add` และห้ามเปิดเผยเนื้อหา.
 - FlowAccount และ Supabase เป็น Production จริง. ก่อน mutation ต้องตรวจ DB/FlowAccount จริง; test documents ต้อง Void/cleanup/verify; soft-delete only; ห้าม replay `EDC_DailyReport_20260825.csv`; ห้ามสร้าง Cash Sale/JV เดิมซ้ำ.
-- งานที่ยังพักและห้ามหยิบมาทำเอง: monthly LINE Pay fee tax invoice, historical tax-invoice reconciliation รวม `INV2026080034`, Grab automation, WHT automation.
+- งานที่ยังพักและห้ามหยิบมาทำเอง: monthly LINE Pay fee tax invoice, reconciliation ใบโอนย้อนหลัง 3 ใบที่ยัง `manual_review`, Grab automation, WHT automation.
 - Workflow ทุกงาน: ตรวจ git/Production ก่อน → confirm scope → implement/test/build/review → commit ด้วย `git commit -F <tmpfile>` → ขออนุญาตก่อน push เสมอ. ห้าม manual `vercel deploy`.
 
 ## TAX INVOICE REVENUE DEDUP — `4f7a9cb` (deployed 2026-08-27)
@@ -27,6 +27,28 @@
 - EDC รายวันเป็นเอกสารภาษีอย่างย่อ/Cash Sale มี VAT; invoice เต็มรูปต้องถูกหักออกจาก Cash Sale รายวัน ไม่ใช้ correcting JV อย่างเดียว เพราะ VAT report จะยังซ้ำ.
 - `linepay_edc_revenue_days.full_tax_invoice_satang`, `daily_sales.full_tax_invoice_cash_satang`, `ttb_promptpay_reports.full_tax_invoice_satang` เก็บ allocation สำหรับเอกสารรายวันในอนาคต. Zero-net cash/TTB/EDC ต้อง skip การสร้างเอกสารใหม่อย่างปลอดภัย.
 - ห้ามเพิ่ม cancellation/release allocation แบบเงียบ ๆ. ถ้าจะยกเลิก request ที่เริ่ม accounting แล้ว ต้องออกแบบ audited release/void workflow และตรวจ FlowAccount ก่อนทุกครั้ง.
+
+## TAX INVOICE MOBILE UPDATE + PENDING EDC — `edb339b`–`a9b13ac` (deployed 2026-08-27)
+- `edb339b`: ใบกำกับภาษี `credit_card` ของวันขายปัจจุบันหรือย้อนหลังไม่เกิน 1 วันออกได้ก่อน LINE Pay CSV มาถึง โดยใช้ `dedup_action = pending_edc_report`; หลังสร้าง INV จะคง `dedup_state = invoice_created` จน reconcile.
+- Migration 046 เพิ่ม service-role-only RPC `reconcile_pending_edc_tax_invoices(date)`. Importer เรียก RPC หลัง import CSV และก่อน sync Cash Sale เพื่อ allocate ใบเต็มรูปเข้า `full_tax_invoice_satang`; Cash Sale จึงสร้างจาก gross ลบ allocation ตั้งแต่แรก.
+- ถ้ายอด EDC authoritative ไม่พอรองรับ INV ที่ออกไปแล้ว ระบบใช้ `manual_review_edc_pool_exceeded`, ไม่ทำ allocation ติดลบ และส่ง Telegram แจ้งผู้ทำบัญชี.
+- `4350418`: Telegram status update แสดงรายละเอียดลูกค้าเต็มเหมือนข้อความคำขอเดิม และเพิ่มหน้า `/tax-invoice-requests` พร้อม API สำหรับดูประวัติคำขอ.
+- `23aa6fb`: ฟอร์มเลือกสำนักงานใหญ่/สาขาแทน free text; `a9b13ac`: เลขสาขาเติมศูนย์ซ้ายให้ครบ 5 หลัก.
+- Production verification หลัง sync local: `main = origin/main = a9b13ac`, Vercel Ready, migration 046/RPC มีจริงและ permission ถูกต้อง, active `pending_edc_report` = 0 และ active `historical_review` = 0.
+
+## AUGUST HISTORICAL TAX-INVOICE RECONCILIATION (Production, 2026-08-27)
+- ผู้ใช้ยืนยัน `INV2026080025` ฿1,498 และ `INV2026080028` ฿1,634 เป็นเงินโอน ไม่ใช่ EDC; ห้ามนำสองใบนี้ไปลด Cash Sale EDC วันที่ 23 ส.ค.
+- EDC 21 ส.ค.: `INV2026080023` collected ฿2,432; Void `CA2026080022` gross ฿20,400 และสร้าง `CA2026080026` paid ฿17,968. DB allocation ฿2,432 และ request `complete`.
+- EDC 23 ส.ค.: `INV2026080026` collected ฿1,470 และ `INV2026080027` collected ฿3,004; Void `CA2026080024` gross ฿24,271, สร้าง/แล้ว Void intermediate `CA2026080027` ฿22,801, final `CA2026080028` paid ฿19,797. DB allocation รวม ฿4,474 และ requests ทั้งสอง `complete`.
+- ตรวจ FlowAccount terminal state แล้ว: source/intermediate Cash Sales เป็น Void; final Cash Sales paid/date/collected ถูกต้อง. Settlement JVs วันที่ settlement 22 และ 24 ส.ค. ยังคง `synced` ด้วย gross/fee/VAT/net เดิม ไม่ถูกแก้.
+- Paid transfer INV ที่ยังไม่มี source JV ยืนยันได้คง `manual_review` 3 ใบ: `INV2026080024` วันที่ 22 ส.ค. ฿3,389 และ `INV2026080025` ฿1,498 + `INV2026080028` ฿1,634 วันที่ 23 ส.ค. ห้ามสร้าง reversal จนกว่าจะพบ/ยืนยัน source revenue posting จริง.
+
+## DUPLICATE TAX-INVOICE REQUEST GUARD (Production DB applied 2026-08-28)
+- พบคำขอซ้ำวันที่ 27 ส.ค. บริษัท/เลขผู้เสียภาษีเดียวกัน ยอดรับจริง ฿1,585 และช่องทาง EDC: `INV2026080029` กับ `INV2026080030` เป็นคนละ request/FlowAccount record จริง ไม่ใช่ UI แสดงซ้ำ.
+- ผู้ใช้ยืนยันให้คง `INV2026080029` ซึ่ง approve/ส่งอีเมลแล้ว และลบยอด `INV2026080030`. ตรวจ exact record/status/collected ก่อน Void; FlowAccount `INV2026080030` terminal state = `void`. Request ถูกตั้ง `cancelled`, soft-delete และมี audit note; `INV2026080029` ยัง active/emailed.
+- Migration 047 เพิ่ม unique index ป้องกัน active request ซ้ำด้วย `document_date + company identity + total_satang`. Company identity ใช้เลขผู้เสียภาษี normalize เป็นหลัก; ถ้าไม่มีจึง fallback ไปชื่อ normalize. Migration 048 บังคับเลขผู้เสียภาษี 13 หลักสำหรับคำขอนิติบุคคล active เพื่อปิดช่อง mixed identity; API บังคับเหมือนกันและ preflight ยัง fallback เทียบชื่อ normalize สำหรับข้อมูลเก่าที่เลขหาย. Status `rejected`/`failed` และ soft-deleted rows ไม่ขวางการส่งใหม่.
+- API ตรวจล่วงหน้าและคืน HTTP 409 พร้อมข้อความภาษาไทย; unique index เป็น concurrency backstop. บริษัท/วันเดียวกันแต่ยอดต่างกันยังอนุญาตตามคำสั่งผู้ใช้.
+- Production transaction test ผ่าน: duplicate key ถูก reject, different amount ถูก accept, rollback แล้ว active test rows = 0.
 
 ## SESSION RESTART SNAPSHOT — ARCHIVED ก่อน `4f7a9cb`
 - Repo: `/Users/anirut/Documents/kintsu-accounting`; live: https://kintsu-accounting.vercel.app; branch `main`.
