@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { createTaxInvoice, exportTaxInvoicePdfBase64, resolveTaxInvoicePayment, attachTaxInvoiceFiles } from '@/lib/flowaccount'
-import { resolveDefaultPaymentConfig } from '@/lib/paymentConfig'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { exportTaxInvoicePdfBase64, attachTaxInvoiceFiles } from '@/lib/flowaccount'
 import { sendTaxInvoiceEmail } from '@/lib/email'
 import { sendTelegram, editTelegramCaption, answerCallbackQuery, escapeHtml } from '@/lib/telegram'
 import { getTodayBKK } from '@/lib/utils'
+import { processApprovedTaxInvoice } from '@/lib/taxInvoiceApprovalService'
 
 // Telegram calls this route directly from the internet — verify the shared secret
 // set via setWebhook's secret_token so random POSTs can't trigger real approvals.
@@ -19,6 +19,10 @@ function approverName(from: { first_name?: string; last_name?: string; username?
   return name || from.username || 'ไม่ทราบชื่อ'
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 export async function POST(req: Request) {
   if (!isAuthentic(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
@@ -31,7 +35,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const approver = approverName(cb.from)
   const messageId: number | undefined = cb.message?.message_id
 
@@ -52,6 +56,20 @@ export async function POST(req: Request) {
   const safeName = escapeHtml(claimed.contact_name)
 
   if (action === 'reject') {
+    if (claimed.dedup_state && claimed.dedup_state !== 'unreserved') {
+      await supabase.from('tax_invoice_requests').update({
+        status: 'accounting_review',
+        error_message: 'คำขอนี้เริ่มสร้างเอกสาร/จองยอดแล้ว ต้องให้ผู้ทำบัญชีตรวจสอบ ห้ามยกเลิกอัตโนมัติ',
+      }).eq('id', requestId)
+      await answerCallbackQuery(cb.id, 'รายการเริ่มลงบัญชีแล้ว ต้องตรวจสอบก่อน')
+      if (messageId) {
+        await editTelegramCaption(
+          messageId,
+          `⏸️ <b>ยกเลิกอัตโนมัติไม่ได้</b>\n👤 ${safeName}\n\nรายการเริ่มสร้างเอกสารหรือจองยอดแล้ว กรุณาให้ผู้ทำบัญชีตรวจสอบ`,
+        )
+      }
+      return NextResponse.json({ ok: true, manualReview: true })
+    }
     await supabase.from('tax_invoice_requests').update({ status: 'rejected' }).eq('id', requestId)
     await answerCallbackQuery(cb.id, 'ปฏิเสธคำขอแล้ว')
     if (messageId) {
@@ -66,44 +84,33 @@ export async function POST(req: Request) {
   // action === 'approve'
   await answerCallbackQuery(cb.id, 'กำลังออกใบกำกับภาษี...')
 
-  // The invoice must be dated the day of the actual sale (per the customer's bill), not
-  // whichever day staff happened to click approve — documentDate falls back to today only
-  // for requests submitted before this column existed.
   const documentDate = claimed.document_date || getTodayBKK()
-  const totalBaht = claimed.total_satang / 100
-  // subTotal comes straight from what the customer read off the receipt — not
-  // back-calculated from the total — so it matches the receipt's own "ก่อน VAT" line exactly.
-  const subTotal = claimed.subtotal_satang / 100
-  const vatAmount = Math.round(subTotal * 0.07 * 100) / 100
-  const roundingAmount = Math.max(0, Math.round((subTotal + vatAmount - totalBaht) * 100) / 100)
 
   try {
-    const paymentConfig = await resolveDefaultPaymentConfig(supabase)
-    const invoice = await createTaxInvoice({
-      contactName: claimed.contact_name,
-      contactTaxId: claimed.contact_tax_id || undefined,
-      contactAddress: claimed.contact_address || undefined,
-      contactBranch: claimed.contact_branch || undefined,
-      contactGroup: claimed.contact_group || undefined,
-      publishedOn: documentDate,
-      internalNotes: 'ลูกค้าขอออกใบกำกับภาษีผ่าน Kintsu Account',
-      items: [{ name: claimed.description, quantity: 1, unitName: 'รายการ', pricePerUnit: subTotal }],
-      payment: resolveTaxInvoicePayment(claimed.payment_method, documentDate, roundingAmount, paymentConfig),
-    })
-
-    await supabase
-      .from('tax_invoice_requests')
-      .update({ status: 'created', flowaccount_record_id: invoice.recordId, flowaccount_document_serial: invoice.documentSerial })
-      .eq('id', requestId)
+    const accounting = await processApprovedTaxInvoice(supabase, requestId, getTodayBKK())
+    if (!accounting.ok) {
+      await supabase.from('tax_invoice_requests').update({
+        status: 'accounting_review',
+        error_message: 'รอบภาษีหรือเอกสารย้อนหลังต้องให้ผู้ทำบัญชีตรวจสอบก่อน',
+      }).eq('id', requestId)
+      if (messageId) {
+        await editTelegramCaption(
+          messageId,
+          `⏸️ <b>รอตรวจสอบบัญชี/ภาษี</b>\n👤 ${safeName}\n📅 ${documentDate}\n\nยังไม่ได้สร้างใบกำกับภาษีใน FlowAccount`,
+        )
+      }
+      return NextResponse.json({ ok: true, manualReview: true })
+    }
+    const invoice = accounting.invoice
 
     if (claimed.bill_image_url) {
       try {
         await attachTaxInvoiceFiles(invoice.recordId, [claimed.bill_image_url])
-      } catch (attachErr: any) {
+      } catch (attachErr: unknown) {
         // Document already created — a failed attachment shouldn't fail the whole
         // approval, just tell staff so they can attach it manually if it matters.
-        sendTelegram(
-          `⚠️ ออก ${invoice.documentSerial} สำเร็จ แต่แนบรูปบิลของลูกค้าไม่สำเร็จ: ${attachErr.message}`,
+        await sendTelegram(
+          `⚠️ ออก ${invoice.documentSerial} สำเร็จ แต่แนบรูปบิลของลูกค้าไม่สำเร็จ: ${errorMessage(attachErr)}`,
           'taxInvoice',
         )
       }
@@ -123,11 +130,11 @@ export async function POST(req: Request) {
           `✅ <b>อนุมัติแล้ว</b>\n👤 ${safeName}\n📄 ${invoice.documentSerial}\nโดย ${escapeHtml(approver)}`,
         )
       }
-      sendTelegram(`📧 ส่งอีเมลใบกำกับภาษี ${invoice.documentSerial} ให้ลูกค้าแล้ว (${escapeHtml(claimed.contact_email)})`, 'taxInvoice')
-    } catch (emailErr: any) {
+      await sendTelegram(`📧 ส่งอีเมลใบกำกับภาษี ${invoice.documentSerial} ให้ลูกค้าแล้ว (${escapeHtml(claimed.contact_email)})`, 'taxInvoice')
+    } catch (emailErr: unknown) {
       await supabase
         .from('tax_invoice_requests')
-        .update({ error_message: `email failed: ${emailErr.message}` })
+        .update({ error_message: `email failed: ${errorMessage(emailErr)}` })
         .eq('id', requestId)
       if (messageId) {
         await editTelegramCaption(
@@ -136,15 +143,22 @@ export async function POST(req: Request) {
         )
       }
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = errorMessage(err)
     await supabase
       .from('tax_invoice_requests')
-      .update({ status: 'failed', error_message: err.message })
+      .update({
+        status: 'pending_review',
+        error_message: message,
+        dedup_error: message,
+        dedup_state_changed_at: new Date().toISOString(),
+      })
       .eq('id', requestId)
     if (messageId) {
       await editTelegramCaption(
         messageId,
-        `❌ <b>ออกใบกำกับภาษีไม่สำเร็จ</b>\n👤 ${safeName}\nโดย ${escapeHtml(approver)}\n\nError: ${escapeHtml(err.message)}`,
+        `❌ <b>ออกใบกำกับภาษี/ปรับรายได้ยังไม่สำเร็จ</b>\n👤 ${safeName}\nโดย ${escapeHtml(approver)}\n\nError: ${escapeHtml(message)}\n\nตรวจ FlowAccount ก่อนลองใหม่`,
+        [[{ text: '🔄 ลองอีกครั้ง', callback_data: `tir:approve:${requestId}` }]],
       )
     }
   }

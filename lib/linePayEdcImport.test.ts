@@ -4,7 +4,7 @@ import {
 } from './flowaccount'
 import {
   expectedEdcDates, isExpectedEdcReport, selectSingleEdcCsvAttachment,
-  syncEdcReportToFlowAccount,
+  replaceEdcCashSaleForTaxInvoice, syncEdcReportToFlowAccount,
 } from './linePayEdcImport'
 
 vi.mock('./flowaccount', () => ({
@@ -143,6 +143,7 @@ describe('LINE Pay EDC import schedule', () => {
     }
     const days: SyncRow[] = [
       { id: 'day-10', revenue_date: '2026-08-10', gross_amount_satang: 2_411_900,
+        full_tax_invoice_satang: 300_400,
         cash_sale_record_id: null, cash_sale_document_serial: null, cash_sale_synced_amount_satang: null,
         cash_sale_sync_state: 'idle', cash_sale_cleanup_record_id: null },
       { id: 'day-11', revenue_date: '2026-08-11', gross_amount_satang: 1_667_400,
@@ -158,7 +159,8 @@ describe('LINE Pay EDC import schedule', () => {
       { revenueDate: '2026-08-11', documentSerial: 'CA-2' },
     ], settlement: { documentSerial: 'JV-1' } })
     expect(vi.mocked(createCashInvoice).mock.calls.map(([input]) => [input.publishedOn, input.items[0].pricePerUnit]))
-      .toEqual([['2026-08-10', 22541.12], ['2026-08-11', 15583.18]])
+      .toEqual([['2026-08-10', 19733.65], ['2026-08-11', 15583.18]])
+    expect(vi.mocked(createCashInvoice).mock.calls[0][0].payment?.roundingAmount).toBe(0.01)
     expect(createApprovedJournal).toHaveBeenCalledTimes(1)
   })
 
@@ -189,5 +191,27 @@ describe('LINE Pay EDC import schedule', () => {
     expect(result.cashSales[0]).toMatchObject({ revenueDate: '2026-08-08', documentSerial: 'CA-NEW', created: true })
     expect(day).toMatchObject({ cash_sale_record_id: 103, cash_sale_document_serial: 'CA-NEW',
       cash_sale_synced_amount_satang: 2_560_600, cash_sale_sync_state: 'synced' })
+  })
+
+  it('replaces an EDC Cash Sale with the amount left after full tax invoices', async () => {
+    vi.mocked(getCashInvoice)
+      .mockResolvedValueOnce({ isDelete: false, statusString: 'paid' })
+      .mockResolvedValueOnce({ isDelete: true, statusString: 'void' })
+    vi.mocked(voidCashInvoice).mockResolvedValue({})
+    vi.mocked(createCashInvoice).mockResolvedValue({ recordId: 104, documentSerial: 'CA-NET' })
+    const day: SyncRow = {
+      id: 'day-tax', revenue_date: '2026-08-23', gross_amount_satang: 2_427_100,
+      full_tax_invoice_satang: 447_400,
+      cash_sale_record_id: 90, cash_sale_document_serial: 'CA-GROSS',
+      cash_sale_synced_amount_satang: 2_427_100, cash_sale_sync_state: 'synced',
+      cash_sale_cleanup_record_id: null,
+    }
+    const supabase = makeSyncSupabase({ id: 'unused' }, [day])
+
+    const result = await replaceEdcCashSaleForTaxInvoice(supabase as never, day as never)
+
+    expect(voidCashInvoice).toHaveBeenCalledWith(90)
+    expect(result).toMatchObject({ revenueDate: '2026-08-23', recordId: 104, documentSerial: 'CA-NET' })
+    expect(day).toMatchObject({ cash_sale_synced_amount_satang: 1_979_700, cash_sale_sync_state: 'synced' })
   })
 })

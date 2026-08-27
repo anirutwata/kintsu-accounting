@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createApprovedJournal, getChartOfAccounts, voidJournalEntry } from './flowaccount'
 import { resolveCashJournalAccount } from './bankTransferSync'
 import { syncRevenueJournal, type RevenueJournalAccount } from './revenueJournal'
+import { netRevenueAmountSatang } from './netRevenueAmount'
 
 async function voidRevenueJournal(recordId: number, allowAlreadyVoided = false) {
   try {
@@ -25,7 +26,10 @@ export async function syncCashRevenueToFlowAccount(supabase: SupabaseClient, dat
   if (error) return { ok: false as const, error: error.message }
   if (!sale) return { ok: false as const, error: 'ไม่พบยอดขายวันนี้' }
 
-  const amountSatang = Number(sale.cash_satang || 0) + Number(sale.papaya_cash_satang || 0)
+  const amountSatang = netRevenueAmountSatang(
+    Number(sale.cash_satang || 0) + Number(sale.papaya_cash_satang || 0),
+    Number(sale.full_tax_invoice_cash_satang || 0),
+  )
 
   if (sale.flowaccount_cash_journal_state === 'voiding' && sale.flowaccount_cash_record_id) {
     const resumedVoid = await voidRevenueJournal(sale.flowaccount_cash_record_id, true)

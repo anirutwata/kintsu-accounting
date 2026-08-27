@@ -36,6 +36,7 @@ interface StoredEdcRevenueDay {
   id: string
   revenue_date: string
   gross_amount_satang: number
+  full_tax_invoice_satang?: number | null
   cash_sale_record_id: number | null
   cash_sale_document_serial: string | null
   cash_sale_synced_amount_satang: number | null
@@ -166,6 +167,8 @@ async function ensureJournalVoided(recordId: number): Promise<void> {
 
 async function syncCashSale(supabase: SupabaseClient, revenueDay: StoredEdcRevenueDay) {
   let current = revenueDay
+  const targetGrossSatang = current.gross_amount_satang - Number(current.full_tax_invoice_satang || 0)
+  if (targetGrossSatang < 0) throw new Error(`ยอดใบกำกับภาษีเต็มรูปเกินยอด EDC วันที่ ${current.revenue_date}`)
   if ((current.cash_sale_sync_state === 'replacing' || current.cash_sale_sync_state === 'cleanup_pending')
     && current.cash_sale_cleanup_record_id) {
     await ensureCashSaleVoided(current.cash_sale_cleanup_record_id)
@@ -178,10 +181,13 @@ async function syncCashSale(supabase: SupabaseClient, revenueDay: StoredEdcReven
     if (!reset) throw new Error('Void Cash Sale EDC ค้างสำเร็จแต่ reset KINTSU ไม่สำเร็จ')
     current = reset as StoredEdcRevenueDay
   } else if (current.cash_sale_record_id && current.cash_sale_document_serial
-    && current.cash_sale_synced_amount_satang === current.gross_amount_satang) {
+    && current.cash_sale_synced_amount_satang === targetGrossSatang) {
     return { revenueDate: current.revenue_date, recordId: current.cash_sale_record_id, documentSerial: current.cash_sale_document_serial, created: false }
   } else if (current.cash_sale_record_id || current.cash_sale_document_serial) {
     throw new Error(`Cash Sale EDC วันที่ ${current.revenue_date} มียอดหรือ state ไม่ตรง ต้องตรวจ FlowAccount`)
+  }
+  if (targetGrossSatang === 0) {
+    return { revenueDate: current.revenue_date, skipped: true, reason: 'ยอด EDC ทั้งวันออกใบกำกับภาษีเต็มรูปแล้ว' }
   }
   const { data: claimed } = await supabase.from('linepay_edc_revenue_days').update({
     cash_sale_sync_state: 'creating', cash_sale_sync_error: null,
@@ -191,12 +197,12 @@ async function syncCashSale(supabase: SupabaseClient, revenueDay: StoredEdcReven
   try {
     const channel = await resolveEdcChannel(supabase)
     const created = await createCashInvoice(buildEdcCashSale({
-      revenueDate: current.revenue_date, grossAmountSatang: current.gross_amount_satang,
+      revenueDate: current.revenue_date, grossAmountSatang: targetGrossSatang,
       edcChannelId: channel.id, edcChannelName: channel.name,
     }))
     const { data: saved } = await supabase.from('linepay_edc_revenue_days').update({
       cash_sale_record_id: created.recordId, cash_sale_document_serial: created.documentSerial,
-      cash_sale_synced_amount_satang: current.gross_amount_satang,
+      cash_sale_synced_amount_satang: targetGrossSatang,
       cash_sale_synced_at: new Date().toISOString(), cash_sale_sync_state: 'synced', cash_sale_sync_error: null,
       updated_at: new Date().toISOString(),
     }).eq('id', current.id).eq('cash_sale_sync_state', 'creating')
@@ -220,6 +226,36 @@ async function syncCashSale(supabase: SupabaseClient, revenueDay: StoredEdcReven
       .eq('id', current.id).eq('cash_sale_sync_state', 'creating')
     throw error
   }
+}
+
+export async function replaceEdcCashSaleForTaxInvoice(
+  supabase: SupabaseClient,
+  revenueDay: StoredEdcRevenueDay,
+) {
+  const targetGrossSatang = revenueDay.gross_amount_satang - Number(revenueDay.full_tax_invoice_satang || 0)
+  if (revenueDay.cash_sale_record_id && revenueDay.cash_sale_document_serial
+    && revenueDay.cash_sale_synced_amount_satang === targetGrossSatang
+    && revenueDay.cash_sale_sync_state === 'synced') {
+    return {
+      revenueDate: revenueDay.revenue_date, recordId: revenueDay.cash_sale_record_id,
+      documentSerial: revenueDay.cash_sale_document_serial, created: false,
+    }
+  }
+  if (revenueDay.cash_sale_sync_state === 'replacing' || revenueDay.cash_sale_sync_state === 'cleanup_pending') {
+    return syncCashSale(supabase, revenueDay)
+  }
+  if (!revenueDay.cash_sale_record_id) return syncCashSale(supabase, revenueDay)
+  const { data: claimed, error } = await supabase.from('linepay_edc_revenue_days').update({
+    cash_sale_sync_state: 'replacing',
+    cash_sale_cleanup_record_id: revenueDay.cash_sale_record_id,
+    cash_sale_sync_error: null,
+    updated_at: new Date().toISOString(),
+  }).eq('id', revenueDay.id).eq('cash_sale_sync_state', 'synced')
+    .eq('cash_sale_record_id', revenueDay.cash_sale_record_id).select('*').maybeSingle()
+  if (error || !claimed) {
+    throw error || new Error(`Cash Sale EDC วันที่ ${revenueDay.revenue_date} ถูกแก้ไขพร้อมกัน`)
+  }
+  return syncCashSale(supabase, claimed as StoredEdcRevenueDay)
 }
 
 async function syncSettlement(supabase: SupabaseClient, report: StoredEdcReport) {

@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createApprovedJournal, getChartOfAccounts, voidJournalEntry } from './flowaccount'
 import { readEncryptedTtbReport } from './ttbPromptPayWorkbook'
 import { syncRevenueJournal, type RevenueJournalAccount } from './revenueJournal'
+import { netRevenueAmountSatang } from './netRevenueAmount'
 
 const REPORT_SENDER = 'ttbsmartshop@digio.co.th'
 const REPORT_SUBJECT = 'ttb smart shop: รายงานการขายประจำวัน (Daily Sales Report)'
@@ -92,6 +93,7 @@ export async function syncTtbReportToFlowAccount(supabase: SupabaseClient, repor
   const { data: report, error } = await supabase.from('ttb_promptpay_reports').select('*')
     .eq('id', reportId).eq('is_deleted', false).single()
   if (error || !report) return { ok: false as const, error: error?.message || 'ไม่พบรายงาน TTB' }
+  const amountSatang = netRevenueAmountSatang(report.successful_amount_satang, report.full_tax_invoice_satang)
   if (report.sync_state === 'cleanup_pending' && report.flowaccount_record_id) {
     try {
       await ensureJournalVoided(report.flowaccount_record_id)
@@ -111,6 +113,7 @@ export async function syncTtbReportToFlowAccount(supabase: SupabaseClient, repor
     }
     return { ok: true as const, recordId: report.flowaccount_record_id, documentSerial: report.flowaccount_document_serial, created: false }
   }
+  if (amountSatang <= 0) return { ok: true as const, skipped: true, reason: 'ยอด TTB ถูกออกใบกำกับภาษีเต็มรูปครบแล้ว และไม่มี JV ค้าง' }
   const { data: claimed } = await supabase.from('ttb_promptpay_reports').update({ sync_state: 'creating', sync_error: null })
     .eq('id', reportId).in('sync_state', ['idle', 'error']).is('flowaccount_record_id', null).select('id').maybeSingle()
   if (!claimed) return { ok: false as const, error: 'รายงานนี้กำลังส่งเข้า FlowAccount หรือถูกส่งไปแล้ว' }
@@ -120,7 +123,7 @@ export async function syncTtbReportToFlowAccount(supabase: SupabaseClient, repor
     const accounts = await resolveJournalAccounts(Number(bank.flowaccount_chart_of_account_id))
     const result = await syncRevenueJournal({
       source: 'ttb_promptpay', date: report.report_date,
-      amountSatang: report.successful_amount_satang,
+      amountSatang,
       debitAccount: { ...accounts.debit, label: `${bank.bank_name} ${bank.account_number}` },
       revenueAccount: accounts.revenue,
     }, { createApprovedJournal })

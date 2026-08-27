@@ -49,7 +49,10 @@ async function flowAccountFetch(path: string, init: RequestInit = {}) {
         ...init.headers,
       },
     })
-    const json = await res.json()
+    const responseText = await res.text()
+    const json = responseText
+      ? JSON.parse(responseText)
+      : { status: res.ok, data: null, message: res.statusText }
     return { res, json }
   }
 
@@ -681,6 +684,14 @@ export async function exportTaxInvoicePdfBase64(recordId: number): Promise<strin
       document: { original: true },
     }),
   })
+}
+
+export async function voidTaxInvoice(recordId: number) {
+  return flowAccountFetch(`/tax-invoices/${recordId}/status/void`, { method: 'POST' })
+}
+
+export async function getTaxInvoice(recordId: number) {
+  return flowAccountFetch(`/tax-invoices/${recordId}`)
 }
 
 export interface CreateCashInvoiceInput {
