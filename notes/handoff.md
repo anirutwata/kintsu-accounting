@@ -1,10 +1,10 @@
 # Handoff — KINTSU Accounting (2026-08-28)
 
-> ฉบับนี้อัปเดตล่าสุดวันที่ 2026-08-28 หลัง reconcile ใบกำกับภาษีย้อนหลังและเพิ่ม duplicate-request guard
+> ฉบับนี้อัปเดตล่าสุดวันที่ 2026-08-28 หลัง deploy ระบบใบกำกับภาษีเงินสด/TTB แบบออกได้ภายในวันเดียวกัน
 
 ## SESSION RESTART SNAPSHOT — CURRENT — อ่านส่วนนี้ก่อน
 - Repo: `/Users/anirut/Documents/kintsu-accounting`; live: https://kintsu-accounting.vercel.app; branch `main`.
-- `main = origin/main = c06bfa8` (duplicate-request guard); same-day cash/TTB feature ยังเป็น local uncommitted ณ snapshot นี้. ชุด mobile ล่าสุดเรียง `edb339b` → `4350418` → `23aa6fb` → `a9b13ac`. Deploy จาก GitHub auto-deploy เท่านั้น.
+- `main = origin/main = 2022eb9`. Commit `c06bfa8` ป้องกันคำขอซ้ำ; commit `2022eb9` เปิด same-day cash/TTB พร้อม pending reconciliation และ concurrency guards. Vercel Production deployment `dpl_Ge7RqDsAb3hdF8RUtNcqPwEW5cT7` เป็น Ready และ live alias ชี้ deployment นี้. Deploy จาก GitHub auto-deploy เท่านั้น.
 - Supabase Production apply migrations ถึง `051_pending_revenue_sync_race_guards.sql` แล้ว. RPC accounting mutations ของ tax-invoice reconciliation จำกัด service role.
 - ระบบใบกำกับภาษีเต็มรูปแบบป้องกันรายได้ซ้ำด้วย authoritative match `วันที่ใบเสร็จ + ยอดรวม + ช่องทางชำระ`; รูปใบเสร็จบังคับแนบและผู้ดูแลตรวจ/อนุมัติผ่าน Telegram ก่อน mutation.
 - เงินสด/TTB ถ้า JV รายวันลงแล้ว: ออก paid tax invoice แล้วสร้าง reversal JV Dr 41210 / Cr 11112 หรือ 11122.07 เท่ายอดเต็มใบเสร็จ. ถ้ายังไม่ลง JV: เก็บ allocation แล้วให้ JV ในอนาคตลงเฉพาะยอดสุทธิหลังหักใบกำกับภาษีเต็มรูป.
@@ -14,7 +14,7 @@
 - Retry ใช้ FlowAccount IDs ที่บันทึกแล้ว ไม่สร้าง INV/JV/Cash Sale ซ้ำ; ถ้าบันทึก DB หลังสร้างเอกสารล้มเหลวจะ Void ชดเชย. ส่งอีเมลหลัง accounting complete เท่านั้น. คำขอที่เริ่มจองยอด/สร้างเอกสารแล้วห้าม reject อัตโนมัติและจะส่ง `accounting_review`.
 - Historical issued tax invoices เดือนสิงหาคม reconcile แล้วเมื่อ 2026-08-27: 10 requests ที่ FlowAccount INV ถูก Void/ลบอยู่ก่อนแล้วถูก soft-delete พร้อม audit note; 3 paid transfer INV วันที่ 22–23 ส.ค. คง `manual_review` เพราะไม่มี authoritative TTB report/source JV ให้ย้อน; 3 paid EDC INV วันที่ 21/23 ส.ค. เป็น `complete` หลังปรับ Cash Sale ตามยอดสุทธิ. `INV2026080034` ตรวจพบว่า FlowAccount INV ถูกลบอยู่ก่อนแล้ว จึง soft-delete request พร้อม audit และไม่ได้สร้าง reversal/correction.
 - Production verification: RPC execute = anon false / authenticated false / service_role true; active Codex tax-dedup test rows = 0, cleaned soft-deleted rows = 7. Live test รอบสุดท้ายหลัง revoke หยุดก่อนสร้าง FlowAccount เพราะ `.env.local` มี service-role placeholder; ไม่มีเอกสารทดสอบใหม่ค้าง. Live test ก่อนหน้าเคยสร้าง/retry/Void INV+JV สำเร็จและ cleanup แล้ว.
-- Verification commit `4f7a9cb`: Vitest 67 passed / 3 skipped, `tsc --noEmit`, targeted ESLint และ Next Production build ผ่าน; Spec/Standards review blockers เรื่อง source JV, service-role permission, zero-net TTB/EDC และ race condition ถูกแก้แล้ว.
+- Verification ล่าสุด commit `2022eb9`: Vitest 81 passed / 3 skipped, `tsc --noEmit`, targeted ESLint และ Next Production build ผ่าน. Spec/Standards re-review ยืนยันว่า duplicate-accounting concurrency race ถูกปิดแล้ว.
 - Working tree ของผู้ใช้ที่ห้ามแตะ/stage/commit: modified `.gitignore`; untracked `.claude/`, `notes/flowaccount-journal-attachment-research-2026-08-25.md`, `supabase/.temp/`, `รหัส-fixed.gs`. ไฟล์ `รหัส-fixed.gs` มี secret ฝังอยู่ ห้าม `git add` และห้ามเปิดเผยเนื้อหา.
 - FlowAccount และ Supabase เป็น Production จริง. ก่อน mutation ต้องตรวจ DB/FlowAccount จริง; test documents ต้อง Void/cleanup/verify; soft-delete only; ห้าม replay `EDC_DailyReport_20260825.csv`; ห้ามสร้าง Cash Sale/JV เดิมซ้ำ.
 - งานที่ยังพักและห้ามหยิบมาทำเอง: monthly LINE Pay fee tax invoice, reconciliation ใบโอนย้อนหลัง 3 ใบที่ยัง `manual_review`, Grab automation, WHT automation.
@@ -50,7 +50,7 @@
 - API ตรวจล่วงหน้าและคืน HTTP 409 พร้อมข้อความภาษาไทย; unique index เป็น concurrency backstop. บริษัท/วันเดียวกันแต่ยอดต่างกันยังอนุญาตตามคำสั่งผู้ใช้.
 - Production transaction test ผ่าน: duplicate key ถูก reject, different amount ถูก accept, rollback แล้ว active test rows = 0.
 
-## SAME-DAY CASH + TTB TAX INVOICES — pending reconciliation (2026-08-28)
+## SAME-DAY CASH + TTB TAX INVOICES — `2022eb9` (deployed 2026-08-28)
 - ลูกค้าชำระเงินสดหรือเงินโอน TTB สามารถ approve/รับ INV ทางอีเมลในวันขายได้ แม้ daily sales หรือรายงาน TTB ยังไม่เข้า เช่นเดียวกับ EDC.
 - เงินสดใช้ `pending_cash_sales`; เมื่อบันทึก daily sales ระบบเรียก service-role RPC reconcile ก่อนสร้าง cash JV แล้ว allocate เข้า `daily_sales.full_tax_invoice_cash_satang`. JV จึงลงเฉพาะยอดสุทธิ.
 - เงินโอนใช้ `pending_ttb_report`; เมื่อ importer บันทึกรายงาน TTB ระบบ reconcile ก่อน `syncTtbReportToFlowAccount` แล้ว allocate เข้า `ttb_promptpay_reports.full_tax_invoice_satang`. JV จึงลงเฉพาะยอดสุทธิ.
@@ -60,6 +60,7 @@
 - Migration 051 ปิด race สองทิศทาง: pending request ที่ยัง `reserved` จะ block daily JV จนบันทึก INV/reconcile เสร็จ และ cash/TTB sync claim ภายใต้ advisory lock เดียวกับ tax-invoice allocation พร้อมคืน source snapshot หลัง lock เพื่อคำนวณยอดสุทธิใหม่ ห้ามใช้ยอดที่อ่านก่อน claim.
 - Production transaction regression tests ผ่าน: reserved pending request block cash JV, cash claim และ TTB claim คืน allocation ล่าสุดหลัง lock; ทุก test rollback และไม่มี test rows/FlowAccount documents.
 - Production transaction integration test ผ่านทั้ง cash/TTB pending → complete และ rollback แล้ว; ไม่สร้าง FlowAccount documents/ไม่เหลือ test rows. Permission check anon/authenticated false, service role true.
+- GitHub `main` และ `origin/main` เท่ากับ `2022eb9`; Vercel Production `dpl_Ge7RqDsAb3hdF8RUtNcqPwEW5cT7` Ready และ alias `https://kintsu-accounting.vercel.app` ชี้ release นี้แล้ว.
 
 ## SESSION RESTART SNAPSHOT — ARCHIVED ก่อน `4f7a9cb`
 - Repo: `/Users/anirut/Documents/kintsu-accounting`; live: https://kintsu-accounting.vercel.app; branch `main`.
