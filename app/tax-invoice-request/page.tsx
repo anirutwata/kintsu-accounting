@@ -33,7 +33,9 @@ function toIsoDate(year: number, month: number, day: number): string {
 function resolveBranchLabel(isHeadOffice: boolean, branchNumber: string): string {
   if (isHeadOffice) return 'สำนักงานใหญ่'
   const digits = branchNumber.replace(/[^0-9]/g, '')
-  return digits ? `สาขาที่ ${digits}` : ''
+  // Thai VAT branch codes are conventionally written as 5 digits (e.g. 00016) — pad
+  // whatever the customer typed ("16" or "00016") so the label is always in that form.
+  return digits ? `สาขาที่ ${digits.padStart(5, '0')}` : ''
 }
 
 const emptyForm = () => ({
@@ -337,7 +339,7 @@ export default function TaxInvoiceRequestPage() {
             {!form.branch_is_head_office && (
               <input value={form.branch_number} onChange={e => handleBranchNumberChange(e.target.value)}
                 onBlur={e => handleBranchNumberBlur(e.target.value.replace(/[^0-9]/g, ''))}
-                className="mt-2 w-full border rounded-xl px-3 py-2 text-sm" placeholder="เลขสาขา เช่น 1" inputMode="numeric" />
+                className="mt-2 w-full border rounded-xl px-3 py-2 text-sm" placeholder="เลขสาขา 5 หลัก เช่น 00001" inputMode="numeric" maxLength={5} />
             )}
             {lookingUpTaxId && <p className="text-xs text-gray-400 mt-1">🔍 กำลังค้นหาชื่อ/ที่อยู่...</p>}
             {taxIdLookupError && <p className="text-xs text-amber-600 mt-1">⚠️ {taxIdLookupError}</p>}
