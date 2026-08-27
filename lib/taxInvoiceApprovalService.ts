@@ -71,7 +71,7 @@ export async function processApprovedTaxInvoice(
 ) {
   return runTaxInvoiceApprovalAccounting(requestId, {
     reserve: async id => {
-      const { data, error } = await supabase.rpc('reserve_tax_invoice_revenue', {
+      const { data, error } = await supabase.rpc('reserve_tax_invoice_revenue_v3', {
         p_request_id: id,
         p_today: today,
       })

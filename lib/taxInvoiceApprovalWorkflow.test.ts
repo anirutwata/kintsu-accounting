@@ -96,6 +96,21 @@ describe('runTaxInvoiceApprovalAccounting', () => {
     expect(row.dedup_state).toBe('invoice_created')
   })
 
+  it.each([
+    ['cash', 'pending_cash_sales'],
+    ['transfer', 'pending_ttb_report'],
+  ] as const)('issues a %s invoice and waits for its authoritative daily pool', async (paymentMethod, action) => {
+    const row = request({ payment_method: paymentMethod, dedup_action: action })
+    const deps = dependencies(row)
+
+    await expect(runTaxInvoiceApprovalAccounting(row.id, deps)).resolves.toMatchObject({
+      ok: true, invoice: { documentSerial: 'INV-1' }, correction: null, pendingReconciliation: true,
+    })
+    expect(deps.createReversal).not.toHaveBeenCalled()
+    expect(deps.markComplete).not.toHaveBeenCalled()
+    expect(row.dedup_state).toBe('invoice_created')
+  })
+
   it('voids a newly-created invoice if its record cannot be saved for idempotent retry', async () => {
     const row = request()
     const deps = dependencies(row)

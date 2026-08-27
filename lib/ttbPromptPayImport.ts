@@ -93,7 +93,7 @@ export async function syncTtbReportToFlowAccount(supabase: SupabaseClient, repor
   const { data: report, error } = await supabase.from('ttb_promptpay_reports').select('*')
     .eq('id', reportId).eq('is_deleted', false).single()
   if (error || !report) return { ok: false as const, error: error?.message || 'ไม่พบรายงาน TTB' }
-  const amountSatang = netRevenueAmountSatang(report.successful_amount_satang, report.full_tax_invoice_satang)
+  let amountSatang = netRevenueAmountSatang(report.successful_amount_satang, report.full_tax_invoice_satang)
   if (report.sync_state === 'cleanup_pending' && report.flowaccount_record_id) {
     try {
       await ensureJournalVoided(report.flowaccount_record_id)
@@ -114,9 +114,15 @@ export async function syncTtbReportToFlowAccount(supabase: SupabaseClient, repor
     return { ok: true as const, recordId: report.flowaccount_record_id, documentSerial: report.flowaccount_document_serial, created: false }
   }
   if (amountSatang <= 0) return { ok: true as const, skipped: true, reason: 'ยอด TTB ถูกออกใบกำกับภาษีเต็มรูปครบแล้ว และไม่มี JV ค้าง' }
-  const { data: claimed } = await supabase.from('ttb_promptpay_reports').update({ sync_state: 'creating', sync_error: null })
-    .eq('id', reportId).in('sync_state', ['idle', 'error']).is('flowaccount_record_id', null).select('id').maybeSingle()
+  const { data: claimed, error: claimError } = await supabase.rpc('claim_ttb_revenue_sync', { p_report_id: reportId })
+  if (claimError) return { ok: false as const, error: claimError.message }
   if (!claimed) return { ok: false as const, error: 'รายงานนี้กำลังส่งเข้า FlowAccount หรือถูกส่งไปแล้ว' }
+  amountSatang = netRevenueAmountSatang(claimed.successful_amount_satang, claimed.full_tax_invoice_satang)
+  if (amountSatang <= 0) {
+    await supabase.from('ttb_promptpay_reports').update({ sync_state: 'idle', sync_error: null, updated_at: new Date().toISOString() })
+      .eq('id', reportId).eq('sync_state', 'creating').is('flowaccount_record_id', null)
+    return { ok: true as const, skipped: true, reason: 'ยอด TTB ถูกออกใบกำกับภาษีเต็มรูปครบแล้ว และไม่มี JV ค้าง' }
+  }
 
   try {
     const bank = await resolveConfiguredBank(supabase)
@@ -236,6 +242,15 @@ export async function importTtbPromptPayFromGmail(supabase: SupabaseClient) {
     if ('skipped' in imported && imported.skipped) {
       results.push(imported)
       continue
+    }
+    const { data: reconciliation, error: reconciliationError } = await supabase
+      .rpc('reconcile_pending_ttb_tax_invoices_v3', { p_revenue_date: imported.reportDate })
+    if (reconciliationError) throw reconciliationError
+    if (reconciliation?.manual_review_ids?.length) {
+      throw new Error('ยอด TTB ไม่พอรองรับใบกำกับภาษีที่ออกแล้ว กรุณาตรวจสอบบัญชี')
+    }
+    if (reconciliation?.blocking_ids?.length) {
+      throw new Error('มีใบกำกับภาษี TTB กำลังบันทึก กรุณาลอง Sync อีกครั้ง')
     }
     const sync = await syncTtbReportToFlowAccount(supabase, imported.reportId)
     results.push({ ...imported, sync })

@@ -26,6 +26,22 @@ describe('planTaxInvoiceDedup', () => {
     })).toEqual({ action: 'reduce_future_revenue_journal', remainingSatang: 421_100 })
   })
 
+  it('issues a same-day cash invoice while daily sales are still pending', () => {
+    expect(planTaxInvoiceDedup({
+      paymentMethod: 'cash', documentDate: '2026-08-28', today: '2026-08-28',
+      totalSatang: 158_500, authoritativeSatang: null, allocatedSatang: 0,
+      sourceRevenueJournalExists: false, edcCashSaleExists: false,
+    })).toEqual({ action: 'pending_cash_sales', remainingSatang: null })
+  })
+
+  it('issues a same-day transfer invoice while the TTB report is pending', () => {
+    expect(planTaxInvoiceDedup({
+      paymentMethod: 'transfer', documentDate: '2026-08-28', today: '2026-08-28',
+      totalSatang: 158_500, authoritativeSatang: null, allocatedSatang: 0,
+      sourceRevenueJournalExists: false, edcCashSaleExists: false,
+    })).toEqual({ action: 'pending_ttb_report', remainingSatang: null })
+  })
+
   it('reduces a future EDC Cash Sale when the daily document does not exist yet', () => {
     expect(planTaxInvoiceDedup({
       paymentMethod: 'credit_card', documentDate: '2026-08-27', today: '2026-08-27',

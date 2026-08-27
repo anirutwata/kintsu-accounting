@@ -26,7 +26,7 @@ export async function syncCashRevenueToFlowAccount(supabase: SupabaseClient, dat
   if (error) return { ok: false as const, error: error.message }
   if (!sale) return { ok: false as const, error: 'ไม่พบยอดขายวันนี้' }
 
-  const amountSatang = netRevenueAmountSatang(
+  let amountSatang = netRevenueAmountSatang(
     Number(sale.cash_satang || 0) + Number(sale.papaya_cash_satang || 0),
     Number(sale.full_tax_invoice_cash_satang || 0),
   )
@@ -100,13 +100,21 @@ export async function syncCashRevenueToFlowAccount(supabase: SupabaseClient, dat
 
   if (amountSatang <= 0) return { ok: true as const, skipped: true, reason: 'ยอดเงินสดเป็น 0 บาท และไม่มี JV ค้าง' }
 
-  const { data: claimed, error: claimError } = await supabase.from('daily_sales').update({
-    flowaccount_cash_journal_state: 'creating', flowaccount_cash_sync_error: null,
-    flowaccount_cash_state_changed_at: new Date().toISOString(),
-  }).eq('id', date).is('flowaccount_cash_record_id', null)
-    .in('flowaccount_cash_journal_state', ['idle', 'error']).select('id').maybeSingle()
+  const { data: claimed, error: claimError } = await supabase
+    .rpc('claim_cash_revenue_sync', { p_revenue_date: date })
   if (claimError) return { ok: false as const, error: claimError.message }
   if (!claimed) return { ok: false as const, error: 'รายการเงินสดกำลังส่งเข้า FlowAccount หรือส่งแล้ว' }
+  amountSatang = netRevenueAmountSatang(
+    Number(claimed.cash_satang || 0) + Number(claimed.papaya_cash_satang || 0),
+    Number(claimed.full_tax_invoice_cash_satang || 0),
+  )
+  if (amountSatang <= 0) {
+    await supabase.from('daily_sales').update({
+      flowaccount_cash_journal_state: 'idle', flowaccount_cash_sync_error: null,
+      flowaccount_cash_state_changed_at: new Date().toISOString(),
+    }).eq('id', date).eq('flowaccount_cash_journal_state', 'creating').is('flowaccount_cash_record_id', null)
+    return { ok: true as const, skipped: true, reason: 'ยอดเงินสดเป็น 0 บาท และไม่มี JV ค้าง' }
+  }
 
   try {
     const chart = await getChartOfAccounts()

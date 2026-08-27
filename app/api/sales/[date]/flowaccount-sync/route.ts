@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { syncCashRevenueToFlowAccount } from '@/lib/cashRevenueSync'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 // Accounting policy:
 // - cash is an approved JV: Dr 11112 / Cr 41210
@@ -20,7 +21,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ date: 
   }
 
   const errors: Record<string, string> = {}
-  const cashResult = await syncCashRevenueToFlowAccount(supabase, date)
+  const admin = createAdminClient()
+  const { data: reconciliation, error: reconciliationError } = await admin
+    .rpc('reconcile_pending_cash_tax_invoices_v3', { p_revenue_date: date })
+  const cashResult = reconciliationError || reconciliation?.manual_review_ids?.length || reconciliation?.blocking_ids?.length
+    ? { ok: false as const, error: reconciliationError?.message || (reconciliation?.blocking_ids?.length
+      ? 'มีใบกำกับภาษีเงินสดกำลังบันทึก กรุณาลอง Sync อีกครั้ง'
+      : 'ยอดเงินสดไม่พอรองรับใบกำกับภาษีที่ออกแล้ว กรุณาตรวจสอบบัญชี') }
+    : await syncCashRevenueToFlowAccount(admin, date)
   if (!cashResult.ok) errors.cash = cashResult.error
 
   const { data: updated, error: reloadError } = await supabase.from('daily_sales').select('*').eq('id', date).single()

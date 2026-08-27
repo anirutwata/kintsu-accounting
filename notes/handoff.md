@@ -4,8 +4,8 @@
 
 ## SESSION RESTART SNAPSHOT — CURRENT — อ่านส่วนนี้ก่อน
 - Repo: `/Users/anirut/Documents/kintsu-accounting`; live: https://kintsu-accounting.vercel.app; branch `main`.
-- local `main` มี commit duplicate-request guard ต่อจาก `origin/main = a9b13ac`; ยังไม่ push ตามกติกาต้องขอผู้ใช้ก่อน. ชุด mobile ล่าสุดเรียง `edb339b` → `4350418` → `23aa6fb` → `a9b13ac`. Vercel Production deployment `dpl_84M66y4x4scA7hLbAnGRxFJzYu6L` Ready และ live alias ยังชี้ code ที่ `a9b13ac`; deploy จาก GitHub auto-deploy เท่านั้น.
-- Supabase Production apply migrations `047_tax_invoice_request_duplicate_guard.sql` และ `048_tax_invoice_juristic_tax_id_required.sql` แล้ว นอกเหนือจาก migration 042–046 เดิม. ยืนยัน RPC `reconcile_pending_edc_tax_invoices(date)` execute = anon false / authenticated false / service_role true.
+- `main = origin/main = c06bfa8` (duplicate-request guard); same-day cash/TTB feature ยังเป็น local uncommitted ณ snapshot นี้. ชุด mobile ล่าสุดเรียง `edb339b` → `4350418` → `23aa6fb` → `a9b13ac`. Deploy จาก GitHub auto-deploy เท่านั้น.
+- Supabase Production apply migrations ถึง `051_pending_revenue_sync_race_guards.sql` แล้ว. RPC accounting mutations ของ tax-invoice reconciliation จำกัด service role.
 - ระบบใบกำกับภาษีเต็มรูปแบบป้องกันรายได้ซ้ำด้วย authoritative match `วันที่ใบเสร็จ + ยอดรวม + ช่องทางชำระ`; รูปใบเสร็จบังคับแนบและผู้ดูแลตรวจ/อนุมัติผ่าน Telegram ก่อน mutation.
 - เงินสด/TTB ถ้า JV รายวันลงแล้ว: ออก paid tax invoice แล้วสร้าง reversal JV Dr 41210 / Cr 11112 หรือ 11122.07 เท่ายอดเต็มใบเสร็จ. ถ้ายังไม่ลง JV: เก็บ allocation แล้วให้ JV ในอนาคตลงเฉพาะยอดสุทธิหลังหักใบกำกับภาษีเต็มรูป.
 - EDC ภายในเดือนปัจจุบัน: Cash Sale รายวันต้องเหลือ gross authoritative ลบยอดใบกำกับภาษีเต็มรูป; ถ้ามี Cash Sale แล้วระบบ Void/verify และสร้างใบสุทธิใหม่. Settlement JV ยังคงใช้ gross/fee/VAT/net จาก CSV เต็มจำนวน ไม่เปลี่ยน.
@@ -49,6 +49,17 @@
 - Migration 047 เพิ่ม unique index ป้องกัน active request ซ้ำด้วย `document_date + company identity + total_satang`. Company identity ใช้เลขผู้เสียภาษี normalize เป็นหลัก; ถ้าไม่มีจึง fallback ไปชื่อ normalize. Migration 048 บังคับเลขผู้เสียภาษี 13 หลักสำหรับคำขอนิติบุคคล active เพื่อปิดช่อง mixed identity; API บังคับเหมือนกันและ preflight ยัง fallback เทียบชื่อ normalize สำหรับข้อมูลเก่าที่เลขหาย. Status `rejected`/`failed` และ soft-deleted rows ไม่ขวางการส่งใหม่.
 - API ตรวจล่วงหน้าและคืน HTTP 409 พร้อมข้อความภาษาไทย; unique index เป็น concurrency backstop. บริษัท/วันเดียวกันแต่ยอดต่างกันยังอนุญาตตามคำสั่งผู้ใช้.
 - Production transaction test ผ่าน: duplicate key ถูก reject, different amount ถูก accept, rollback แล้ว active test rows = 0.
+
+## SAME-DAY CASH + TTB TAX INVOICES — pending reconciliation (2026-08-28)
+- ลูกค้าชำระเงินสดหรือเงินโอน TTB สามารถ approve/รับ INV ทางอีเมลในวันขายได้ แม้ daily sales หรือรายงาน TTB ยังไม่เข้า เช่นเดียวกับ EDC.
+- เงินสดใช้ `pending_cash_sales`; เมื่อบันทึก daily sales ระบบเรียก service-role RPC reconcile ก่อนสร้าง cash JV แล้ว allocate เข้า `daily_sales.full_tax_invoice_cash_satang`. JV จึงลงเฉพาะยอดสุทธิ.
+- เงินโอนใช้ `pending_ttb_report`; เมื่อ importer บันทึกรายงาน TTB ระบบ reconcile ก่อน `syncTtbReportToFlowAccount` แล้ว allocate เข้า `ttb_promptpay_reports.full_tax_invoice_satang`. JV จึงลงเฉพาะยอดสุทธิ.
+- ถ้ายอด authoritative ภายหลังไม่พอ request จะเป็น `manual_review_revenue_pool_exceeded` และห้ามสร้าง JV รายวันต่อ; TTB cron ส่ง failure alert ตาม workflow เดิม ส่วน cash save คืน partial error ให้ผู้ดูแล.
+- Migration 049 เพิ่ม `reserve_tax_invoice_revenue_v2`, `reconcile_pending_cash_tax_invoices` และ `reconcile_pending_ttb_tax_invoices`; ทั้งหมด service-role-only. Sales automatic/manual sync และ TTB automatic/manual sync ถูกบังคับให้ reconcile ก่อน accounting mutation.
+- Migration 050 เพิ่ม guarded v3/v2 RPCs: pending ใช้ได้เฉพาะเมื่อ source row/report ยังไม่มีจริง (source ที่มี authoritative = 0 ต้อง reject), และ manual-review pool ที่ยอดไม่พอยังคง block JV ในทุก retry.
+- Migration 051 ปิด race สองทิศทาง: pending request ที่ยัง `reserved` จะ block daily JV จนบันทึก INV/reconcile เสร็จ และ cash/TTB sync claim ภายใต้ advisory lock เดียวกับ tax-invoice allocation พร้อมคืน source snapshot หลัง lock เพื่อคำนวณยอดสุทธิใหม่ ห้ามใช้ยอดที่อ่านก่อน claim.
+- Production transaction regression tests ผ่าน: reserved pending request block cash JV, cash claim และ TTB claim คืน allocation ล่าสุดหลัง lock; ทุก test rollback และไม่มี test rows/FlowAccount documents.
+- Production transaction integration test ผ่านทั้ง cash/TTB pending → complete และ rollback แล้ว; ไม่สร้าง FlowAccount documents/ไม่เหลือ test rows. Permission check anon/authenticated false, service role true.
 
 ## SESSION RESTART SNAPSHOT — ARCHIVED ก่อน `4f7a9cb`
 - Repo: `/Users/anirut/Documents/kintsu-accounting`; live: https://kintsu-accounting.vercel.app; branch `main`.

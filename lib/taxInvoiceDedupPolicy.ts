@@ -7,6 +7,8 @@ export type TaxInvoiceDedupAction =
   | 'replace_edc_cash_sale'
   | 'manual_review_closed_vat_period'
   | 'pending_edc_report'
+  | 'pending_cash_sales'
+  | 'pending_ttb_report'
 
 export interface TaxInvoiceDedupInput {
   paymentMethod: TaxInvoicePaymentMethod
@@ -38,6 +40,10 @@ export function planTaxInvoiceDedup(input: TaxInvoiceDedupInput): {
   action: TaxInvoiceDedupAction
   remainingSatang: number | null
 } {
+  if (input.authoritativeSatang === null && input.documentDate === input.today) {
+    if (input.paymentMethod === 'cash') return { action: 'pending_cash_sales', remainingSatang: null }
+    if (input.paymentMethod === 'transfer') return { action: 'pending_ttb_report', remainingSatang: null }
+  }
   if (input.paymentMethod === 'credit_card' && !input.authoritativeSatang
     && daysBetween(input.documentDate, input.today) <= 1) {
     // The settlement report always lags a day behind the sale — this is not a

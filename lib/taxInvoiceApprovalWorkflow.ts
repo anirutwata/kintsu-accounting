@@ -76,6 +76,8 @@ export async function runTaxInvoiceApprovalAccounting(
   // against yet. The invoice still ships to the customer now; reconcile_pending_edc_tax_invoices
   // finishes the allocation once the report lands, so this action does not mark complete.
   const pendingReconciliation = request.dedup_action === 'pending_edc_report'
+    || request.dedup_action === 'pending_cash_sales'
+    || request.dedup_action === 'pending_ttb_report'
   if (!correction && request.dedup_action === 'reversal_journal') {
     correction = await dependencies.createReversal(request, invoice)
     try {

@@ -16,11 +16,17 @@ function statusInfo(request: TaxInvoiceRequest): { label: string; color: string;
   if (request.dedup_state === 'manual_review' || request.status === 'accounting_review') {
     return { label: 'รอผู้ทำบัญชีตรวจสอบ', color: 'text-amber-700', detail: request.dedup_error || request.error_message || undefined }
   }
-  if (request.dedup_state === 'complete' || request.status === 'emailed') {
-    return { label: 'สำเร็จ', color: 'text-green-700', detail: request.flowaccount_document_serial || undefined }
-  }
   if (request.dedup_action === 'pending_edc_report') {
     return { label: 'ออกใบแล้ว รอปรับยอด EDC', color: 'text-blue-700', detail: request.flowaccount_document_serial || undefined }
+  }
+  if (request.dedup_action === 'pending_cash_sales') {
+    return { label: 'ออกใบแล้ว รอปรับยอดเงินสด', color: 'text-blue-700', detail: request.flowaccount_document_serial || undefined }
+  }
+  if (request.dedup_action === 'pending_ttb_report') {
+    return { label: 'ออกใบแล้ว รอรายงาน TTB', color: 'text-blue-700', detail: request.flowaccount_document_serial || undefined }
+  }
+  if (request.dedup_state === 'complete' || request.status === 'emailed') {
+    return { label: 'สำเร็จ', color: 'text-green-700', detail: request.flowaccount_document_serial || undefined }
   }
   if (request.status === 'pending_review' && request.error_message) {
     return { label: 'ล้มเหลว รอลองใหม่', color: 'text-red-700', detail: request.error_message }

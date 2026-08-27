@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { calcGrabNet } from '@/lib/money'
 import { sendTelegram, buildSalesMessage } from '@/lib/telegram'
 import { syncCashRevenueToFlowAccount } from '@/lib/cashRevenueSync'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET(req: Request) {
   const supabase = await createClient()
@@ -142,7 +143,16 @@ export async function POST(req: Request) {
 
   // Cash revenue is accounting-authoritative once the daily sales record is saved.
   // Sync it in the same user action so a separate button cannot leave days behind.
-  const cashSync = await syncCashRevenueToFlowAccount(supabase, date)
+  const admin = createAdminClient()
+  const { data: cashReconciliation, error: cashReconciliationError } = await admin
+    .rpc('reconcile_pending_cash_tax_invoices_v3', { p_revenue_date: date })
+  const manualCashRequests = cashReconciliation?.manual_review_ids || []
+  const blockingCashRequests = cashReconciliation?.blocking_ids || []
+  const cashSync = cashReconciliationError || manualCashRequests.length || blockingCashRequests.length
+    ? { ok: false as const, error: cashReconciliationError?.message || (blockingCashRequests.length
+      ? 'มีใบกำกับภาษีเงินสดกำลังบันทึก กรุณาลอง Sync อีกครั้ง'
+      : 'ยอดเงินสดไม่พอรองรับใบกำกับภาษีที่ออกแล้ว กรุณาตรวจสอบบัญชี') }
+    : await syncCashRevenueToFlowAccount(admin, date)
   const { data: updated, error: reloadError } = await supabase.from('daily_sales').select('*').eq('id', date).single()
   if (reloadError) return NextResponse.json({ error: reloadError.message }, { status: 500 })
   if (!cashSync.ok) {
