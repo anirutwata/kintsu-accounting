@@ -26,13 +26,25 @@ function toIsoDate(year: number, month: number, day: number): string {
   return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
+// สาขา always resolves to one of these two labels — never customer-typed free text —
+// so the label sent to FlowAccount can never end up blank (which FlowAccount silently
+// defaults to "สำนักงานใหญ่", contradicting a branch number the customer put in their
+// company name instead).
+function resolveBranchLabel(isHeadOffice: boolean, branchNumber: string): string {
+  if (isHeadOffice) return 'สำนักงานใหญ่'
+  const digits = branchNumber.replace(/[^0-9]/g, '')
+  return digits ? `สาขาที่ ${digits}` : ''
+}
+
 const emptyForm = () => ({
   document_date: getTodayBKK(), // วันที่ในบิล/ใบเสร็จ — ใช้เป็นวันที่บนใบกำกับภาษี ไม่ใช่วันที่อนุมัติ
   contact_group: 'juristic' as 'juristic' | 'individual',
   contact_name: '',
   contact_tax_id: '',
   contact_address: '',
-  contact_branch: '',
+  branch_is_head_office: true,
+  branch_number: '',
+  contact_branch: resolveBranchLabel(true, ''),
   contact_email: '',
   subtotal_baht: '',
   total_baht: '',
@@ -97,15 +109,34 @@ export default function TaxInvoiceRequestPage() {
     const digits = value.replace(/[^0-9]/g, '').slice(0, 13)
     set('contact_tax_id', digits)
     setTaxIdLookupError('')
-    if (digits.length === 13) lookupTaxId(digits, 0)
+    if (digits.length === 13) {
+      const branchNumber = form.branch_is_head_office ? 0 : parseInt(form.branch_number, 10) || 0
+      lookupTaxId(digits, branchNumber)
+    }
+  }
+
+  function handleBranchChoice(isHeadOffice: boolean) {
+    const branchNumber = isHeadOffice ? '' : form.branch_number
+    setForm(f => ({
+      ...f, branch_is_head_office: isHeadOffice, branch_number: branchNumber,
+      contact_branch: resolveBranchLabel(isHeadOffice, branchNumber),
+    }))
+    setConfirmed(false)
+    if (form.contact_tax_id.length === 13) {
+      lookupTaxId(form.contact_tax_id, isHeadOffice ? 0 : parseInt(branchNumber, 10) || 0)
+    }
+  }
+
+  function handleBranchNumberChange(value: string) {
+    const digits = value.replace(/[^0-9]/g, '')
+    setForm(f => ({ ...f, branch_number: digits, contact_branch: resolveBranchLabel(false, digits) }))
+    setConfirmed(false)
   }
 
   // Head-office and each branch have DIFFERENT registered addresses — if the customer
   // knows their branch number, re-look-up that branch's own name/address on blur.
-  function handleBranchBlur(value: string) {
-    if (form.contact_tax_id.length !== 13) return
-    const digits = value.replace(/[^0-9]/g, '')
-    if (!digits) return
+  function handleBranchNumberBlur(digits: string) {
+    if (form.contact_tax_id.length !== 13 || !digits) return
     lookupTaxId(form.contact_tax_id, parseInt(digits, 10))
   }
 
@@ -287,6 +318,27 @@ export default function TaxInvoiceRequestPage() {
           <Field label="เลขผู้เสียภาษี 13 หลัก">
             <input value={form.contact_tax_id} onChange={e => handleTaxIdChange(e.target.value)}
               className="w-full border rounded-xl px-3 py-2 text-sm" placeholder="1234567890123" inputMode="numeric" maxLength={13} />
+          </Field>
+          <Field label="สาขา *">
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex items-center gap-2 py-2 px-3 rounded-xl text-sm border cursor-pointer"
+                style={{ borderColor: form.branch_is_head_office ? '#D33F22' : '#e5e7eb' }}>
+                <input type="radio" name="branch_choice" checked={form.branch_is_head_office}
+                  onChange={() => handleBranchChoice(true)} className="w-4 h-4 shrink-0" />
+                สำนักงานใหญ่
+              </label>
+              <label className="flex items-center gap-2 py-2 px-3 rounded-xl text-sm border cursor-pointer"
+                style={{ borderColor: !form.branch_is_head_office ? '#D33F22' : '#e5e7eb' }}>
+                <input type="radio" name="branch_choice" checked={!form.branch_is_head_office}
+                  onChange={() => handleBranchChoice(false)} className="w-4 h-4 shrink-0" />
+                สาขา
+              </label>
+            </div>
+            {!form.branch_is_head_office && (
+              <input value={form.branch_number} onChange={e => handleBranchNumberChange(e.target.value)}
+                onBlur={e => handleBranchNumberBlur(e.target.value.replace(/[^0-9]/g, ''))}
+                className="mt-2 w-full border rounded-xl px-3 py-2 text-sm" placeholder="เลขสาขา เช่น 1" inputMode="numeric" />
+            )}
             {lookingUpTaxId && <p className="text-xs text-gray-400 mt-1">🔍 กำลังค้นหาชื่อ/ที่อยู่...</p>}
             {taxIdLookupError && <p className="text-xs text-amber-600 mt-1">⚠️ {taxIdLookupError}</p>}
           </Field>
@@ -297,12 +349,6 @@ export default function TaxInvoiceRequestPage() {
           <Field label="ที่อยู่">
             <textarea value={form.contact_address} onChange={e => set('contact_address', e.target.value)}
               className="w-full border rounded-xl px-3 py-2 text-sm" rows={2} placeholder="ที่อยู่สำหรับออกใบกำกับภาษี" />
-          </Field>
-          <Field label="สาขา">
-            <input value={form.contact_branch} onChange={e => set('contact_branch', e.target.value)}
-              onBlur={e => handleBranchBlur(e.target.value)}
-              className="w-full border rounded-xl px-3 py-2 text-sm" placeholder="สำนักงานใหญ่ / สาขาที่ ..." />
-            <p className="text-[10px] text-gray-400 mt-1">ถ้าไม่ใช่สำนักงานใหญ่ กรอกเลขสาขา (เช่น 1) ระบบจะค้นหาที่อยู่สาขานั้นให้อัตโนมัติ</p>
           </Field>
           <Field label="อีเมลรับใบกำกับภาษี *">
             <input required type="email" value={form.contact_email} onChange={e => set('contact_email', e.target.value)}
