@@ -7,7 +7,7 @@ import { createOcrSessionToken } from '@/lib/ocr/session'
 const STAFF_ROLES = ['manager', 'cashier', 'purchasing']
 
 function setOcrSession(cookieStore: Awaited<ReturnType<typeof cookies>>, actorId: string, role: string, maxAge: number) {
-  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const secret = process.env.OCR_SESSION_SIGNING_SECRET
   if (!secret) return
   cookieStore.set('kintsu_acc_ocr_session', createOcrSessionToken({
     actorId, role, expiresAt: Date.now() + maxAge * 1000,

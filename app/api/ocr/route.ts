@@ -36,8 +36,9 @@ function sanitizedFailure(error: unknown) {
 export async function POST(req: Request) {
   const cookieStore = await cookies()
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!serviceRoleKey) return NextResponse.json({ error: 'OCR provider is not configured' }, { status: 503 })
-  const session = verifyOcrSessionToken(cookieStore.get('kintsu_acc_ocr_session')?.value, serviceRoleKey)
+  const sessionSecret = process.env.OCR_SESSION_SIGNING_SECRET
+  if (!serviceRoleKey || !sessionSecret) return NextResponse.json({ error: 'OCR provider is not configured' }, { status: 503 })
+  const session = verifyOcrSessionToken(cookieStore.get('kintsu_acc_ocr_session')?.value, sessionSecret)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let formData: FormData
