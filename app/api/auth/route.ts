@@ -2,8 +2,17 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import bcrypt from 'bcryptjs'
+import { createOcrSessionToken } from '@/lib/ocr/session'
 
 const STAFF_ROLES = ['manager', 'cashier', 'purchasing']
+
+function setOcrSession(cookieStore: Awaited<ReturnType<typeof cookies>>, actorId: string, role: string, maxAge: number) {
+  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!secret) return
+  cookieStore.set('kintsu_acc_ocr_session', createOcrSessionToken({
+    actorId, role, expiresAt: Date.now() + maxAge * 1000,
+  }, secret), { httpOnly: true, secure: true, sameSite: 'lax', maxAge, path: '/' })
+}
 
 export async function POST(req: Request) {
   const body = await req.json()
@@ -32,6 +41,7 @@ export async function POST(req: Request) {
     cookieStore.set('kintsu_acc_user_id', admin.id, { httpOnly: true, secure: true, maxAge, path: '/' })
     cookieStore.set('kintsu_acc_role', 'owner', { httpOnly: false, secure: true, maxAge, path: '/' })
     cookieStore.set('kintsu_acc_name', admin.display_name, { httpOnly: false, secure: true, maxAge, path: '/' })
+    setOcrSession(cookieStore, admin.id, 'owner', maxAge)
     return NextResponse.json({ ok: true, name: admin.display_name, role: 'owner' })
   }
 
@@ -47,6 +57,7 @@ export async function POST(req: Request) {
   cookieStore.set('kintsu_acc_user_id', name.trim(), { httpOnly: true, secure: true, maxAge, path: '/' })
   cookieStore.set('kintsu_acc_role', role, { httpOnly: false, secure: true, maxAge, path: '/' })
   cookieStore.set('kintsu_acc_name', name.trim(), { httpOnly: false, secure: true, maxAge, path: '/' })
+  setOcrSession(cookieStore, 'staff', role, maxAge)
   return NextResponse.json({ ok: true, name: name.trim(), role })
 }
 
@@ -55,5 +66,6 @@ export async function DELETE() {
   cookieStore.delete('kintsu_acc_user_id')
   cookieStore.delete('kintsu_acc_role')
   cookieStore.delete('kintsu_acc_name')
+  cookieStore.delete('kintsu_acc_ocr_session')
   return NextResponse.json({ ok: true })
 }
