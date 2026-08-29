@@ -36,6 +36,20 @@ export interface PaymentSlipLocalPayment {
   recorded_by_name: string | null
 }
 
+function comparePaymentSlipSerialDesc(left: string, right: string): number {
+  const leftNumber = /^PAY(\d+)$/i.exec(left)?.[1]
+  const rightNumber = /^PAY(\d+)$/i.exec(right)?.[1]
+  if (leftNumber && rightNumber) {
+    const leftNormalized = leftNumber.replace(/^0+(?=\d)/, '')
+    const rightNormalized = rightNumber.replace(/^0+(?=\d)/, '')
+    if (leftNormalized.length !== rightNormalized.length) {
+      return rightNormalized.length - leftNormalized.length
+    }
+    if (leftNormalized !== rightNormalized) return rightNormalized > leftNormalized ? 1 : -1
+  }
+  return right.localeCompare(left)
+}
+
 export function groupExpensesByPaymentSlip(
   expenses: PaymentSlipExpense[],
   localPayments: PaymentSlipLocalPayment[] = [],
@@ -67,5 +81,5 @@ export function groupExpensesByPaymentSlip(
       status: group.status === 'pending' && group.local_payment ? 'awaiting_flowaccount' as const : group.status,
       expenses: group.expenses.sort((a, b) => a.document_date.localeCompare(b.document_date)),
     }))
-    .sort((a, b) => b.payment_date.localeCompare(a.payment_date) || b.serial.localeCompare(a.serial))
+    .sort((a, b) => comparePaymentSlipSerialDesc(a.serial, b.serial))
 }

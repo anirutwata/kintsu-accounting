@@ -30,6 +30,17 @@ describe('payment slip grouping', () => {
     })
   })
 
+  it('orders payment slips by PAY document number descending', () => {
+    const groups = groupExpensesByPaymentSlip([
+      { ...base, flowaccount_payment_slip_serial: 'PAY2026080018' },
+      { ...base, id: '2', flowaccount_payment_slip_serial: 'PAY2026080022' },
+      { ...base, id: '3', flowaccount_payment_slip_serial: 'PAY2026080006' },
+    ])
+    expect(groups.map(group => group.serial)).toEqual([
+      'PAY2026080022', 'PAY2026080018', 'PAY2026080006',
+    ])
+  })
+
   it('uses the net bank transfer after withholding tax', () => {
     const [group] = groupExpensesByPaymentSlip([{ ...base, total_satang: 107_000, wht_satang: 3_000 }])
     expect(group).toMatchObject({ gross_total_satang: 107_000, total_satang: 104_000, status: 'paid' })
