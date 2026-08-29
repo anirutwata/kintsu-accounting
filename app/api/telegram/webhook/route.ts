@@ -53,8 +53,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  const safeName = escapeHtml(claimed.contact_name)
-
   if (action === 'reject') {
     if (claimed.dedup_state && claimed.dedup_state !== 'unreserved') {
       await supabase.from('tax_invoice_requests').update({
@@ -75,7 +73,7 @@ export async function POST(req: Request) {
     if (messageId) {
       await editTelegramCaption(
         messageId,
-        `❌ <b>ปฏิเสธคำขอ</b>\n👤 ${safeName}\nโดย ${escapeHtml(approver)}`,
+        `❌ <b>ปฏิเสธคำขอ</b>\nโดย ${escapeHtml(approver)}\n\n${buildTaxInvoiceRequestDetails(claimed)}`,
       )
     }
     return NextResponse.json({ ok: true })
@@ -130,7 +128,7 @@ export async function POST(req: Request) {
       if (messageId) {
         await editTelegramCaption(
           messageId,
-          `✅ <b>อนุมัติแล้ว</b>\n👤 ${safeName}\n📄 ${invoice.documentSerial}\nโดย ${escapeHtml(approver)}${pendingNote}`,
+          `✅ <b>อนุมัติแล้ว</b>\n📄 ${invoice.documentSerial}\nโดย ${escapeHtml(approver)}\n\n${buildTaxInvoiceRequestDetails(claimed)}${pendingNote}`,
         )
       }
       await sendTelegram(`📧 ส่งอีเมลใบกำกับภาษี ${invoice.documentSerial} ให้ลูกค้าแล้ว (${escapeHtml(claimed.contact_email)})`, 'taxInvoice')
@@ -142,7 +140,7 @@ export async function POST(req: Request) {
       if (messageId) {
         await editTelegramCaption(
           messageId,
-          `⚠️ <b>อนุมัติแล้ว แต่ส่งอีเมลไม่สำเร็จ</b>\n👤 ${safeName}\n📄 ${invoice.documentSerial}\nโดย ${escapeHtml(approver)}\n\nรบกวนส่ง PDF ให้ลูกค้าด้วยตนเอง (${escapeHtml(claimed.contact_email)})`,
+          `⚠️ <b>อนุมัติแล้ว แต่ส่งอีเมลไม่สำเร็จ</b>\n📄 ${invoice.documentSerial}\nโดย ${escapeHtml(approver)}\n\n${buildTaxInvoiceRequestDetails(claimed)}\n\nรบกวนส่ง PDF ให้ลูกค้าด้วยตนเอง (${escapeHtml(claimed.contact_email)})`,
         )
       }
     }

@@ -42,6 +42,30 @@ describe('planTaxInvoiceDedup', () => {
     })).toEqual({ action: 'pending_ttb_report', remainingSatang: null })
   })
 
+  it('issues a cash invoice requested after midnight for yesterday\'s receipt while daily sales are still pending', () => {
+    expect(planTaxInvoiceDedup({
+      paymentMethod: 'cash', documentDate: '2026-08-27', today: '2026-08-28',
+      totalSatang: 158_500, authoritativeSatang: null, allocatedSatang: 0,
+      sourceRevenueJournalExists: false, edcCashSaleExists: false,
+    })).toEqual({ action: 'pending_cash_sales', remainingSatang: null })
+  })
+
+  it('issues a transfer invoice requested after midnight for yesterday\'s receipt while the TTB report is pending', () => {
+    expect(planTaxInvoiceDedup({
+      paymentMethod: 'transfer', documentDate: '2026-08-27', today: '2026-08-28',
+      totalSatang: 158_500, authoritativeSatang: null, allocatedSatang: 0,
+      sourceRevenueJournalExists: false, edcCashSaleExists: false,
+    })).toEqual({ action: 'pending_ttb_report', remainingSatang: null })
+  })
+
+  it('still rejects a missing cash pool for an older date instead of deferring', () => {
+    expect(() => planTaxInvoiceDedup({
+      paymentMethod: 'cash', documentDate: '2026-08-20', today: '2026-08-28',
+      totalSatang: 158_500, authoritativeSatang: null, allocatedSatang: 0,
+      sourceRevenueJournalExists: false, edcCashSaleExists: false,
+    })).toThrow('ยอดใบกำกับภาษีรวมเกินยอดเงินสดของวันที่ 2026-08-20')
+  })
+
   it('reduces a future EDC Cash Sale when the daily document does not exist yet', () => {
     expect(planTaxInvoiceDedup({
       paymentMethod: 'credit_card', documentDate: '2026-08-27', today: '2026-08-27',
