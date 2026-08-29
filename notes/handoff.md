@@ -1,11 +1,11 @@
-# Handoff — KINTSU Accounting (2026-08-28)
+# Handoff — KINTSU Accounting (2026-08-30)
 
-> ฉบับนี้อัปเดตล่าสุดวันที่ 2026-08-28 หลัง deploy ระบบใบกำกับภาษีเงินสด/TTB แบบออกได้ภายในวันเดียวกัน
+> ฉบับนี้อัปเดตล่าสุดวันที่ 2026-08-30 หลังเปิด OCR Provider Phase 1 บน Production และปรับลำดับหน้า Payment Slips
 
 ## SESSION RESTART SNAPSHOT — CURRENT — อ่านส่วนนี้ก่อน
 - Repo: `/Users/anirut/Documents/kintsu-accounting`; live: https://kintsu-accounting.vercel.app; branch `main`.
-- `main = origin/main = 2022eb9`. Commit `c06bfa8` ป้องกันคำขอซ้ำ; commit `2022eb9` เปิด same-day cash/TTB พร้อม pending reconciliation และ concurrency guards. Vercel Production deployment `dpl_Ge7RqDsAb3hdF8RUtNcqPwEW5cT7` เป็น Ready และ live alias ชี้ deployment นี้. Deploy จาก GitHub auto-deploy เท่านั้น.
-- Supabase Production apply migrations ถึง `051_pending_revenue_sync_race_guards.sql` แล้ว. RPC accounting mutations ของ tax-invoice reconciliation จำกัด service role.
+- `main = origin/main = b750f29`. OCR Phase 1 commits: `81b7953`, `507090d`; merge `8a155b5`. Vercel Production OCR deployment `dpl_HE1Deqwr9sUPoLRqAzgmUH33qiyz` was deployed Ready; later pushes may have produced a newer active deployment, so verify the live alias before any mutation. GitHub push triggers auto-deploy; do not use manual `vercel deploy`.
+- Supabase Production migrations 052 and 053 are applied. Migration 053 added versioned OCR cache/RPC, actor+global quotas, usage telemetry, and service-role-only access. Public slip storage remains a temporary accepted production risk; private attachment migration is a separate blocker.
 - ระบบใบกำกับภาษีเต็มรูปแบบป้องกันรายได้ซ้ำด้วย authoritative match `วันที่ใบเสร็จ + ยอดรวม + ช่องทางชำระ`; รูปใบเสร็จบังคับแนบและผู้ดูแลตรวจ/อนุมัติผ่าน Telegram ก่อน mutation.
 - เงินสด/TTB ถ้า JV รายวันลงแล้ว: ออก paid tax invoice แล้วสร้าง reversal JV Dr 41210 / Cr 11112 หรือ 11122.07 เท่ายอดเต็มใบเสร็จ. ถ้ายังไม่ลง JV: เก็บ allocation แล้วให้ JV ในอนาคตลงเฉพาะยอดสุทธิหลังหักใบกำกับภาษีเต็มรูป.
 - EDC ภายในเดือนปัจจุบัน: Cash Sale รายวันต้องเหลือ gross authoritative ลบยอดใบกำกับภาษีเต็มรูป; ถ้ามี Cash Sale แล้วระบบ Void/verify และสร้างใบสุทธิใหม่. Settlement JV ยังคงใช้ gross/fee/VAT/net จาก CSV เต็มจำนวน ไม่เปลี่ยน.
@@ -14,11 +14,30 @@
 - Retry ใช้ FlowAccount IDs ที่บันทึกแล้ว ไม่สร้าง INV/JV/Cash Sale ซ้ำ; ถ้าบันทึก DB หลังสร้างเอกสารล้มเหลวจะ Void ชดเชย. ส่งอีเมลหลัง accounting complete เท่านั้น. คำขอที่เริ่มจองยอด/สร้างเอกสารแล้วห้าม reject อัตโนมัติและจะส่ง `accounting_review`.
 - Historical issued tax invoices เดือนสิงหาคม reconcile แล้วเมื่อ 2026-08-27: 10 requests ที่ FlowAccount INV ถูก Void/ลบอยู่ก่อนแล้วถูก soft-delete พร้อม audit note; 3 paid transfer INV วันที่ 22–23 ส.ค. คง `manual_review` เพราะไม่มี authoritative TTB report/source JV ให้ย้อน; 3 paid EDC INV วันที่ 21/23 ส.ค. เป็น `complete` หลังปรับ Cash Sale ตามยอดสุทธิ. `INV2026080034` ตรวจพบว่า FlowAccount INV ถูกลบอยู่ก่อนแล้ว จึง soft-delete request พร้อม audit และไม่ได้สร้าง reversal/correction.
 - Production verification: RPC execute = anon false / authenticated false / service_role true; active Codex tax-dedup test rows = 0, cleaned soft-deleted rows = 7. Live test รอบสุดท้ายหลัง revoke หยุดก่อนสร้าง FlowAccount เพราะ `.env.local` มี service-role placeholder; ไม่มีเอกสารทดสอบใหม่ค้าง. Live test ก่อนหน้าเคยสร้าง/retry/Void INV+JV สำเร็จและ cleanup แล้ว.
-- Verification ล่าสุด commit `2022eb9`: Vitest 81 passed / 3 skipped, `tsc --noEmit`, targeted ESLint และ Next Production build ผ่าน. Spec/Standards re-review ยืนยันว่า duplicate-accounting concurrency race ถูกปิดแล้ว.
+- Verification: OCR targeted tests 30 passed; full suite 114 passed / 3 skipped; TypeScript, targeted ESLint, and production build passed. Production unauthenticated OCR guard returns 401 and no recent 5xx logs were found. Authenticated synthetic OCR smoke test remains pending.
 - Working tree ของผู้ใช้ที่ห้ามแตะ/stage/commit: modified `.gitignore`; untracked `.claude/`, `notes/flowaccount-journal-attachment-research-2026-08-25.md`, `supabase/.temp/`, `รหัส-fixed.gs`. ไฟล์ `รหัส-fixed.gs` มี secret ฝังอยู่ ห้าม `git add` และห้ามเปิดเผยเนื้อหา.
 - FlowAccount และ Supabase เป็น Production จริง. ก่อน mutation ต้องตรวจ DB/FlowAccount จริง; test documents ต้อง Void/cleanup/verify; soft-delete only; ห้าม replay `EDC_DailyReport_20260825.csv`; ห้ามสร้าง Cash Sale/JV เดิมซ้ำ.
 - งานที่ยังพักและห้ามหยิบมาทำเอง: monthly LINE Pay fee tax invoice, reconciliation ใบโอนย้อนหลัง 3 ใบที่ยัง `manual_review`, Grab automation, WHT automation.
 - Workflow ทุกงาน: ตรวจ git/Production ก่อน → confirm scope → implement/test/build/review → commit ด้วย `git commit -F <tmpfile>` → ขออนุญาตก่อน push เสมอ. ห้าม manual `vercel deploy`.
+
+## OCR PROVIDER PHASE 1 — `81b7953`, `507090d`, `8a155b5` (Production, 2026-08-29)
+- `/api/ocr` uses a central provider layer: Gemini 2.5 Flash-Lite → Gemini 2.5 Flash → Claude Sonnet 4.6. Provider calls receive validated image bytes directly; business route does not import provider SDKs.
+- Signed OCR sessions use `OCR_SESSION_SIGNING_SECRET` (separate from API/Supabase keys), with constant-time verification, expiry, versioning, and logout deletion. Missing/invalid session fails before file processing/provider calls.
+- Migration 052 was already present in Production and was skipped. Migration 053 was applied in one `--single-transaction` and verified: 11 OCR columns, two cache indexes, `claim_ocr_job` with cache/actor/global advisory locks, 10-minute stale recovery, actor/global limits, RLS and service-role-only grants.
+- Production environment variables are configured: `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `OCR_SESSION_SIGNING_SECRET`, model/fallback/schema/image/timeout/rate-limit settings. Never print values.
+- Production initially rolled back to `dpl_GNyyukQfvHrsDFCk8kBLVyXmgpuf`, then redeployed commit `8a155b5` as `dpl_HE1Deqwr9sUPoLRqAzgmUH33qiyz` (Ready, live alias active). Synthetic authenticated smoke test still requires an operator login; unauthenticated `/api/ocr` returns 401.
+- OCR response contract remains 13 fields. Legacy MD5 response hash is preserved separately from the versioned SHA-256 cache key. Cache results are schema/validation checked; optional empty fields do not force fallback; non-integer satang is rejected.
+- Public `slips` URLs are accepted temporarily. Expenses, transfers, payment-slips, and FlowAccount sync still persist/use `slip_image_url`; do not make the bucket private without a separate audited migration covering all consumers.
+
+### OCR — จุดเริ่มงานครั้งหน้า
+- ทำ authenticated smoke test ผ่านหน้า Production: logout/login ใหม่ → อัปโหลด synthetic/ปิดบังข้อมูลหนึ่งภาพ → ส่งภาพเดิมซ้ำเพื่อตรวจ cache.
+- ตรวจแบบ read-only ว่า OCR job ล่าสุด `status=done`, `provider=gemini`, `model=gemini-2.5-flash-lite`, `fallback_level=0`; usage event ควรเพิ่มเฉพาะ request แรกและห้ามรายงาน `ocr_data`/PII/URL.
+- ถ้า OCR ล้มเหลวหรือเกิด 5xx ให้หยุด request เพิ่ม ตรวจ logs แบบไม่เปิดเผยข้อมูล และเตรียม rollback ไป last-known-good deployment `dpl_GNyyukQfvHrsDFCk8kBLVyXmgpuf`; migration 053 เป็น additive ห้ามลบ objects แบบฉุกเฉิน.
+- เมื่อ smoke test ผ่านจึงถือว่าการลดต้นทุนสลิปทำงานจริง. OCR ของ bill/VAT/vendor/items/asset/transfer routes อื่นยังไม่ได้ย้ายและยังเป็น Phase 2.
+
+## PAYMENT SLIP DISPLAY ORDER — `b750f29` (2026-08-30)
+- `/payment-slips` now orders grouped PAY documents by the numeric `PAY...` serial descending, so the latest document number appears first regardless of payment date.
+- Regression test covers `PAY2026080022`, `PAY2026080018`, `PAY2026080006`. Commit pushed to `main`; no user-pending files were staged.
 
 ## TAX INVOICE REVENUE DEDUP — `4f7a9cb` (deployed 2026-08-27)
 - Decision/spec ฉบับเต็ม: `/Users/anirut/brainstorms/2026-08-27-tax-invoice-revenue-dedup.md`; implementation หลักอยู่ใน `lib/taxInvoiceApprovalService.ts`, `lib/taxInvoiceApprovalWorkflow.ts`, `lib/taxInvoiceDedupPolicy.ts`, `lib/netRevenueAmount.ts`, cash/TTB/EDC sync modules และ migration 045.
