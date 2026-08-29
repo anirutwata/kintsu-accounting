@@ -13,6 +13,9 @@ const GROUP_LABELS: Record<string, string> = { individual: 'บุคคลธ�
 
 function statusInfo(request: TaxInvoiceRequest): { label: string; color: string; detail?: string } {
   if (request.status === 'rejected') return { label: 'ปฏิเสธ', color: 'text-gray-500' }
+  if (request.status === 'cancelled') {
+    return { label: 'ยกเลิก (ใบกำกับภาษีถูกยกเลิกใน FlowAccount)', color: 'text-gray-500', detail: request.error_message || undefined }
+  }
   if (request.dedup_state === 'manual_review' || request.status === 'accounting_review') {
     return { label: 'รอผู้ทำบัญชีตรวจสอบ', color: 'text-amber-700', detail: request.dedup_error || request.error_message || undefined }
   }
