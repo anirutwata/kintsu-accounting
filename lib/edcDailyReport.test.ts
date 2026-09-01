@@ -29,6 +29,12 @@ describe('LINE Pay EDC daily report', () => {
     expect(report.transactions.map(item => item.transactionId)).toEqual(['tx-local', 'tx-inter'])
   })
 
+  it('names the exact column and expected value when the header no longer matches', () => {
+    const renamedAmount = [header.replace('amount,fee_rate', 'gross_amount,fee_rate'), ...rows].join('\n')
+    expect(() => parseEdcDailyReport(renamedAmount, 'EDC_DailyReport_20260825.csv'))
+      .toThrow('ตำแหน่งที่ 6 พบ "gross_amount" แต่ต้องเป็น "amount"')
+  })
+
   it('accepts a report where LINE Pay renamed the terminal_id column to reference_id', () => {
     const renamedHeader = header.replace('terminal_id', 'reference_id')
     const renamed = [renamedHeader, ...rows].join('\n')
