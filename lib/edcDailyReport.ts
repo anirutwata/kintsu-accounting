@@ -97,7 +97,11 @@ export function parseEdcDailyReport(source: string, filename: string): EdcDailyR
   // comment near EdcTransaction.terminalId below); accept either name in that position.
   const normalizedHeaders = headers.map((value, index) => (index === 2 && value === 'reference_id') ? 'terminal_id' : value)
   if (normalizedHeaders.join(',') !== requiredHeaders.join(',')) {
-    throw new Error('หัวตารางไฟล์ EDC CSV ไม่ถูกต้อง')
+    const columnCount = Math.max(normalizedHeaders.length, requiredHeaders.length)
+    const mismatches = Array.from({ length: columnCount }, (_, index) => index)
+      .filter(index => normalizedHeaders[index] !== requiredHeaders[index])
+      .map(index => `ตำแหน่งที่ ${index + 1} พบ "${normalizedHeaders[index] ?? '(ไม่มีคอลัมน์)'}" แต่ต้องเป็น "${requiredHeaders[index] ?? '(ไม่ควรมีคอลัมน์นี้)'}"`)
+    throw new Error(`หัวตารางไฟล์ EDC CSV ไม่ถูกต้อง: ${mismatches.join(', ')}`)
   }
   const filenameMatch = filename.match(/^EDC_DailyReport_(\d{4})(\d{2})(\d{2})\.csv$/i)
   if (!filenameMatch) throw new Error(`ชื่อไฟล์รายงาน EDC ไม่ถูกต้อง: ${filename || '(ว่าง)'}`)
