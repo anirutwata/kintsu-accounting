@@ -29,6 +29,13 @@ describe('LINE Pay EDC daily report', () => {
     expect(report.transactions.map(item => item.transactionId)).toEqual(['tx-local', 'tx-inter'])
   })
 
+  it('accepts a report where LINE Pay renamed the terminal_id column to reference_id', () => {
+    const renamedHeader = header.replace('terminal_id', 'reference_id')
+    const renamed = [renamedHeader, ...rows].join('\n')
+    const report = parseEdcDailyReport(renamed, 'EDC_DailyReport_20260825.csv')
+    expect(report.transactionCount).toBe(2)
+  })
+
   it('rejects a filename date that differs from settlement_date', () => {
     expect(() => parseEdcDailyReport(sample, 'EDC_DailyReport_20260824.csv'))
       .toThrow('วันที่ชื่อไฟล์ EDC ไม่ตรงกับ Settlement')

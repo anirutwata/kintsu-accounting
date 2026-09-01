@@ -93,7 +93,10 @@ export function parseEdcDailyReport(source: string, filename: string): EdcDailyR
     'amount', 'fee_rate', 'fee_amount', 'vat_amount', 'net_amount', 'settlement_date',
     'transaction_time', 'transaction_id',
   ]
-  if (headers.join(',') !== requiredHeaders.join(',')) {
+  // LINE Pay renamed column 3 from terminal_id to reference_id (still unused — see the
+  // comment near EdcTransaction.terminalId below); accept either name in that position.
+  const normalizedHeaders = headers.map((value, index) => (index === 2 && value === 'reference_id') ? 'terminal_id' : value)
+  if (normalizedHeaders.join(',') !== requiredHeaders.join(',')) {
     throw new Error('หัวตารางไฟล์ EDC CSV ไม่ถูกต้อง')
   }
   const filenameMatch = filename.match(/^EDC_DailyReport_(\d{4})(\d{2})(\d{2})\.csv$/i)
