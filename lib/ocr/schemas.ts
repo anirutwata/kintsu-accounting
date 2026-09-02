@@ -10,6 +10,7 @@ export const slipProviderOutputSchema = z.object({
   sender_account: z.string(),
   recipient: z.string(),
   recipient_bank: z.string(),
+  recipient_account: z.string(),
   confidence: z.number(),
 }).strict()
 
@@ -26,10 +27,11 @@ export const slipJsonSchema: Record<string, unknown> = {
     sender_account: { type: 'string' },
     recipient: { type: 'string' },
     recipient_bank: { type: 'string' },
+    recipient_account: { type: 'string' },
     confidence: { type: 'number' },
   },
   required: [
     'amount_satang', 'date', 'time', 'ref_number', 'sender_name',
-    'sender_bank', 'sender_account', 'recipient', 'recipient_bank', 'confidence',
+    'sender_bank', 'sender_account', 'recipient', 'recipient_bank', 'recipient_account', 'confidence',
   ],
 }

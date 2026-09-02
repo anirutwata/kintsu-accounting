@@ -71,6 +71,7 @@ export function normalizeAndValidateSlip(raw: unknown, now = new Date()): SlipVa
     sender_account: parsed.data.sender_account.trim(),
     recipient: parsed.data.recipient.trim(),
     recipient_bank: normalizeBank(parsed.data.recipient_bank),
+    recipient_account: parsed.data.recipient_account.trim(),
     confidence: Math.min(1, Math.max(0, parsed.data.confidence)),
   }
 

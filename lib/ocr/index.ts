@@ -2,6 +2,8 @@ import { createOcrCacheKey } from './cache'
 import { thaiTransferSlipProfile } from './profiles/slip'
 import { taxInvoiceBillProfile } from './profiles/taxInvoiceBill'
 import { expenseBillProfile } from './profiles/expenseBill'
+import { assetReceiptProfile } from './profiles/assetReceipt'
+import { bankStatementProfile } from './profiles/bankStatement'
 import { AnthropicOcrProvider } from './providers/anthropic'
 import { GeminiOcrProvider } from './providers/gemini'
 import { hasBlockingSlipIssues, normalizeAndValidateSlip } from './validation'
@@ -105,6 +107,16 @@ const profiles = {
     ...expenseBillProfile,
     promptFor: (context?: ExtractDocumentInput['context']) => expenseBillProfile.prompt(context?.categoryNames ?? []),
     validateFor: (raw: unknown, context?: ExtractDocumentInput['context']) => expenseBillProfile.validate(raw, context?.categoryNames ?? []),
+  },
+  asset_receipt: {
+    ...assetReceiptProfile, maxOutputTokens: 1024,
+    promptFor: () => assetReceiptProfile.prompt,
+    validateFor: (raw: unknown) => assetReceiptProfile.validate(raw),
+  },
+  bank_statement: {
+    ...bankStatementProfile,
+    promptFor: () => bankStatementProfile.prompt,
+    validateFor: (raw: unknown) => bankStatementProfile.validate(raw),
   },
 } as const
 

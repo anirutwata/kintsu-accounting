@@ -19,6 +19,7 @@ export function toLegacyOcrResponse(
     sender_account: data.sender_account,
     recipient: data.recipient,
     recipient_bank: data.recipient_bank,
+    recipient_account: data.recipient_account,
     confidence: data.confidence,
     cached: extras.cached,
     hash: extras.hash,

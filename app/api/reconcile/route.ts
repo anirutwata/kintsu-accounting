@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import Anthropic from '@anthropic-ai/sdk'
+import { extractDocument } from '@/lib/ocr'
 
 interface StatementEntry {
   date: string
@@ -51,63 +51,13 @@ function bankMatches(stored: string | null, selected: string): boolean {
   return false
 }
 
-// Parse PDF using Claude Vision
-async function parsePdfWithClaude(file: File): Promise<StatementEntry[]> {
-  const anthropic = new Anthropic()
-  const buffer = await file.arrayBuffer()
-  const base64 = Buffer.from(buffer).toString('base64')
-
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 16000,
-    messages: [{
-      role: 'user',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      content: [
-        {
-          type: 'document',
-          source: { type: 'base64', media_type: 'application/pdf', data: base64 },
-        } as any,
-        {
-          type: 'text',
-          text: `You are extracting transactions from a Thai bank statement PDF.
-
-TASK: Extract EVERY transaction row. Return ONLY a raw JSON array — no markdown, no code fences, no explanation.
-
-OUTPUT FORMAT (each item):
-{"date":"YYYY-MM-DD","description":"...","amount":1234.56,"type":"in"}
-
-DATE RULES (Thai Buddhist Era, 2-digit year):
-- Year "68" = 2568 BE = 2568-543 = 2025 CE
-- Year "69" = 2569 BE = 2569-543 = 2026 CE
-- Month abbreviations: ม.ค.=01 ก.พ.=02 มี.ค.=03 เม.ย.=04 พ.ค.=05 มิ.ย.=06 ก.ค.=07 ส.ค.=08 ก.ย.=09 ต.ค.=10 พ.ย.=11 ธ.ค.=12
-- Example: "9 มิ.ย. 69" → "2026-06-09", "30 มี.ค. 69" → "2026-03-30"
-
-AMOUNT RULES (จำนวนเงิน column):
-- Positive (+) or no sign → type "in"
-- Negative (-) → type "out"
-- amount is always positive number (no sign)
-
-DESCRIPTION: combine รายการ + รายละเอียด columns. Skip ช่องทาง, ยอดเงินคงเหลือ.
-
-Start output with [ and end with ]. Nothing else.`
-        }
-      ]
-    }]
+async function parsePdfWithPipeline(file: File): Promise<StatementEntry[]> {
+  const result = await extractDocument({
+    profile: 'bank_statement',
+    image: { bytes: new Uint8Array(await file.arrayBuffer()), mimeType: 'application/pdf' },
+    schemaVersion: `${process.env.OCR_SCHEMA_VERSION || '1'}-bank-statement-v1`,
   })
-
-  const raw = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
-  // Strip markdown fences if present
-  const clean = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
-  // Extract JSON array
-  const match = clean.match(/\[[\s\S]*\]/)
-  if (!match) throw new Error(`Claude ไม่ส่งข้อมูลกลับมา (raw: ${raw.slice(0, 200)})`)
-  try {
-    const parsed = JSON.parse(match[0]) as StatementEntry[]
-    return parsed.filter(e => e.date && typeof e.amount === 'number' && e.amount > 0 && (e.type === 'in' || e.type === 'out'))
-  } catch (e) {
-    throw new Error(`แปลง JSON ไม่ได้: ${e instanceof Error ? e.message : e} | raw: ${raw.slice(0, 200)}`)
-  }
+  return result.data.entries
 }
 
 // Parse CSV (handles TTB single signed-amount column and standard credit/debit columns)
@@ -395,7 +345,7 @@ export async function POST(req: Request) {
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
 
     if (isPdf) {
-      statementEntries = await parsePdfWithClaude(file)
+      statementEntries = await parsePdfWithPipeline(file)
     } else {
       const text = await file.text()
       statementEntries = parseCsv(text)

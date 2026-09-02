@@ -75,7 +75,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'OCR provider is not configured' }, { status: 503 })
   }
   const db = createAdminClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
-  const schemaVersion = process.env.OCR_SCHEMA_VERSION || '1'
+  const schemaVersion = `${process.env.OCR_SCHEMA_VERSION || '1'}-slip-account-v2`
   const hash = createOcrCacheKey(image.bytes, PROFILE, schemaVersion)
   const legacyHash = createHash('md5').update(image.bytes).digest('hex')
   const requestActorHash = actorHash(session.role === 'owner' ? `owner:${session.actorId}` : 'staff')

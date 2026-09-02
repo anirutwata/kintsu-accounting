@@ -1,4 +1,4 @@
-export type OcrProfileName = 'thai_transfer_slip' | 'tax_invoice_bill' | 'expense_bill'
+export type OcrProfileName = 'thai_transfer_slip' | 'tax_invoice_bill' | 'expense_bill' | 'asset_receipt' | 'bank_statement'
 
 export type OcrProviderName = 'gemini' | 'anthropic'
 
@@ -11,10 +11,11 @@ export type OcrErrorCategory =
 
 export interface OcrImage {
   bytes: Uint8Array
-  mimeType: SupportedImageMimeType
+  mimeType: SupportedDocumentMimeType
 }
 
 export type SupportedImageMimeType = 'image/jpeg' | 'image/png' | 'image/webp'
+export type SupportedDocumentMimeType = SupportedImageMimeType | 'application/pdf'
 
 export interface SlipOcrData {
   amount_satang: number
@@ -26,7 +27,23 @@ export interface SlipOcrData {
   sender_account: string
   recipient: string
   recipient_bank: string
+  recipient_account: string
   confidence: number
+}
+
+export interface AssetReceiptOcrData {
+  name: string
+  amount_satang: number
+  date: string
+  vendor: string
+  description: string
+  payment_bank: string
+  payment_account: string
+  confidence: number
+}
+
+export interface BankStatementOcrData {
+  entries: Array<{ date: string; description: string; amount: number; type: 'in' | 'out' }>
 }
 
 export interface TaxInvoiceBillOcrData {
@@ -64,6 +81,8 @@ export interface OcrDataByProfile {
   thai_transfer_slip: SlipOcrData
   tax_invoice_bill: TaxInvoiceBillOcrData
   expense_bill: ExpenseBillOcrData
+  asset_receipt: AssetReceiptOcrData
+  bank_statement: BankStatementOcrData
 }
 
 export interface ProviderUsage {

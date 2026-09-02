@@ -28,7 +28,9 @@ export class AnthropicOcrProvider implements OcrProvider {
         max_tokens: input.maxOutputTokens ?? 512,
         thinking: { type: 'disabled' },
         messages: [{ role: 'user', content: [
-          { type: 'image', source: { type: 'base64', media_type: input.image.mimeType, data: Buffer.from(input.image.bytes).toString('base64') } },
+          (input.image.mimeType === 'application/pdf'
+            ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: Buffer.from(input.image.bytes).toString('base64') } }
+            : { type: 'image', source: { type: 'base64', media_type: input.image.mimeType, data: Buffer.from(input.image.bytes).toString('base64') } }) as never,
           { type: 'text', text: schemaInstruction },
         ] }],
       })

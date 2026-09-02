@@ -17,6 +17,7 @@ const valid = {
   sender_account: 'xxx-x-12345-x',
   recipient: 'บริษัท คิวโซลา จำกัด',
   recipient_bank: 'SCB',
+  recipient_account: 'xxx-x-98765-x',
   confidence: 0.94,
 }
 
@@ -57,6 +58,21 @@ function provider(name: 'gemini' | 'anthropic', model: string, result: unknown):
 }
 
 describe('extractDocument', () => {
+  it('extracts asset receipts through the shared provider pipeline', async () => {
+    const data = { name: 'ตู้แช่ รุ่น A', amount_satang: 2500000, date: '2026-08-20', vendor: 'ร้านตัวอย่าง', description: 'SN123', payment_bank: 'กสิกรไทย', payment_account: 'xxx-x-5555-x', confidence: 0.9 }
+    const primary = provider('gemini', 'gemini-3.5-flash-lite', data)
+    const result = await extractDocument({ profile: 'asset_receipt', image, providers: [primary] })
+    expect(result.data).toEqual(data)
+    expect(primary.extract).toHaveBeenCalledOnce()
+  })
+
+  it('extracts PDF bank statements through the shared provider pipeline', async () => {
+    const pdf = { bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46]), mimeType: 'application/pdf' as const }
+    const data = { entries: [{ date: '2026-08-20', description: 'โอนเงิน', amount: 50000, type: 'out' }] }
+    const primary = provider('gemini', 'gemini-3.5-flash-lite', data)
+    const result = await extractDocument({ profile: 'bank_statement', image: pdf, providers: [primary] })
+    expect(result.data).toEqual(data)
+  })
   it('extracts every tax-invoice bill field in one Gemini Flash-Lite call', async () => {
     const primary = provider('gemini', 'gemini-2.5-flash-lite', validTaxInvoiceBill)
     const secondary = provider('gemini', 'gemini-2.5-flash', validTaxInvoiceBill)
@@ -312,7 +328,7 @@ it('keeps the /api/ocr success response contract unchanged', () => {
     slip_image_url: null,
   })
   expect(Object.keys(response).sort()).toEqual([
-    'amount_satang', 'cached', 'confidence', 'date', 'hash', 'recipient', 'recipient_bank',
+    'amount_satang', 'cached', 'confidence', 'date', 'hash', 'recipient', 'recipient_account', 'recipient_bank',
     'ref_number', 'sender_account', 'sender_bank', 'sender_name', 'slip_image_url', 'time',
   ])
 })

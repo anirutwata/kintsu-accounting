@@ -163,16 +163,20 @@ export default function TransfersPage() {
       const res = await fetch('/api/ocr/transfer', { method: 'POST', body: fd })
       const data = await res.json()
       setForm(f => {
-        const fromMatch = data.from_bank ? matchAccount(data.from_bank, data.from_account) : undefined
-        const toMatch = data.to_bank ? matchAccount(data.to_bank, data.to_account) : undefined
+        const fromBank = data.sender_bank || data.from_bank || ''
+        const fromAccount = data.sender_account || data.from_account || ''
+        const toBank = data.recipient_bank || data.to_bank || ''
+        const toAccount = data.recipient_account || data.to_account || ''
+        const fromMatch = fromBank ? matchAccount(fromBank, fromAccount) : undefined
+        const toMatch = toBank ? matchAccount(toBank, toAccount) : undefined
         return {
           ...f,
           date: data.date || f.date,
           amount: data.amount_satang ? fmtInput(data.amount_satang) : f.amount,
-          from_bank: fromMatch ? fromMatch.bank_name : (data.from_bank || f.from_bank),
-          from_account: fromMatch ? fromMatch.account_number : (data.from_account || f.from_account),
-          to_bank: toMatch ? toMatch.bank_name : (data.to_bank || f.to_bank),
-          to_account: toMatch ? toMatch.account_number : (data.to_account || f.to_account),
+          from_bank: fromMatch ? fromMatch.bank_name : (fromBank || f.from_bank),
+          from_account: fromMatch ? fromMatch.account_number : (fromAccount || f.from_account),
+          to_bank: toMatch ? toMatch.bank_name : (toBank || f.to_bank),
+          to_account: toMatch ? toMatch.account_number : (toAccount || f.to_account),
         }
       })
     } catch { /* ignore */ }
