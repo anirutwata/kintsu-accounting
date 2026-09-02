@@ -123,7 +123,10 @@ async function resolveContact(expense: any) {
   // the attached bill/receipt photo (not the payment slip) so a brand-new vendor still
   // gets a real address instead of FlowAccount's default blank ad-hoc contact.
   const receiptUrl = expense.receipt_image_urls?.[0]
-  if (!contact && receiptUrl) {
+  // New expense-bill OCR fills recipient_address during upload. Only use the
+  // legacy vendor OCR fallback for historical rows that still lack an address;
+  // otherwise the same bill would trigger a second model call during sync.
+  if (!contact && receiptUrl && !expense.recipient_address) {
     const extracted = await extractVendorInfoFromReceipt(receiptUrl).catch(() => null)
     if (extracted?.address) {
       contact = { name: extracted.name || contactName, address: extracted.address, taxId: extracted.taxId, branch: extracted.branch }

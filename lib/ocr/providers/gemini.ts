@@ -23,7 +23,7 @@ export class GeminiOcrProvider implements OcrProvider {
         config: {
           responseMimeType: 'application/json',
           responseJsonSchema: input.jsonSchema,
-          maxOutputTokens: 512,
+          maxOutputTokens: input.maxOutputTokens ?? 512,
           temperature: 0,
           httpOptions: { timeout: input.timeoutMs, retryOptions: { attempts: 1 } },
         },

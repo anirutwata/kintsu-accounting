@@ -1,5 +1,7 @@
 import { createOcrCacheKey } from './cache'
 import { thaiTransferSlipProfile } from './profiles/slip'
+import { taxInvoiceBillProfile } from './profiles/taxInvoiceBill'
+import { expenseBillProfile } from './profiles/expenseBill'
 import { AnthropicOcrProvider } from './providers/anthropic'
 import { GeminiOcrProvider } from './providers/gemini'
 import { hasBlockingSlipIssues, normalizeAndValidateSlip } from './validation'
@@ -11,6 +13,7 @@ import {
   type OcrProfileName,
   type OcrProvider,
   type OcrResult,
+  type OcrDataByProfile,
   type OcrUsageRecorder,
 } from './types'
 
@@ -23,6 +26,7 @@ export interface ExtractDocumentInput {
   schemaVersion?: string
   timeoutMs?: number
   now?: Date
+  context?: { categoryNames?: string[] }
 }
 
 type OcrEnvironment = Partial<Record<
@@ -79,9 +83,33 @@ async function saveCache(cache: OcrCache | undefined, cacheKey: string, result: 
   try { await cache.save(cacheKey, result) } catch { /* cache is best-effort */ }
 }
 
-export async function extractDocument(input: ExtractDocumentInput): Promise<OcrResult> {
-  const profile = thaiTransferSlipProfile
-  if (input.profile !== profile.name) throw new OcrError('configuration', 'Unsupported OCR profile')
+const profiles = {
+  thai_transfer_slip: {
+    ...thaiTransferSlipProfile,
+    validate: normalizeAndValidateSlip,
+    isBlocking: hasBlockingSlipIssues,
+    failureMessage: 'ไม่สามารถอ่านสลิปได้ในขณะนี้',
+    maxOutputTokens: 512,
+    promptFor: () => thaiTransferSlipProfile.prompt,
+    validateFor: (raw: unknown, _context: ExtractDocumentInput['context'], now?: Date) => normalizeAndValidateSlip(raw, now),
+  },
+  tax_invoice_bill: {
+    ...taxInvoiceBillProfile, maxOutputTokens: 512,
+    promptFor: () => taxInvoiceBillProfile.prompt,
+    validateFor: (raw: unknown) => taxInvoiceBillProfile.validate(raw),
+  },
+  expense_bill: {
+    ...expenseBillProfile,
+    promptFor: (context?: ExtractDocumentInput['context']) => expenseBillProfile.prompt(context?.categoryNames ?? []),
+    validateFor: (raw: unknown, context?: ExtractDocumentInput['context']) => expenseBillProfile.validate(raw, context?.categoryNames ?? []),
+  },
+} as const
+
+export async function extractDocument<TProfile extends keyof OcrDataByProfile>(
+  input: ExtractDocumentInput & { profile: TProfile },
+): Promise<OcrResult<OcrDataByProfile[TProfile]>> {
+  const profile = profiles[input.profile as keyof typeof profiles]
+  if (!profile) throw new OcrError('configuration', 'Unsupported OCR profile')
   const schemaVersion = input.schemaVersion ?? process.env.OCR_SCHEMA_VERSION ?? '1'
   if (!schemaVersion.trim()) throw new OcrError('configuration', 'OCR_SCHEMA_VERSION must not be blank')
   const hash = createOcrCacheKey(input.image.bytes, input.profile, schemaVersion)
@@ -89,9 +117,9 @@ export async function extractDocument(input: ExtractDocumentInput): Promise<OcrR
   try {
     const cached = await input.cache?.get(hash)
     if (cached) {
-      const validation = normalizeAndValidateSlip(cached.data, input.now)
-      if (validation.data && !hasBlockingSlipIssues(validation.issueCodes)) {
-        return { ...cached, data: validation.data, cached: true, hash }
+      const validation = profile.validateFor(cached.data, input.context, input.now)
+      if (validation.data && !profile.isBlocking(validation.issueCodes)) {
+        return { ...cached, data: validation.data, cached: true, hash } as OcrResult<OcrDataByProfile[TProfile]>
       }
     }
   } catch { /* cache failure must not prevent OCR */ }
@@ -106,12 +134,13 @@ export async function extractDocument(input: ExtractDocumentInput): Promise<OcrR
     try {
       const providerResult = await provider.extract({
         image: input.image,
-        prompt: profile.prompt,
+        prompt: profile.promptFor(input.context),
         jsonSchema: profile.jsonSchema,
         timeoutMs: configuredTimeout(input.timeoutMs),
+        maxOutputTokens: profile.maxOutputTokens,
       })
-      const validation = normalizeAndValidateSlip(providerResult.data, input.now)
-      if (!validation.data || hasBlockingSlipIssues(validation.issueCodes)) {
+      const validation = profile.validateFor(providerResult.data, input.context, input.now)
+      if (!validation.data || profile.isBlocking(validation.issueCodes)) {
         const metadata = attemptMetadata({
           provider, fallbackLevel, latencyMs: providerResult.latencyMs,
           inputTokens: providerResult.usage.inputTokens, outputTokens: providerResult.usage.outputTokens,
@@ -129,7 +158,7 @@ export async function extractDocument(input: ExtractDocumentInput): Promise<OcrR
       await recordUsage(input.usageRecorder, { ...metadata, profile: input.profile, schemaVersion })
       const result = { data: validation.data, metadata }
       await saveCache(input.cache, hash, result)
-      return { ...result, cached: false, hash }
+      return { ...result, cached: false, hash } as OcrResult<OcrDataByProfile[TProfile]>
     } catch (error) {
       const ocrError = error instanceof OcrError ? error : new OcrError('provider_error', 'OCR provider failed')
       const metadata = attemptMetadata({
@@ -140,8 +169,10 @@ export async function extractDocument(input: ExtractDocumentInput): Promise<OcrR
       failures.push(ocrError.category)
     }
   }
-  throw new OcrError('provider_error', 'ไม่สามารถอ่านสลิปได้ในขณะนี้', [...new Set(failures)])
+  throw new OcrError('provider_error', profile.failureMessage, [...new Set(failures)])
 }
+
+export { parseTaxInvoiceBillJson } from './profiles/taxInvoiceBill'
 
 export * from './types'
 export * from './image'

@@ -19,7 +19,7 @@ export class AnthropicOcrProvider implements OcrProvider {
       const client = new Anthropic({ apiKey: this.apiKey, timeout: input.timeoutMs, maxRetries: 0 })
       const response = await client.messages.create({
         model: this.model,
-        max_tokens: 512,
+        max_tokens: input.maxOutputTokens ?? 512,
         messages: [{ role: 'user', content: [
           { type: 'image', source: { type: 'base64', media_type: input.image.mimeType, data: Buffer.from(input.image.bytes).toString('base64') } },
           { type: 'text', text: `${input.prompt}\nตอบเป็น JSON object เท่านั้น ไม่มี markdown` },

@@ -1,4 +1,4 @@
-export type OcrProfileName = 'thai_transfer_slip'
+export type OcrProfileName = 'thai_transfer_slip' | 'tax_invoice_bill' | 'expense_bill'
 
 export type OcrProviderName = 'gemini' | 'anthropic'
 
@@ -29,6 +29,42 @@ export interface SlipOcrData {
   confidence: number
 }
 
+export interface TaxInvoiceBillOcrData {
+  documentDate: string | null
+  subtotalBaht: number | null
+  totalBaht: number | null
+  paymentMethod: 'cash' | 'transfer' | 'credit_card' | null
+  confidence: number
+}
+
+export interface ExpenseBillItemOcrData {
+  description: string
+  quantity: number
+  unit: string
+  pricePerUnit: number
+  suggestedCategory: string | null
+}
+
+export interface ExpenseBillOcrData {
+  hasVat: boolean
+  vatSatang: number
+  vatInclusive: boolean
+  hasWht: boolean
+  whtSatang: number
+  hasDiscount: boolean
+  discountSatang: number
+  totalSatang: number | null
+  items: ExpenseBillItemOcrData[]
+  vendor: { name: string; address: string; taxId: string; branch: string }
+  confidence: number
+}
+
+export interface OcrDataByProfile {
+  thai_transfer_slip: SlipOcrData
+  tax_invoice_bill: TaxInvoiceBillOcrData
+  expense_bill: ExpenseBillOcrData
+}
+
 export interface ProviderUsage {
   inputTokens: number | null
   outputTokens: number | null
@@ -49,6 +85,7 @@ export interface OcrProvider {
     prompt: string
     jsonSchema: Record<string, unknown>
     timeoutMs: number
+    maxOutputTokens?: number
   }): Promise<ProviderResult>
 }
 
@@ -64,15 +101,15 @@ export interface OcrAttemptMetadata {
   errorCategory: OcrErrorCategory | null
 }
 
-export interface OcrResult {
-  data: SlipOcrData
+export interface OcrResult<TData = SlipOcrData> {
+  data: TData
   metadata: OcrAttemptMetadata
   cached: boolean
   hash: string
 }
 
-export interface CachedOcrResult {
-  data: SlipOcrData
+export interface CachedOcrResult<TData = unknown> {
+  data: TData
   metadata: OcrAttemptMetadata
 }
 

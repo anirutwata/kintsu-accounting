@@ -4,6 +4,8 @@
 // the auto-filled fields before saving (unlike lib/vendorOcr.ts's extraction, which
 // runs silently server-side during sync).
 import Anthropic from '@anthropic-ai/sdk'
+import { parseTaxInvoiceBillJson } from './ocr/profiles/taxInvoiceBill'
+export { parseTaxInvoiceBillJson } from './ocr/profiles/taxInvoiceBill'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -89,20 +91,6 @@ export interface ExtractedTaxInvoiceBill {
   confidence: number
 }
 
-interface RawTaxInvoiceBillJson {
-  date_found?: boolean
-  date_day?: unknown
-  date_month?: unknown
-  date_year_ce?: unknown
-  subtotal_found?: boolean
-  subtotal_baht?: unknown
-  total_found?: boolean
-  total_baht?: unknown
-  payment_method_found?: boolean
-  payment_method?: unknown
-  confidence?: unknown
-}
-
 // Exported for unit testing the date-assembly/validation logic without mocking the
 // Anthropic SDK. Day/month/year are read as three separate fields (see the prompt
 // below) rather than having the model assemble an ISO string itself — a bill dated
@@ -110,33 +98,6 @@ interface RawTaxInvoiceBillJson {
 // day-or-month numbers), and asking the model to label which number is which
 // resists the classic DD/MM-vs-MM/DD swap far better than asking it to convert
 // straight to YYYY-MM-DD in one step.
-export function parseTaxInvoiceBillJson(parsed: RawTaxInvoiceBillJson): ExtractedTaxInvoiceBill {
-  const day = Number(parsed.date_day)
-  const month = Number(parsed.date_month)
-  const year = Number(parsed.date_year_ce)
-  const validComponents = !!parsed.date_found
-    && Number.isInteger(day) && day >= 1 && day <= 31
-    && Number.isInteger(month) && month >= 1 && month <= 12
-    && Number.isInteger(year) && year >= 2000 && year <= 2100
-  const isoDate = validComponents
-    ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-    : null
-  const calendarDate = validComponents ? new Date(Date.UTC(year, month - 1, day)) : null
-  const validDate = calendarDate !== null
-    && calendarDate.getUTCFullYear() === year
-    && calendarDate.getUTCMonth() === month - 1
-    && calendarDate.getUTCDate() === day
-  const validPaymentMethod = !!parsed.payment_method_found
-    && ['cash', 'transfer', 'credit_card'].includes(parsed.payment_method as string)
-  return {
-    documentDate: validDate ? isoDate : null,
-    subtotalBaht: parsed.subtotal_found ? Number(parsed.subtotal_baht) || null : null,
-    totalBaht: parsed.total_found ? Number(parsed.total_baht) || null : null,
-    paymentMethod: validPaymentMethod ? (parsed.payment_method as ExtractedTaxInvoiceBill['paymentMethod']) : null,
-    confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0,
-  }
-}
-
 export async function extractTaxInvoiceFieldsFromBill(imageUrl: string): Promise<ExtractedTaxInvoiceBill | null> {
   const res = await fetch(imageUrl)
   if (!res.ok) return null

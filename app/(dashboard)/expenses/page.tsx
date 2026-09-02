@@ -280,6 +280,7 @@ export default function ExpensesPage() {
     // when the staff member hasn't already ticked/typed VAT themselves — never
     // overwrite a manual entry.
     const shouldDetectVat = form.receipt_image_urls.length === 0 && !form.has_vat && !form.vat && !form.has_wht && !form.wht
+    const shouldDetectItems = itemRowsAreEmpty(form.items)
     const newUrls: string[] = []
     const newPreviews: string[] = []
     for (const file of Array.from(files)) {
@@ -301,10 +302,12 @@ export default function ExpensesPage() {
     }))
     setUploadingReceipt(false)
 
-    if (shouldDetectVat && newUrls[0]) {
-      setVatOcring(true)
+    // Read taxes and every line item from the first bill in one provider call.
+    if ((shouldDetectVat || shouldDetectItems) && newUrls[0]) {
+      if (shouldDetectVat) setVatOcring(true)
+      if (shouldDetectItems) setItemsOcring(true)
       try {
-        const res = await fetch('/api/ocr/bill-vat', {
+        const res = await fetch('/api/ocr/bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: newUrls[0] }),
@@ -320,35 +323,35 @@ export default function ExpensesPage() {
         if (data.hasDiscount && data.discountSatang > 0) {
           setForm(f => (f.discount ? f : { ...f, discount: (data.discountSatang / 100).toFixed(2) }))
         }
-      } catch { /* ignore — staff can still tick VAT/WHT manually */ }
-      setVatOcring(false)
-    }
-
-    // Same first-photo-only, don't-overwrite-manual-entry guard as the VAT detection above.
-    if (itemRowsAreEmpty(form.items) && newUrls[0]) {
-      setItemsOcring(true)
-      try {
-        const res = await fetch('/api/ocr/bill-items', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: newUrls[0] }),
-        })
-        const data = await res.json()
-        const extracted = Array.isArray(data.items) ? data.items : []
-        if (extracted.length > 0) {
+        if (data.vendor?.name || data.vendor?.address) {
+          setForm(f => ({
+            ...f,
+            recipient_name: f.recipient_name || data.vendor.name || '',
+            recipient_address: f.recipient_address || data.vendor.address || '',
+          }))
+        }
+        const extracted: Array<{
+          suggestedCategory?: string | null
+          description?: string
+          quantity?: number
+          unit?: string
+          pricePerUnit?: number
+        }> = Array.isArray(data.items) ? data.items : []
+        if (shouldDetectItems && extracted.length > 0) {
           setForm(f => (!itemRowsAreEmpty(f.items) ? f : {
             ...f,
-            items: extracted.map((i: any) => ({
+            items: extracted.map(i => ({
               category: i.suggestedCategory || '',
-              description: i.description,
-              quantity: String(i.quantity),
-              unit: i.unit,
-              price_per_unit: String(i.pricePerUnit),
+              description: i.description || '',
+              quantity: String(i.quantity ?? 1),
+              unit: i.unit || 'รายการ',
+              price_per_unit: String(i.pricePerUnit ?? 0),
             })),
           }))
         }
-      } catch { /* ignore — staff can still add rows manually */ }
-      setItemsOcring(false)
+      } catch { /* ignore — staff can still fill every field manually */ }
+      if (shouldDetectVat) setVatOcring(false)
+      if (shouldDetectItems) setItemsOcring(false)
     }
   }
 

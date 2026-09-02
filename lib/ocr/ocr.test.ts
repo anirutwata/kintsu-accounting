@@ -20,6 +20,29 @@ const valid = {
   confidence: 0.94,
 }
 
+const validTaxInvoiceBill = {
+  date_found: true,
+  date_day: 1,
+  date_month: 9,
+  date_year_ce: 2026,
+  subtotal_found: true,
+  subtotal_baht: 1268,
+  total_found: true,
+  total_baht: 1356,
+  payment_method_found: true,
+  payment_method: 'credit_card',
+  confidence: 0.95,
+}
+
+const validExpenseBill = {
+  has_vat: true, vat_baht: 88, vat_inclusive: false,
+  has_wht: true, wht_baht: 38, has_discount: true, discount_baht: 100,
+  total_baht: 1356, confidence: 0.93,
+  items: [{ description: 'กระดาษ A4', quantity: 2, unit: 'รีม', price_per_unit: 634, suggested_category: 'อุปกรณ์สำนักงาน' }],
+  vendor_name: 'บริษัท ตัวอย่าง จำกัด', vendor_address: 'กรุงเทพฯ 10110',
+  vendor_tax_id: '0105559999999', vendor_branch: 'สำนักงานใหญ่',
+}
+
 function provider(name: 'gemini' | 'anthropic', model: string, result: unknown): OcrProvider & { extract: ReturnType<typeof vi.fn> } {
   return {
     name,
@@ -33,6 +56,63 @@ function provider(name: 'gemini' | 'anthropic', model: string, result: unknown):
 }
 
 describe('extractDocument', () => {
+  it('extracts every tax-invoice bill field in one Gemini Flash-Lite call', async () => {
+    const primary = provider('gemini', 'gemini-2.5-flash-lite', validTaxInvoiceBill)
+    const secondary = provider('gemini', 'gemini-2.5-flash', validTaxInvoiceBill)
+    const result = await extractDocument({ profile: 'tax_invoice_bill', image, providers: [primary, secondary] })
+    expect(result.data).toEqual({
+      documentDate: '2026-09-01', subtotalBaht: 1268, totalBaht: 1356,
+      paymentMethod: 'credit_card', confidence: 0.95,
+    })
+    expect(primary.extract).toHaveBeenCalledOnce()
+    expect(secondary.extract).not.toHaveBeenCalled()
+  })
+
+  it('uses a validated tax-invoice bill cache without calling a provider', async () => {
+    const primary = provider('gemini', 'gemini-2.5-flash-lite', validTaxInvoiceBill)
+    const cache: OcrCache = { get: vi.fn().mockResolvedValue({
+      data: { documentDate: '2026-09-01', subtotalBaht: 1268, totalBaht: 1356, paymentMethod: 'credit_card', confidence: 0.95 },
+      metadata: { provider: 'gemini', model: 'gemini-2.5-flash-lite', fallbackLevel: 0 },
+    }), save: vi.fn() } as unknown as OcrCache
+    const result = await extractDocument({ profile: 'tax_invoice_bill', image, providers: [primary], cache })
+    expect(result.cached).toBe(true)
+    expect(primary.extract).not.toHaveBeenCalled()
+  })
+
+  it('extracts expense taxes and line items in one Gemini Flash-Lite call', async () => {
+    const primary = provider('gemini', 'gemini-2.5-flash-lite', validExpenseBill)
+    const result = await extractDocument({
+      profile: 'expense_bill', image, providers: [primary],
+      context: { categoryNames: ['อุปกรณ์สำนักงาน', 'วัตถุดิบ'] },
+    })
+    expect(result.data).toEqual({
+      hasVat: true, vatSatang: 8800, vatInclusive: false,
+      hasWht: true, whtSatang: 3800, hasDiscount: true, discountSatang: 10000,
+      totalSatang: 135600, confidence: 0.93,
+      vendor: { name: 'บริษัท ตัวอย่าง จำกัด', address: 'กรุงเทพฯ 10110', taxId: '0105559999999', branch: 'สำนักงานใหญ่' },
+      items: [{ description: 'กระดาษ A4', quantity: 2, unit: 'รีม', pricePerUnit: 634, suggestedCategory: 'อุปกรณ์สำนักงาน' }],
+    })
+    expect(primary.extract).toHaveBeenCalledOnce()
+  })
+
+  it('uses a validated expense-bill cache without calling a provider', async () => {
+    const primary = provider('gemini', 'gemini-2.5-flash-lite', validExpenseBill)
+    const cached = {
+      hasVat: true, vatSatang: 8800, vatInclusive: false,
+      hasWht: true, whtSatang: 3800, hasDiscount: true, discountSatang: 10000,
+      totalSatang: 135600, confidence: 0.93,
+      vendor: { name: 'บริษัท ตัวอย่าง จำกัด', address: 'กรุงเทพฯ 10110', taxId: '0105559999999', branch: 'สำนักงานใหญ่' },
+      items: [{ description: 'กระดาษ A4', quantity: 2, unit: 'รีม', pricePerUnit: 634, suggestedCategory: 'อุปกรณ์สำนักงาน' }],
+    }
+    const cache: OcrCache = { get: vi.fn().mockResolvedValue({ data: cached, metadata: {} }), save: vi.fn() } as unknown as OcrCache
+    const result = await extractDocument({
+      profile: 'expense_bill', image, providers: [primary], cache,
+      context: { categoryNames: ['อุปกรณ์สำนักงาน'] },
+    })
+    expect(result.cached).toBe(true)
+    expect(primary.extract).not.toHaveBeenCalled()
+  })
+
   it('stops after Gemini Flash-Lite succeeds', async () => {
     const primary = provider('gemini', 'gemini-2.5-flash-lite', valid)
     const secondary = provider('gemini', 'gemini-2.5-flash', valid)
