@@ -8,7 +8,13 @@ import { syncRevenueJournal, type RevenueJournalAccount } from './revenueJournal
 import { netRevenueAmountSatang } from './netRevenueAmount'
 
 const REPORT_SENDER = 'ttbsmartshop@digio.co.th'
-const REPORT_SUBJECT = 'ttb smart shop: รายงานการขายประจำวัน (Daily Sales Report)'
+// The automatic 03:00 daily email and the "resend on request" email TTB sends when a
+// staff member asks for a report themselves (used to backfill a day whose automatic
+// report never arrived) use different subject lines for the same report format.
+const REPORT_SUBJECTS = [
+  'ttb smart shop: รายงานการขายประจำวัน (Daily Sales Report)',
+  'ttb smart shop: รายงานการขาย (Your Requested Sales Report)',
+]
 
 export function expectedTtbReportDate(): string {
   const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -31,13 +37,14 @@ async function findReportMessages(): Promise<Array<{ messageId: string; attachme
   await client.connect()
   const lock = await client.getMailboxLock('INBOX')
   try {
-    const uids = await client.search({ gmraw: `from:${REPORT_SENDER} subject:"${REPORT_SUBJECT}" newer_than:3d has:attachment` }, { uid: true })
+    const subjectQuery = REPORT_SUBJECTS.map(subject => `subject:"${subject}"`).join(' OR ')
+    const uids = await client.search({ gmraw: `from:${REPORT_SENDER} (${subjectQuery}) newer_than:3d has:attachment` }, { uid: true })
     for (const uid of (uids || []).slice(-20)) {
       const message = await client.fetchOne(uid, { source: true }, { uid: true })
       if (!message || !message.source) continue
       const parsed = await simpleParser(message.source)
       const senders = parsed.from?.value.map(item => item.address?.toLowerCase()).filter(Boolean) || []
-      if (senders.length !== 1 || senders[0] !== REPORT_SENDER || parsed.subject !== REPORT_SUBJECT) continue
+      if (senders.length !== 1 || senders[0] !== REPORT_SENDER || !REPORT_SUBJECTS.includes(parsed.subject || '')) continue
       const messageId = parsed.messageId || `gmail-uid-${uid}`
       for (const attachment of parsed.attachments) {
         if (!/\.xlsx$/i.test(attachment.filename || '')) continue
@@ -171,14 +178,19 @@ async function importAttachment(supabase: SupabaseClient, input: { messageId: st
   const sha256 = createHash('sha256').update(input.content).digest('hex')
   // Validate the bank document on every run, including legacy rows imported
   // before filename/summary cross-checking existed. Nothing may repair KINTSU
-  // or reach FlowAccount until the current attachment passes all date checks.
+  // or reach FlowAccount until the attachment passes all date checks.
   const report = await readEncryptedTtbReport(
     input.content,
     requiredEnv('TTB_SMARTSHOP_REPORT_PASSWORD'),
     input.attachmentName,
   )
-  if (report.reportDate !== expectedTtbReportDate()) {
-    return { imported: false, skipped: true, reportDate: report.reportDate, reason: `รอเฉพาะรายงาน D-1 (${expectedTtbReportDate()})` }
+  // No longer gated to D-1 only: a staff member can ask TTB to resend an earlier day's
+  // report (e.g. one the automatic 03:00 email never delivered) and that backfill should
+  // import and sync just like the daily report. Still reject anything dated in the
+  // future, which could only mean a bank clock/timezone bug.
+  const todayBangkok = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  if (report.reportDate > todayBangkok) {
+    throw new Error(`วันที่รายงาน TTB อยู่ในอนาคต: ${report.reportDate}`)
   }
   const { data: existingByMessage } = await supabase.from('ttb_promptpay_reports').select('id, report_date, successful_amount_satang')
     .eq('gmail_message_id', input.messageId).eq('is_deleted', false).maybeSingle()
@@ -239,10 +251,6 @@ export async function importTtbPromptPayFromGmail(supabase: SupabaseClient) {
   const results = []
   for (const message of messages) {
     const imported = await importAttachment(supabase, message)
-    if ('skipped' in imported && imported.skipped) {
-      results.push(imported)
-      continue
-    }
     const { data: reconciliation, error: reconciliationError } = await supabase
       .rpc('reconcile_pending_ttb_tax_invoices_v3', { p_revenue_date: imported.reportDate })
     if (reconciliationError) throw reconciliationError
@@ -256,8 +264,8 @@ export async function importTtbPromptPayFromGmail(supabase: SupabaseClient) {
     results.push({ ...imported, sync })
   }
   const expectedDate = expectedTtbReportDate()
-  const expected = results.find(result => result.reportDate === expectedDate && !('skipped' in result && result.skipped))
+  const expected = results.find(result => result.reportDate === expectedDate)
   if (!expected) throw new Error(`ไม่พบรายงาน TTB Smart Shop ของวันที่ ${expectedDate}`)
-  if ('sync' in expected && expected.sync && !expected.sync.ok) throw new Error(expected.sync.error)
-  return { scanned: messages.length, results, current: 'sync' in expected ? expected : undefined }
+  if (!expected.sync.ok) throw new Error(expected.sync.error)
+  return { scanned: messages.length, results, current: expected }
 }

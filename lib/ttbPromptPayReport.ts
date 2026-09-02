@@ -38,6 +38,11 @@ export function reportDateFromTtbFilename(filename: string): string {
 }
 
 export function assertTtbFilenameMatchesReportDate(filename: string, reportDate: string): void {
+  // TTB's "resend on request" email (used to backfill a day whose automatic 03:00
+  // report never arrived) attaches a generic Report_Kintsu.xlsx with no date in the
+  // name — fall back to the workbook's own date checks (summary date vs. transaction
+  // date, already enforced in parseTtbSmartShopRows) instead of a filename cross-check.
+  if (/^Report_Kintsu\.xlsx$/i.test(filename.trim())) return
   const filenameDate = reportDateFromTtbFilename(filename)
   if (filenameDate !== reportDate) {
     throw new Error(`วันที่ชื่อไฟล์ TTB ไม่ตรงกับวันที่รับเงิน: ชื่อไฟล์ ${filenameDate} แต่รายการ ${reportDate}`)

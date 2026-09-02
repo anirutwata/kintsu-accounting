@@ -44,6 +44,10 @@ describe('TTB Smart Shop report', () => {
       .toThrow('วันที่ชื่อไฟล์ TTB ไม่ตรงกับวันที่รับเงิน')
   })
 
+  it('accepts the undated Report_Kintsu.xlsx TTB sends for a manually-requested resend', () => {
+    expect(() => assertTtbFilenameMatchesReportDate('Report_Kintsu.xlsx', '2026-08-27')).not.toThrow()
+  })
+
   it('rejects a report whose summary date disagrees with its transactions', () => {
     const rows = reportRows()
     rows[10] = ['หมายเหตุ: - สรุปรายการสำหรับวันที่ 23/08/2026 ณ เวลา 23:00 น.']
