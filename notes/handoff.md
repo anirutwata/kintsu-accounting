@@ -305,6 +305,14 @@
 - Pushed to `main`; Vercel Production deployment is Ready and aliased at `https://kintsu-accounting.vercel.app`.
 
 ## Working conventions ของ repo นี้ (สำคัญ อ่านก่อนเริ่มงาน)
+
+## Unified OCR pipeline (2026-09-03)
+- All runtime document extraction now enters `lib/ocr` and is Gemini-first: `gemini-3.5-flash-lite` → `gemini-2.5-flash` → `claude-sonnet-5` final fallback.
+- Removed every direct runtime reference to `claude-sonnet-4-6`, `new Anthropic`, and `messages.create` outside the shared Anthropic provider adapter.
+- Covered profiles/routes: payment slips, inter-account transfer slips, tax-invoice bills, expense bills (date/VAT/WHT/discount/vendor/items), asset receipts, and PDF bank statements used by reconcile.
+- Compatibility endpoints `/api/ocr/transfer`, `/api/ocr/bill-vat`, and `/api/ocr/bill-items` remain but delegate to the shared pipeline.
+- Slip schema now includes `recipient_account`; cache version is `slip-account-v2` so old cache cannot silently omit the destination account.
+- Verification at implementation time: 139 tests passed, 3 live tests skipped, TypeScript/build and targeted lint passed.
 - **Migration**: มี `DATABASE_URL` ใน `.env.local` แล้ว รันตรงผ่าน `psql "$DATABASE_URL" -f supabase/migrations/0NN_xxx.sql` ได้เลย ไม่ต้องให้ user paste ใน Supabase Dashboard
 - **Soft delete only** — ทุกตารางมี `is_deleted`/`is_active`, ห้าม hard delete
 - **FlowAccount เป็น Production จริง** (บริษัท คิวโซลา จำกัด N304014) ไม่ใช่ Sandbox — ระวังทุกครั้งที่เขียน/ทดสอบ ถ้าต้องสร้างเอกสารทดสอบ ต้องลบ/void คืนหลังทดสอบเสมอ (ผ่าน `deleteExpenseDocument()`/`updateExpense()` — ใช้ได้เฉพาะตอนเอกสารยังเป็น "awaiting"; ถ้า "ชำระแล้ว" ต้อง void ในเว็บ FlowAccount เอง แล้วเช็คด้วย `expense__get_document` field `isDelete` เพื่อยืนยัน ไม่ใช่แค่ดู `statusString`)
