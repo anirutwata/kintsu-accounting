@@ -24,7 +24,7 @@ The server-side `/api/ocr` route uses Gemini first and Anthropic only as the fin
 GEMINI_API_KEY=
 ANTHROPIC_API_KEY=
 OCR_SESSION_SIGNING_SECRET=
-OCR_PRIMARY_MODEL=gemini-2.5-flash-lite
+OCR_PRIMARY_MODEL=gemini-3.5-flash-lite
 OCR_SECONDARY_MODEL=gemini-2.5-flash
 OCR_FINAL_MODEL=claude-sonnet-4-6
 OCR_FINAL_FALLBACK_ENABLED=true

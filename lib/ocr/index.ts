@@ -54,7 +54,7 @@ export function createConfiguredProviders(environment?: OcrEnvironment): OcrProv
     }
   }
   if (geminiKey) {
-    providers.push(new GeminiOcrProvider(env.OCR_PRIMARY_MODEL || 'gemini-2.5-flash-lite', 0, geminiKey))
+    providers.push(new GeminiOcrProvider(env.OCR_PRIMARY_MODEL || 'gemini-3.5-flash-lite', 0, geminiKey))
     providers.push(new GeminiOcrProvider(env.OCR_SECONDARY_MODEL || 'gemini-2.5-flash', 1, geminiKey))
   }
   if (env.OCR_FINAL_FALLBACK_ENABLED !== 'false' && env.ANTHROPIC_API_KEY) {
@@ -94,7 +94,7 @@ const profiles = {
     validateFor: (raw: unknown, _context: ExtractDocumentInput['context'], now?: Date) => normalizeAndValidateSlip(raw, now),
   },
   tax_invoice_bill: {
-    ...taxInvoiceBillProfile, maxOutputTokens: 512,
+    ...taxInvoiceBillProfile, maxOutputTokens: 2048,
     promptFor: () => taxInvoiceBillProfile.prompt,
     validateFor: (raw: unknown) => taxInvoiceBillProfile.validate(raw),
   },

@@ -65,6 +65,7 @@ describe('extractDocument', () => {
       paymentMethod: 'credit_card', confidence: 0.95,
     })
     expect(primary.extract).toHaveBeenCalledOnce()
+    expect(primary.extract).toHaveBeenCalledWith(expect.objectContaining({ maxOutputTokens: 2048 }))
     expect(secondary.extract).not.toHaveBeenCalled()
   })
 
@@ -246,7 +247,7 @@ describe('provider configuration', () => {
     const providers = createConfiguredProviders({
       GEMINI_API_KEY: 'test', ANTHROPIC_API_KEY: 'test', OCR_FINAL_FALLBACK_ENABLED: 'false',
     })
-    expect(providers.map(item => item.model)).toEqual(['gemini-2.5-flash-lite', 'gemini-2.5-flash'])
+    expect(providers.map(item => item.model)).toEqual(['gemini-3.5-flash-lite', 'gemini-2.5-flash'])
   })
 
   it('fails safely when no provider key is configured', async () => {
