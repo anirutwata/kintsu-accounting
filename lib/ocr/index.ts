@@ -35,7 +35,7 @@ type OcrEnvironment = Partial<Record<
 >>
 
 export function createConfiguredProviders(environment?: OcrEnvironment): OcrProvider[] {
-  const env: OcrEnvironment = environment ?? {
+  const rawEnv: OcrEnvironment = environment ?? {
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     OCR_PRIMARY_MODEL: process.env.OCR_PRIMARY_MODEL,
@@ -43,6 +43,9 @@ export function createConfiguredProviders(environment?: OcrEnvironment): OcrProv
     OCR_FINAL_MODEL: process.env.OCR_FINAL_MODEL,
     OCR_FINAL_FALLBACK_ENABLED: process.env.OCR_FINAL_FALLBACK_ENABLED,
   }
+  const env = Object.fromEntries(
+    Object.entries(rawEnv).map(([name, value]) => [name, value?.trim()]),
+  ) as OcrEnvironment
   const providers: OcrProvider[] = []
   const geminiKey = env.GEMINI_API_KEY
   for (const [name, value] of Object.entries(env)) {

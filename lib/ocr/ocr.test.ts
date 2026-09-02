@@ -238,6 +238,19 @@ describe('extractDocument', () => {
 })
 
 describe('provider configuration', () => {
+  it('trims whitespace accidentally stored with provider model names', () => {
+    const providers = createConfiguredProviders({
+      GEMINI_API_KEY: 'test', ANTHROPIC_API_KEY: 'test',
+      OCR_PRIMARY_MODEL: 'gemini-3.5-flash-lite\n',
+      OCR_SECONDARY_MODEL: ' gemini-2.5-flash ',
+      OCR_FINAL_MODEL: 'claude-sonnet-5\n',
+      OCR_FINAL_FALLBACK_ENABLED: ' true\n',
+    })
+    expect(providers.map(item => item.model)).toEqual([
+      'gemini-3.5-flash-lite', 'gemini-2.5-flash', 'claude-sonnet-5',
+    ])
+  })
+
   it('uses Anthropic directly when no Gemini key is configured', () => {
     const providers = createConfiguredProviders({ ANTHROPIC_API_KEY: 'test', OCR_FINAL_FALLBACK_ENABLED: 'true' })
     expect(providers.map(item => [item.name, item.model])).toEqual([['anthropic', 'claude-sonnet-5']])
