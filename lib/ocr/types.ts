@@ -46,6 +46,7 @@ export interface ExpenseBillItemOcrData {
 }
 
 export interface ExpenseBillOcrData {
+  documentDate: string | null
   hasVat: boolean
   vatSatang: number
   vatInclusive: boolean

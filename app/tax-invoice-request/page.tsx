@@ -1,7 +1,8 @@
 'use client'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { getTodayBKK } from '@/lib/utils'
 import { compressImageFile } from '@/lib/compressImage'
+import { ImageLightbox } from '@/components/ImageLightbox'
 
 // Everything on this page is Thai — a native <input type="date"> renders in whatever
 // language the customer's device happens to be set to (e.g. "24 Aug 2026"), which the
@@ -73,6 +74,8 @@ export default function TaxInvoiceRequestPage() {
   const [submitted, setSubmitted] = useState(false)
   const [lookingUpTaxId, setLookingUpTaxId] = useState(false)
   const [taxIdLookupError, setTaxIdLookupError] = useState('')
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const billInputRef = useRef<HTMLInputElement>(null)
 
   function set<K extends keyof ReturnType<typeof emptyForm>>(key: K, value: ReturnType<typeof emptyForm>[K]) {
     setForm(f => ({ ...f, [key]: value }))
@@ -247,20 +250,29 @@ export default function TaxInvoiceRequestPage() {
 
         <form onSubmit={handleFormSubmit} className="space-y-3">
           <Field label="รูปถ่ายบิล/ใบเสร็จ *">
-            <label className="block border-2 border-dashed rounded-xl p-3 text-center cursor-pointer"
+            <input ref={billInputRef} type="file" accept="image/*" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleBillUpload(f) }} />
+            <div className="block border-2 border-dashed rounded-xl p-3 text-center"
               style={{ borderColor: form.bill_image_url ? '#16A34A' : '#e5e7eb' }}>
-              <input type="file" accept="image/*" className="hidden"
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleBillUpload(f) }} />
               {billPreview ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={billPreview} alt="bill" className="max-h-48 mx-auto rounded-lg object-contain" />
+                <button type="button" className="mx-auto block cursor-zoom-in" onClick={() => setLightboxUrl(billPreview)}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={billPreview} alt="บิลหรือใบเสร็จ" className="max-h-48 mx-auto rounded-lg object-contain" />
+                  <span className="mt-1 block text-xs text-gray-500">แตะรูปเพื่อดูขนาดใหญ่</span>
+                </button>
               ) : (
-                <span className="text-sm text-gray-500">📷 แตะเพื่อถ่ายรูปหรือเลือกรูปบิล</span>
+                <button type="button" onClick={() => billInputRef.current?.click()} className="text-sm text-gray-500">
+                  📷 แตะเพื่อถ่ายรูปหรือเลือกรูปบิล
+                </button>
               )}
               {uploadingBill && <p className="text-xs text-gray-400 mt-1">กำลังอัปโหลด...</p>}
               {billOcring && <p className="text-xs text-gray-400 mt-1">🔍 กำลังอ่านวันที่/ยอดเงินจากบิล...</p>}
-              {form.bill_image_url && !uploadingBill && !billOcring && <p className="text-xs text-green-600 mt-1">✓ แนบรูปแล้ว (แตะเพื่อเปลี่ยนรูป)</p>}
-            </label>
+              {form.bill_image_url && !uploadingBill && !billOcring && (
+                <button type="button" onClick={() => billInputRef.current?.click()} className="mt-2 text-xs font-medium text-green-700 underline">
+                  ✓ แนบรูปแล้ว · เปลี่ยนรูป
+                </button>
+              )}
+            </div>
             {uploadError && <p className="text-xs text-red-500">❌ {uploadError}</p>}
           </Field>
 
@@ -431,6 +443,7 @@ export default function TaxInvoiceRequestPage() {
           </div>
         </div>
       )}
+      <ImageLightbox src={lightboxUrl} alt="บิลหรือใบเสร็จ" onClose={() => setLightboxUrl(null)} />
     </div>
   )
 }

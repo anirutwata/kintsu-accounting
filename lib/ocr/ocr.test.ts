@@ -35,6 +35,7 @@ const validTaxInvoiceBill = {
 }
 
 const validExpenseBill = {
+  document_date_found: true, document_date_day: 18, document_date_month: 8, document_date_year_ce: 2026,
   has_vat: true, vat_baht: 88, vat_inclusive: false,
   has_wht: true, wht_baht: 38, has_discount: true, discount_baht: 100,
   total_baht: 1356, confidence: 0.93,
@@ -87,6 +88,7 @@ describe('extractDocument', () => {
       context: { categoryNames: ['อุปกรณ์สำนักงาน', 'วัตถุดิบ'] },
     })
     expect(result.data).toEqual({
+      documentDate: '2026-08-18',
       hasVat: true, vatSatang: 8800, vatInclusive: false,
       hasWht: true, whtSatang: 3800, hasDiscount: true, discountSatang: 10000,
       totalSatang: 135600, confidence: 0.93,
@@ -99,6 +101,7 @@ describe('extractDocument', () => {
   it('uses a validated expense-bill cache without calling a provider', async () => {
     const primary = provider('gemini', 'gemini-2.5-flash-lite', validExpenseBill)
     const cached = {
+      documentDate: '2026-08-18',
       hasVat: true, vatSatang: 8800, vatInclusive: false,
       hasWht: true, whtSatang: 3800, hasDiscount: true, discountSatang: 10000,
       totalSatang: 135600, confidence: 0.93,

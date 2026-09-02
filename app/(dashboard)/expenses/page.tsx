@@ -5,6 +5,7 @@ import { formatBaht, toSatang } from '@/lib/money'
 import { getTodayBKK, getMonthKey, formatThaiMonth } from '@/lib/utils'
 import { compressImageFile } from '@/lib/compressImage'
 import { ThaiDateSelect } from '@/components/ThaiDateSelect'
+import { ImageLightbox } from '@/components/ImageLightbox'
 import type { Expense, BankAccount, OcrData, ExpenseItem } from '@/types'
 
 const BANK_OPTIONS = ['KBANK','SCB','KTB','BBL','TTB','GSB','BAY','BAAC','GHB','CIMB','UOB','KKP','LH BANK']
@@ -281,6 +282,7 @@ export default function ExpensesPage() {
     // overwrite a manual entry.
     const shouldDetectVat = form.receipt_image_urls.length === 0 && !form.has_vat && !form.vat && !form.has_wht && !form.wht
     const shouldDetectItems = itemRowsAreEmpty(form.items)
+    const shouldDetectDocumentDate = form.receipt_image_urls.length === 0 && form.document_date === getTodayBKK()
     const newUrls: string[] = []
     const newPreviews: string[] = []
     for (const file of Array.from(files)) {
@@ -303,7 +305,7 @@ export default function ExpensesPage() {
     setUploadingReceipt(false)
 
     // Read taxes and every line item from the first bill in one provider call.
-    if ((shouldDetectVat || shouldDetectItems) && newUrls[0]) {
+    if ((shouldDetectDocumentDate || shouldDetectVat || shouldDetectItems) && newUrls[0]) {
       if (shouldDetectVat) setVatOcring(true)
       if (shouldDetectItems) setItemsOcring(true)
       try {
@@ -313,6 +315,9 @@ export default function ExpensesPage() {
           body: JSON.stringify({ url: newUrls[0] }),
         })
         const data = await res.json()
+        if (shouldDetectDocumentDate && typeof data.documentDate === 'string') {
+          setForm(f => (f.document_date === getTodayBKK() ? { ...f, document_date: data.documentDate } : f))
+        }
         if (data.hasVat && data.vatSatang > 0) {
           // Guard again at write time — staff may have ticked VAT manually while OCR was in flight.
           setForm(f => (f.has_vat || f.vat ? f : { ...f, has_vat: true, vat: (data.vatSatang / 100).toFixed(2), vat_inclusive: !!data.vatInclusive }))
@@ -804,14 +809,7 @@ export default function ExpensesPage() {
       )}
 
       {/* ── Image Lightbox ─────────────────────────────────────────────── */}
-      {lightboxUrl && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90"
-          onClick={() => setLightboxUrl(null)}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lightboxUrl} alt="full" className="max-w-full max-h-full object-contain p-4" />
-          <button className="absolute top-4 right-4 text-white text-3xl leading-none" onClick={() => setLightboxUrl(null)}>×</button>
-        </div>
-      )}
+      <ImageLightbox src={lightboxUrl} onClose={() => setLightboxUrl(null)} />
 
       {/* ── Add / Edit Expense Modal ───────────────────────────────────── */}
       {showForm && (
@@ -842,7 +840,8 @@ export default function ExpensesPage() {
                       <div key={i} className="relative">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={p} alt={`receipt-${i}`}
-                          className="w-full aspect-square object-cover rounded-lg border"
+                          className="w-full aspect-square cursor-zoom-in object-cover rounded-lg border"
+                          onClick={() => setLightboxUrl(p)}
                           style={{ borderColor: 'var(--border)' }} />
                         <button type="button"
                           onClick={() => setForm(f => ({
@@ -880,7 +879,8 @@ export default function ExpensesPage() {
                 {form.slip_url_preview ? (
                   <div className="relative">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={form.slip_url_preview} alt="slip" className="w-full rounded-xl object-contain max-h-64 border"
+                    <img src={form.slip_url_preview} alt="slip" className="w-full cursor-zoom-in rounded-xl object-contain max-h-64 border"
+                      onClick={() => setLightboxUrl(form.slip_url_preview)}
                       style={{ borderColor: 'var(--border)' }} />
                     <div className="absolute top-2 right-2 flex gap-1">
                       <button type="button" onClick={() => slipRef.current?.click()}

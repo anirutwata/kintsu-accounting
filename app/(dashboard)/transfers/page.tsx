@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from 'react'
 import { formatBaht, toSatang, parseInput, fmtInput } from '@/lib/money'
 import { getTodayBKK } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
+import { findBankAccount } from '@/lib/bankAccountMatch'
+import { ImageLightbox } from '@/components/ImageLightbox'
 
 interface BankAccount { id: string; bank_name: string; account_number: string; account_name: string }
 
@@ -138,17 +140,7 @@ export default function TransfersPage() {
   }
 
   function matchAccount(bankName: string, accountNum: string): BankAccount | undefined {
-    if (!bankName) return undefined
-    const allAccounts = [CASH_OPTION, ...accounts]
-    const exact = allAccounts.find(a =>
-      a.bank_name.toLowerCase() === bankName.toLowerCase() &&
-      (!accountNum || a.account_number === accountNum)
-    )
-    if (exact) return exact
-    return allAccounts.find(a =>
-      a.bank_name.toLowerCase().includes(bankName.toLowerCase()) ||
-      bankName.toLowerCase().includes(a.bank_name.toLowerCase())
-    )
+    return findBankAccount([CASH_OPTION, ...accounts], bankName, accountNum)
   }
 
   async function uploadSlip(file: File): Promise<string> {
@@ -425,17 +417,7 @@ export default function TransfersPage() {
       )}
 
       {/* Lightbox */}
-      {lightbox && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.85)' }}
-          onClick={() => setLightbox('')}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lightbox} alt="slip" className="max-w-full max-h-full rounded-2xl object-contain"
-            onClick={e => e.stopPropagation()} />
-          <button className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 text-white text-lg leading-8 text-center"
-            onClick={() => setLightbox('')}>✕</button>
-        </div>
-      )}
+      <ImageLightbox src={lightbox || null} alt="สลิปโอนเงิน" onClose={() => setLightbox('')} />
 
       {/* List */}
       {loading ? (

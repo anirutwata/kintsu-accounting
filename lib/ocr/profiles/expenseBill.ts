@@ -2,6 +2,8 @@ import { z } from 'zod'
 import type { ExpenseBillOcrData } from '../types'
 
 const providerSchema = z.object({
+  document_date_found: z.boolean(), document_date_day: z.number().int().nullable(),
+  document_date_month: z.number().int().nullable(), document_date_year_ce: z.number().int().nullable(),
   has_vat: z.boolean(), vat_baht: z.number(), vat_inclusive: z.boolean(),
   has_wht: z.boolean(), wht_baht: z.number(),
   has_discount: z.boolean(), discount_baht: z.number(),
@@ -14,6 +16,7 @@ const providerSchema = z.object({
 }).strict()
 
 const normalizedSchema = z.object({
+  documentDate: z.string().nullable(),
   hasVat: z.boolean(), vatSatang: z.number().int(), vatInclusive: z.boolean(),
   hasWht: z.boolean(), whtSatang: z.number().int(), hasDiscount: z.boolean(), discountSatang: z.number().int(),
   totalSatang: z.number().int().nullable(), confidence: z.number(),
@@ -30,6 +33,8 @@ export const expenseBillProfile = {
   jsonSchema: {
     type: 'object', additionalProperties: false,
     properties: {
+      document_date_found: { type: 'boolean' }, document_date_day: { type: ['integer', 'null'] },
+      document_date_month: { type: ['integer', 'null'] }, document_date_year_ce: { type: ['integer', 'null'] },
       has_vat: { type: 'boolean' }, vat_baht: { type: 'number' }, vat_inclusive: { type: 'boolean' },
       has_wht: { type: 'boolean' }, wht_baht: { type: 'number' },
       has_discount: { type: 'boolean' }, discount_baht: { type: 'number' },
@@ -41,11 +46,12 @@ export const expenseBillProfile = {
         price_per_unit: { type: 'number' }, suggested_category: { type: ['string', 'null'] },
       }, required: ['description', 'quantity', 'unit', 'price_per_unit', 'suggested_category'] } },
     },
-    required: ['has_vat', 'vat_baht', 'vat_inclusive', 'has_wht', 'wht_baht', 'has_discount', 'discount_baht', 'total_baht', 'confidence', 'vendor_name', 'vendor_address', 'vendor_tax_id', 'vendor_branch', 'items'],
+    required: ['document_date_found', 'document_date_day', 'document_date_month', 'document_date_year_ce', 'has_vat', 'vat_baht', 'vat_inclusive', 'has_wht', 'wht_baht', 'has_discount', 'discount_baht', 'total_baht', 'confidence', 'vendor_name', 'vendor_address', 'vendor_tax_id', 'vendor_branch', 'items'],
   } as Record<string, unknown>,
   prompt(categoryNames: string[]) {
     return `อ่านบิล ใบเสร็จ หรือใบกำกับภาษีภาษาไทย แล้วตอบ JSON ตาม schema ในครั้งเดียว
-- อ่าน VAT, ภาษีหัก ณ ที่จ่าย, ส่วนลด, ยอดรวม, ข้อมูลผู้ขาย และรายการสินค้าทุกบรรทัด
+- อ่านวันที่เอกสาร, VAT, ภาษีหัก ณ ที่จ่าย, ส่วนลด, ยอดรวม, ข้อมูลผู้ขาย และรายการสินค้าทุกบรรทัด
+- วันที่เอกสารตอบเป็น document_date_day/document_date_month/document_date_year_ce; แปลง พ.ศ. เป็น ค.ศ. และห้ามใช้วันที่ชำระจากสลิป
 - vendor_* คือผู้ออกเอกสาร ไม่ใช่ชื่อลูกค้า; ถ้าไม่เห็นให้ใช้ข้อความว่าง
 - ยอดเงินทุกช่องเป็นบาทตามตัวเลขที่เห็น ห้ามเดา
 - suggested_category ต้องเป็นหนึ่งใน: ${categoryNames.join(', ')} หรือ null
@@ -65,7 +71,18 @@ export const expenseBillProfile = {
     const parsed = providerSchema.safeParse(raw)
     if (!parsed.success) return { data: null, issueCodes: ['schema_invalid'] }
     const amount = (found: boolean, value: number) => found && Number.isFinite(value) && value > 0 ? Math.round(value * 100) : 0
+    const day = Number(parsed.data.document_date_day)
+    const month = Number(parsed.data.document_date_month)
+    const year = Number(parsed.data.document_date_year_ce)
+    const calendarDate = parsed.data.document_date_found ? new Date(Date.UTC(year, month - 1, day)) : null
+    const documentDate = calendarDate
+      && calendarDate.getUTCFullYear() === year
+      && calendarDate.getUTCMonth() === month - 1
+      && calendarDate.getUTCDate() === day
+      && year >= 2000 && year <= 2100
+      ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}` : null
     const data: ExpenseBillOcrData = {
+      documentDate,
       hasVat: parsed.data.has_vat, vatSatang: amount(parsed.data.has_vat, parsed.data.vat_baht),
       vatInclusive: parsed.data.has_vat && parsed.data.vat_inclusive,
       hasWht: parsed.data.has_wht, whtSatang: amount(parsed.data.has_wht, parsed.data.wht_baht),

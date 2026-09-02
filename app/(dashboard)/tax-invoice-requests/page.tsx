@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { formatBaht } from '@/lib/money'
 import { formatThaiMonth, getMonthKey } from '@/lib/utils'
+import { ImageLightbox } from '@/components/ImageLightbox'
 import type { TaxInvoiceRequest } from '@/types'
 
 function thaiDate(value: string) {
@@ -45,6 +46,7 @@ export default function TaxInvoiceRequestsPage() {
   const [loading, setLoading] = useState(true)
   const [openId, setOpenId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -119,11 +121,11 @@ export default function TaxInvoiceRequestsPage() {
                 {request.flowaccount_document_serial && <p>เลขที่เอกสาร: {request.flowaccount_document_serial}</p>}
                 {info.detail && <p className={info.color}>{info.detail}</p>}
                 {request.bill_image_url && (
-                  <a href={request.bill_image_url} target="_blank" rel="noreferrer"
+                  <button type="button" onClick={() => setLightboxUrl(request.bill_image_url)}
                     className="inline-block mt-2 rounded-lg border px-3 py-1.5 text-xs font-medium text-blue-700"
                     style={{ borderColor: 'var(--border)' }}>
                     ดูรูปบิล
-                  </a>
+                  </button>
                 )}
               </div>
             )}
@@ -131,6 +133,7 @@ export default function TaxInvoiceRequestsPage() {
         )
       })}
       {!loading && filtered.length === 0 && <div className="text-center py-12 text-gray-400">ไม่มีคำขอในเดือนนี้</div>}
+      <ImageLightbox src={lightboxUrl} alt="บิลขอใบกำกับภาษี" onClose={() => setLightboxUrl(null)} />
     </div>
   )
 }

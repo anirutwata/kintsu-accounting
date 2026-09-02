@@ -14,7 +14,7 @@ function quota(name: 'OCR_ACTOR_RATE_LIMIT' | 'OCR_GLOBAL_RATE_LIMIT', fallback:
 
 export function expenseBillSchemaVersion(categoryNames: string[], base = process.env.OCR_SCHEMA_VERSION || '1'): string {
   const categoryHash = createHash('sha256').update([...categoryNames].sort().join('\0')).digest('hex').slice(0, 12)
-  return `${base}-expense-${categoryHash}`
+  return `${base}-expense-date-v2-${categoryHash}`
 }
 
 async function imageFromReceiptUrl(urlValue: string) {
