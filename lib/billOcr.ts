@@ -121,7 +121,11 @@ export function parseTaxInvoiceBillJson(parsed: RawTaxInvoiceBillJson): Extracte
   const isoDate = validComponents
     ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     : null
-  const validDate = isoDate !== null && !isNaN(Date.parse(isoDate))
+  const calendarDate = validComponents ? new Date(Date.UTC(year, month - 1, day)) : null
+  const validDate = calendarDate !== null
+    && calendarDate.getUTCFullYear() === year
+    && calendarDate.getUTCMonth() === month - 1
+    && calendarDate.getUTCDate() === day
   const validPaymentMethod = !!parsed.payment_method_found
     && ['cash', 'transfer', 'credit_card'].includes(parsed.payment_method as string)
   return {

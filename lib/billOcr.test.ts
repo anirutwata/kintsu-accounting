@@ -34,6 +34,16 @@ describe('parseTaxInvoiceBillJson', () => {
     expect(parseTaxInvoiceBillJson(baseJson({ date_day: 1, date_month: 13 })).documentDate).toBeNull()
   })
 
+  it('rejects a day that does not exist in the selected calendar month', () => {
+    expect(parseTaxInvoiceBillJson(baseJson({ date_day: 31, date_month: 2, date_year_ce: 2026 })).documentDate).toBeNull()
+  })
+
+  it('honors month lengths and Gregorian leap years', () => {
+    expect(parseTaxInvoiceBillJson(baseJson({ date_day: 31, date_month: 4, date_year_ce: 2026 })).documentDate).toBeNull()
+    expect(parseTaxInvoiceBillJson(baseJson({ date_day: 29, date_month: 2, date_year_ce: 2026 })).documentDate).toBeNull()
+    expect(parseTaxInvoiceBillJson(baseJson({ date_day: 29, date_month: 2, date_year_ce: 2028 })).documentDate).toBe('2028-02-29')
+  })
+
   it('still extracts subtotal, total, and payment method', () => {
     const result = parseTaxInvoiceBillJson(baseJson())
     expect(result).toMatchObject({ subtotalBaht: 1268, totalBaht: 1356, paymentMethod: 'credit_card' })
