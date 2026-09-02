@@ -93,12 +93,19 @@ export function parseTtbSmartShopRows(rows: ReportCell[][]): TtbPromptPayReport 
   if (reportDates.size !== 1) throw new Error('รายงาน TTB มีรายการ Success มากกว่าหนึ่งวัน')
   const transactionDate = transactions[0].paymentDate
 
+  // The automatic daily report includes a "สรุปรายการสำหรับวันที่" footnote that cross-checks
+  // the transaction date; TTB's "resend on request" report (used for backfilling a day whose
+  // automatic report never arrived) omits this footnote entirely. Cross-check it when present,
+  // otherwise fall back to the already-validated transaction date alone (single unique date,
+  // and count/amount already reconciled against the summary rows below).
   const summaryDateCell = rows.flat().map(text).find(value => value.includes('สรุปรายการสำหรับวันที่'))
-  const summaryDateMatch = summaryDateCell?.match(/สรุปรายการสำหรับวันที่\s*(\d{2}\/\d{2}\/\d{4})/)
-  if (!summaryDateMatch) throw new Error('ไม่พบวันที่สรุปในรายงาน TTB')
-  const summaryDate = thaiReportDate(summaryDateMatch[1])
-  if (summaryDate !== transactionDate) {
-    throw new Error(`วันที่สรุปในรายงาน TTB ไม่ตรงกับวันที่รับเงิน: สรุป ${summaryDate} แต่รายการ ${transactionDate}`)
+  if (summaryDateCell) {
+    const summaryDateMatch = summaryDateCell.match(/สรุปรายการสำหรับวันที่\s*(\d{2}\/\d{2}\/\d{4})/)
+    if (!summaryDateMatch) throw new Error('ไม่พบวันที่สรุปในรายงาน TTB')
+    const summaryDate = thaiReportDate(summaryDateMatch[1])
+    if (summaryDate !== transactionDate) {
+      throw new Error(`วันที่สรุปในรายงาน TTB ไม่ตรงกับวันที่รับเงิน: สรุป ${summaryDate} แต่รายการ ${transactionDate}`)
+    }
   }
 
   const successfulCount = Math.round(number(summaryCountRow[1], 'จำนวนรายการสำเร็จ'))

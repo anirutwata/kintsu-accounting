@@ -53,4 +53,11 @@ describe('TTB Smart Shop report', () => {
     rows[10] = ['หมายเหตุ: - สรุปรายการสำหรับวันที่ 23/08/2026 ณ เวลา 23:00 น.']
     expect(() => parseTtbSmartShopRows(rows)).toThrow('วันที่สรุปในรายงาน TTB ไม่ตรงกับวันที่รับเงิน')
   })
+
+  it('parses a manually-requested resend report, which omits the สรุปรายการสำหรับวันที่ footnote entirely', () => {
+    const rows = reportRows()
+    rows.splice(10, 1) // drop the footnote row; the resend format never includes it
+    const report = parseTtbSmartShopRows(rows)
+    expect(report).toMatchObject({ reportDate: '2026-08-24', successfulCount: 2, successfulAmountSatang: 1_970_800 })
+  })
 })
