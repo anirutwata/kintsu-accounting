@@ -89,6 +89,50 @@ export interface ExtractedTaxInvoiceBill {
   confidence: number
 }
 
+interface RawTaxInvoiceBillJson {
+  date_found?: boolean
+  date_day?: unknown
+  date_month?: unknown
+  date_year_ce?: unknown
+  subtotal_found?: boolean
+  subtotal_baht?: unknown
+  total_found?: boolean
+  total_baht?: unknown
+  payment_method_found?: boolean
+  payment_method?: unknown
+  confidence?: unknown
+}
+
+// Exported for unit testing the date-assembly/validation logic without mocking the
+// Anthropic SDK. Day/month/year are read as three separate fields (see the prompt
+// below) rather than having the model assemble an ISO string itself — a bill dated
+// e.g. "01/09/2569" is genuinely ambiguous as a single string (both halves are valid
+// day-or-month numbers), and asking the model to label which number is which
+// resists the classic DD/MM-vs-MM/DD swap far better than asking it to convert
+// straight to YYYY-MM-DD in one step.
+export function parseTaxInvoiceBillJson(parsed: RawTaxInvoiceBillJson): ExtractedTaxInvoiceBill {
+  const day = Number(parsed.date_day)
+  const month = Number(parsed.date_month)
+  const year = Number(parsed.date_year_ce)
+  const validComponents = !!parsed.date_found
+    && Number.isInteger(day) && day >= 1 && day <= 31
+    && Number.isInteger(month) && month >= 1 && month <= 12
+    && Number.isInteger(year) && year >= 2000 && year <= 2100
+  const isoDate = validComponents
+    ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    : null
+  const validDate = isoDate !== null && !isNaN(Date.parse(isoDate))
+  const validPaymentMethod = !!parsed.payment_method_found
+    && ['cash', 'transfer', 'credit_card'].includes(parsed.payment_method as string)
+  return {
+    documentDate: validDate ? isoDate : null,
+    subtotalBaht: parsed.subtotal_found ? Number(parsed.subtotal_baht) || null : null,
+    totalBaht: parsed.total_found ? Number(parsed.total_baht) || null : null,
+    paymentMethod: validPaymentMethod ? (parsed.payment_method as ExtractedTaxInvoiceBill['paymentMethod']) : null,
+    confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0,
+  }
+}
+
 export async function extractTaxInvoiceFieldsFromBill(imageUrl: string): Promise<ExtractedTaxInvoiceBill | null> {
   const res = await fetch(imageUrl)
   if (!res.ok) return null
@@ -110,7 +154,9 @@ export async function extractTaxInvoiceFieldsFromBill(imageUrl: string): Promise
           text: `อ่านบิล/ใบเสร็จนี้ เพื่อดึง 4 ค่า: วันที่บนบิล, ยอดก่อน VAT, ยอดชำระจริงสุทธิ, ช่องทางชำระเงิน ตอบเป็น JSON เท่านั้น ไม่ต้องมีคำอธิบาย:
 {
   "date_found": <true เฉพาะเมื่อเห็นวันที่ระบุตรงๆ บนบิล (เช่น "วันที่", "Date") ห้ามเดา>,
-  "document_date": <วันที่บนบิล แปลงเป็นรูปแบบ "YYYY-MM-DD" แบบปีคริสต์ศักราช (ค.ศ.) เท่านั้น — ถ้าปีบนบิลเป็นพุทธศักราช (พ.ศ., ปี 4 หลักที่มากกว่า 2400) ให้ลบ 543 ก่อนแปลง เช่น "15/08/2569" (พ.ศ.) → "2026-08-15" ถ้า date_found เป็น false ให้ใส่ null>,
+  "date_day": <ตัวเลขวันที่ (1-31) ตามที่ปรากฏบนบิล ถ้า date_found เป็น false ให้ใส่ null>,
+  "date_month": <ตัวเลขเดือน (1-12) ตามที่ปรากฏบนบิล — บิลและสลิปเครื่องรูดบัตรในไทยแทบทั้งหมดพิมพ์วันที่แบบ วัน/เดือน/ปี (DD/MM/YYYY) ตัวเลขตัวแรกคือ "วันที่" ตัวเลขตัวที่สองคือ "เดือน" เสมอ ไม่ใช่รูปแบบเดือน/วัน/ปีแบบอเมริกัน (MM/DD/YYYY) แม้ตัวเลขทั้งสองตัวจะน้อยกว่าหรือเท่ากับ 12 ก็ตาม (เช่น "01/09/2569" ต้องอ่านว่า วันที่ 1 เดือน 9 (กันยายน) ห้ามอ่านเป็นเดือน 1 (มกราคม) วันที่ 9 เด็ดขาด) ถ้า date_found เป็น false ให้ใส่ null>,
+  "date_year_ce": <ปีคริสต์ศักราช (ค.ศ., 4 หลัก) ตามที่ปรากฏบนบิล — ถ้าบิลแสดงปีเป็นพุทธศักราช (พ.ศ., เลข 4 หลักที่มากกว่า 2400) ให้ลบ 543 ก่อนตอบ เช่น 2569 (พ.ศ.) → 2026 (ค.ศ.) ถ้า date_found เป็น false ให้ใส่ null>,
   "subtotal_found": <true เฉพาะเมื่อเห็นยอดก่อน VAT ระบุตรงๆ บนบิล (เช่น "รวมเป็นเงิน", "Sub Total", "Before VAT" — ยอดก่อนบวก VAT 7%) ห้ามเดา ถ้าบิลไม่แยก VAT ให้ใส่ false>,
   "subtotal_baht": <ยอดก่อน VAT เป็นบาท ถ้า subtotal_found เป็น false ให้ใส่ 0>,
   "total_found": <true เฉพาะเมื่อเห็นยอดชำระจริงสุทธิระบุตรงๆ บนบิล (เช่น "จำนวนเงินรวมทั้งสิ้น", "ยอดชำระ", "Grand Total" — ยอดสุดท้ายที่ลูกค้าจ่ายจริง รวม VAT แล้ว) ห้ามเดา>,
@@ -128,17 +174,7 @@ export async function extractTaxInvoiceFieldsFromBill(imageUrl: string): Promise
   const match = raw.match(/\{[\s\S]*\}/)
   if (!match) return null
   try {
-    const parsed = JSON.parse(match[0])
-    const isoDate: unknown = parsed.document_date
-    const validDate = parsed.date_found && typeof isoDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(isoDate) && !isNaN(Date.parse(isoDate))
-    const validPaymentMethod = parsed.payment_method_found && ['cash', 'transfer', 'credit_card'].includes(parsed.payment_method)
-    return {
-      documentDate: validDate ? (isoDate as string) : null,
-      subtotalBaht: parsed.subtotal_found ? Number(parsed.subtotal_baht) || null : null,
-      totalBaht: parsed.total_found ? Number(parsed.total_baht) || null : null,
-      paymentMethod: validPaymentMethod ? parsed.payment_method : null,
-      confidence: parsed.confidence ?? 0,
-    }
+    return parseTaxInvoiceBillJson(JSON.parse(match[0]))
   } catch {
     return null
   }
