@@ -58,7 +58,7 @@ export function createConfiguredProviders(environment?: OcrEnvironment): OcrProv
     providers.push(new GeminiOcrProvider(env.OCR_SECONDARY_MODEL || 'gemini-2.5-flash', 1, geminiKey))
   }
   if (env.OCR_FINAL_FALLBACK_ENABLED !== 'false' && env.ANTHROPIC_API_KEY) {
-    providers.push(new AnthropicOcrProvider(env.OCR_FINAL_MODEL || 'claude-sonnet-4-6', env.ANTHROPIC_API_KEY))
+    providers.push(new AnthropicOcrProvider(env.OCR_FINAL_MODEL || 'claude-sonnet-5', env.ANTHROPIC_API_KEY))
   }
   return providers
 }

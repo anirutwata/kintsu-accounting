@@ -17,12 +17,19 @@ export class AnthropicOcrProvider implements OcrProvider {
     try {
       const { default: Anthropic } = await import('@anthropic-ai/sdk')
       const client = new Anthropic({ apiKey: this.apiKey, timeout: input.timeoutMs, maxRetries: 0 })
+      const schemaInstruction = [
+        input.prompt,
+        'ตอบเป็น JSON object เท่านั้น ไม่มี markdown',
+        'ต้องใช้ชื่อฟิลด์ ชนิดข้อมูล และฟิลด์บังคับตาม JSON Schema นี้อย่างเคร่งครัด ห้ามเพิ่มหรือตัดฟิลด์:',
+        JSON.stringify(input.jsonSchema),
+      ].join('\n')
       const response = await client.messages.create({
         model: this.model,
         max_tokens: input.maxOutputTokens ?? 512,
+        thinking: { type: 'disabled' },
         messages: [{ role: 'user', content: [
           { type: 'image', source: { type: 'base64', media_type: input.image.mimeType, data: Buffer.from(input.image.bytes).toString('base64') } },
-          { type: 'text', text: `${input.prompt}\nตอบเป็น JSON object เท่านั้น ไม่มี markdown` },
+          { type: 'text', text: schemaInstruction },
         ] }],
       })
       const text = response.content.filter(part => part.type === 'text').map(part => part.text).join('\n').trim()

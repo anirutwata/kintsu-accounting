@@ -240,7 +240,7 @@ describe('extractDocument', () => {
 describe('provider configuration', () => {
   it('uses Anthropic directly when no Gemini key is configured', () => {
     const providers = createConfiguredProviders({ ANTHROPIC_API_KEY: 'test', OCR_FINAL_FALLBACK_ENABLED: 'true' })
-    expect(providers.map(item => [item.name, item.model])).toEqual([['anthropic', 'claude-sonnet-4-6']])
+    expect(providers.map(item => [item.name, item.model])).toEqual([['anthropic', 'claude-sonnet-5']])
   })
 
   it('omits Sonnet when final fallback is disabled', () => {
