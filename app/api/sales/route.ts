@@ -22,7 +22,32 @@ export async function GET(req: Request) {
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  if (!data?.length) return NextResponse.json(data)
+
+  // The FlowAccount document number for each channel lives on its own report table
+  // (ttb_promptpay_reports.flowaccount_document_serial, keyed by daily_sales'
+  // ttb_promptpay_report_id) or per-day aggregate (linepay_edc_revenue_days
+  // .cash_sale_document_serial, keyed by revenue_date -- a settlement report can span
+  // several sale dates, so the report id on daily_sales isn't specific enough). Join
+  // them in here so the sales page can show "which document, for lookup" the same way
+  // it already does for the cash JV.
+  const ttbReportIds = [...new Set(data.map(row => row.ttb_promptpay_report_id).filter(Boolean))]
+  const dates = data.map(row => row.date)
+  const [{ data: ttbReports }, { data: edcRevenueDays }] = await Promise.all([
+    ttbReportIds.length
+      ? supabase.from('ttb_promptpay_reports').select('id, flowaccount_document_serial').in('id', ttbReportIds)
+      : Promise.resolve({ data: [] as Array<{ id: string; flowaccount_document_serial: string | null }> }),
+    supabase.from('linepay_edc_revenue_days').select('revenue_date, cash_sale_document_serial')
+      .in('revenue_date', dates).eq('is_deleted', false),
+  ])
+  const ttbSerialById = new Map((ttbReports || []).map(report => [report.id, report.flowaccount_document_serial]))
+  const edcSerialByDate = new Map((edcRevenueDays || []).map(day => [day.revenue_date, day.cash_sale_document_serial]))
+
+  return NextResponse.json(data.map(row => ({
+    ...row,
+    ttb_promptpay_document_serial: row.ttb_promptpay_report_id ? ttbSerialById.get(row.ttb_promptpay_report_id) ?? null : null,
+    linepay_edc_cash_sale_document_serial: edcSerialByDate.get(row.date) ?? null,
+  })))
 }
 
 export async function POST(req: Request) {
