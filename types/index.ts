@@ -226,8 +226,11 @@ export interface DailySales {
   papaya_credit_card_satang: number
   ttb_promptpay_satang: number
   ttb_promptpay_report_id: string | null
+  // Joined in by GET /api/sales — not columns on daily_sales itself.
+  ttb_promptpay_document_serial?: string | null
   linepay_edc_gross_satang: number
   linepay_edc_report_id: string | null
+  linepay_edc_cash_sale_document_serial?: string | null
   flowaccount_cash_record_id: number | null
   flowaccount_cash_document_serial: string | null
   flowaccount_cash_synced_at: string | null

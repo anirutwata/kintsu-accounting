@@ -293,6 +293,9 @@ export default function SalesPage() {
                 : `⚠️ ยอดต่างกัน ${formatBaht(Math.abs((existing.ttb_promptpay_satang || 0) - staffPromptPay))}`}
             </p>
           )}
+          {existing?.ttb_promptpay_document_serial && (
+            <p>📄 เอกสาร FlowAccount: {existing.ttb_promptpay_document_serial}</p>
+          )}
         </div>
         {ttbMessage && <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{ttbMessage}</p>}
       </div>
@@ -319,6 +322,9 @@ export default function SalesPage() {
                 ? '✅ ยอดตรงกับรายงาน EDC'
                 : `⚠️ ยอดต่างกัน ${formatBaht(Math.abs((existing.linepay_edc_gross_satang || 0) - staffCreditCard))}`}
             </p>
+          )}
+          {existing?.linepay_edc_cash_sale_document_serial && (
+            <p>📄 เอกสาร FlowAccount: {existing.linepay_edc_cash_sale_document_serial}</p>
           )}
         </div>
         {edcMessage && <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{edcMessage}</p>}
