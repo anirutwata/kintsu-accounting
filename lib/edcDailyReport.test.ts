@@ -10,7 +10,7 @@ const sample = [header, ...rows].join('\n')
 
 describe('LINE Pay EDC daily report', () => {
   it('uses transaction time as the revenue date and reconciles the settlement totals', () => {
-    const report = parseEdcDailyReport(sample, 'EDC_DailyReport_20260825.csv')
+    const report = parseEdcDailyReport(sample)
 
     expect(report).toMatchObject({
       revenueDate: '2026-08-24',
@@ -29,32 +29,43 @@ describe('LINE Pay EDC daily report', () => {
     expect(report.transactions.map(item => item.transactionId)).toEqual(['tx-local', 'tx-inter'])
   })
 
-  it('names the exact column and expected value when the header no longer matches', () => {
-    const renamedAmount = [header.replace('amount,fee_rate', 'gross_amount,fee_rate'), ...rows].join('\n')
-    expect(() => parseEdcDailyReport(renamedAmount, 'EDC_DailyReport_20260825.csv'))
-      .toThrow('ตำแหน่งที่ 6 พบ "gross_amount" แต่ต้องเป็น "amount"')
+  it('rejects a header missing a required column, naming which one', () => {
+    const headerWithoutAmount = header.split(',').filter(name => name !== 'amount').join(',')
+    expect(() => parseEdcDailyReport([headerWithoutAmount, ...rows].join('\n')))
+      .toThrow('หัวตารางไฟล์ EDC CSV ไม่มีคอลัมน์: amount')
   })
 
-  it('accepts a report where LINE Pay renamed the terminal_id column to reference_id', () => {
-    const renamedHeader = header.replace('terminal_id', 'reference_id')
-    const renamed = [renamedHeader, ...rows].join('\n')
-    const report = parseEdcDailyReport(renamed, 'EDC_DailyReport_20260825.csv')
+  it('accepts columns in a different order', () => {
+    const columns = header.split(',')
+    const reordered = [columns[1], columns[0], ...columns.slice(2)].join(',')
+    const reorderedRows = rows.map(row => {
+      const values = row.split(',')
+      return [values[1], values[0], ...values.slice(2)].join(',')
+    })
+    const report = parseEdcDailyReport([reordered, ...reorderedRows].join('\n'))
     expect(report.transactionCount).toBe(2)
+    expect(report.merchantName).toBe('คินสึ ยากินิคุ เซ็นทรัล ขอนแก่น แคมปัส')
   })
 
-  it('rejects a filename date that differs from settlement_date', () => {
-    expect(() => parseEdcDailyReport(sample, 'EDC_DailyReport_20260824.csv'))
-      .toThrow('วันที่ชื่อไฟล์ EDC ไม่ตรงกับ Settlement')
+  it('ignores an unused column no matter what it is named (terminal_id, reference_id, or anything else)', () => {
+    const asReferenceId = [header.replace('terminal_id', 'reference_id'), ...rows].join('\n')
+    expect(() => parseEdcDailyReport(asReferenceId)).not.toThrow()
+
+    const withoutThatColumnAtAll = [
+      header.split(',').filter(name => name !== 'terminal_id').join(','),
+      ...rows.map(row => row.split(',').filter((_, index) => index !== 2).join(',')),
+    ].join('\n')
+    expect(() => parseEdcDailyReport(withoutThatColumnAtAll)).not.toThrow()
   })
 
   it('groups multiple transaction dates while ignoring terminal ID differences', () => {
     // terminal_id varies by card scheme (Visa/Mastercard vs. JCB) on the same physical
     // device, so a differing terminal_id alone is not a rejection reason.
     const otherTerminal = sample.replace(',88122653,EDC,CREDIT_CARD_INTER', ',99999999,EDC,CREDIT_CARD_INTER')
-    expect(() => parseEdcDailyReport(otherTerminal, 'EDC_DailyReport_20260825.csv')).not.toThrow()
+    expect(() => parseEdcDailyReport(otherTerminal)).not.toThrow()
 
     const otherDate = sample.replace('2026-08-24 21:24:49', '2026-08-23 21:24:49')
-    expect(parseEdcDailyReport(otherDate, 'EDC_DailyReport_20260825.csv').revenueDays).toEqual([
+    expect(parseEdcDailyReport(otherDate).revenueDays).toEqual([
       expect.objectContaining({ revenueDate: '2026-08-23', transactionCount: 1, grossAmountSatang: 253_400 }),
       expect.objectContaining({ revenueDate: '2026-08-24', transactionCount: 1, grossAmountSatang: 691_700 }),
     ])
@@ -66,7 +77,7 @@ describe('LINE Pay EDC daily report', () => {
       ...rows,
       '59IlGmY3YE2dsy1aUflYJI8WDrpyoA,คินสึ ยากินิคุ เซ็นทรัล ขอนแก่น แคมปัส,19912876,EDC,JCB_CARD,994,0.03,29.82,2.09,962.09,2026-08-25,2026-08-24 18:44:44,tx-jcb',
     ].join('\n')
-    const report = parseEdcDailyReport(withJcb, 'EDC_DailyReport_20260825.csv')
+    const report = parseEdcDailyReport(withJcb)
     expect(report.transactionCount).toBe(3)
     expect(report.grossAmountSatang).toBe(945_100 + 99_400)
   })
@@ -80,7 +91,7 @@ describe('LINE Pay EDC daily report', () => {
       '59IlGmY3YE2dsy1aUflYJI8WDrpyoA,คินสึ ยากินิคุ เซ็นทรัล ขอนแก่น แคมปัส,19912876,EDC,UPI_CARD,100,0.023,2.30,0.16,97.54,2026-08-25,2026-08-23 20:44:44,tx-upi',
     ].join('\n')
 
-    const report = parseEdcDailyReport(mixedServices, 'EDC_DailyReport_20260825.csv')
+    const report = parseEdcDailyReport(mixedServices)
     expect(report.transactions.map(item => item.serviceName)).toEqual([
       'CREDIT_CARD_LOCAL', 'CREDIT_CARD_INTER', 'DEBIT_CARD', 'QR_PROMPTPAY', 'UPI_CARD',
     ])
@@ -91,27 +102,35 @@ describe('LINE Pay EDC daily report', () => {
 
   it('accepts the confirmed legacy spelling for the same merchant ID', () => {
     const legacyName = sample.replaceAll('คินสึ ยากินิคุ เซ็นทรัล ขอนแก่น แคมปัส', 'คิตสุ ยากินิคุ')
-    expect(() => parseEdcDailyReport(legacyName, 'EDC_DailyReport_20260825.csv')).not.toThrow()
+    expect(() => parseEdcDailyReport(legacyName)).not.toThrow()
   })
 
   it('rejects a report for a different store, even with a familiar terminal_id', () => {
     const wrongMerchant = sample.replaceAll('คินสึ ยากินิคุ เซ็นทรัล ขอนแก่น แคมปัส', 'ร้านอื่น')
-    expect(() => parseEdcDailyReport(wrongMerchant, 'EDC_DailyReport_20260825.csv'))
+    expect(() => parseEdcDailyReport(wrongMerchant))
       .toThrow('รายงาน EDC ไม่ใช่ร้าน KINTSU Central Khon Kaen Campus')
   })
 
   it('allows delayed settlement after the transaction date', () => {
     const delayedSettlement = sample.replaceAll('2026-08-25', '2026-08-26')
-    expect(() => parseEdcDailyReport(delayedSettlement, 'EDC_DailyReport_20260826.csv')).not.toThrow()
+    expect(() => parseEdcDailyReport(delayedSettlement)).not.toThrow()
+  })
+
+  it('rejects a transaction dated on or after its own settlement date', () => {
+    // Confirmed real-world case: a CSV where every transaction_time matched
+    // settlement_date exactly instead of being the day before it.
+    const sameDayAsSettlement = sample.replace('2026-08-24 21:24:49', '2026-08-25 09:11:26')
+    expect(() => parseEdcDailyReport(sameDayAsSettlement))
+      .toThrow('Settlement EDC ต้องอยู่หลังวันขายทุกรายการ')
   })
 
   it('rejects duplicate transaction IDs and unreconciled net amounts', () => {
     const duplicate = sample.replace('tx-inter', 'tx-local')
-    expect(() => parseEdcDailyReport(duplicate, 'EDC_DailyReport_20260825.csv'))
+    expect(() => parseEdcDailyReport(duplicate))
       .toThrow('Transaction ID EDC ซ้ำ')
 
     const wrongNet = sample.replace('2448.59', '2448.58')
-    expect(() => parseEdcDailyReport(wrongNet, 'EDC_DailyReport_20260825.csv'))
+    expect(() => parseEdcDailyReport(wrongNet))
       .toThrow('ยอดสุทธิ EDC ไม่ตรง')
   })
 })

@@ -338,7 +338,7 @@ export async function importLinePayEdcAttachment(
   input: { messageId: string; attachmentName: string; content: Buffer },
   options: { enforceExpected?: boolean } = {},
 ) {
-  const report = parseEdcDailyReport(input.content.toString('utf8'), input.attachmentName)
+  const report = parseEdcDailyReport(input.content.toString('utf8'))
   if (options.enforceExpected !== false && !isExpectedEdcReport(report)) {
     return {
       imported: false, skipped: true, revenueDate: report.revenueDate,
