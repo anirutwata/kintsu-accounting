@@ -84,6 +84,23 @@ function satang(value: string, label: string): number {
   return Math.round(parsed * 100)
 }
 
+function dayBefore(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day - 1)).toISOString().slice(0, 10)
+}
+
+// Confirmed 2026-09-03: every transaction_time in that settlement exactly equaled
+// settlement_date instead of preceding it, but the store's own POS credit-card total
+// for settlement_date minus one day matched this settlement's total to the baht — so
+// transaction_time was reporting LINE Pay's batch/settlement processing moment, not the
+// actual point-of-sale time, for that file. When a transaction's date lands exactly on
+// its own settlement date, treat it as belonging to the day before instead of trusting
+// the raw timestamp; any date genuinely on or after settlement in another way (i.e.
+// still not before settlement after that correction) remains a hard rejection.
+function effectiveRevenueDate(transactionDate: string, settlementDate: string): string {
+  return transactionDate === settlementDate ? dayBefore(settlementDate) : transactionDate
+}
+
 // LINE Pay's CSV export format (column names, order, and the exact set of columns
 // present) has already changed on us more than once — a renamed column and a dropped
 // footnote elsewhere in this file broke a strict format check without the underlying
@@ -142,7 +159,7 @@ export function parseEdcDailyReport(source: string): EdcDailyReport {
   if (new Set(transactions.map(item => item.settlementDate)).size !== 1) {
     throw new Error('รายงาน EDC มี Settlement Date มากกว่าหนึ่งวัน')
   }
-  if (transactions.some(item => item.transactionTime.slice(0, 10) >= first.settlementDate)) {
+  if (transactions.some(item => effectiveRevenueDate(item.transactionTime.slice(0, 10), first.settlementDate) >= first.settlementDate)) {
     throw new Error('Settlement EDC ต้องอยู่หลังวันขายทุกรายการ')
   }
   const transactionIds = transactions.map(item => item.transactionId)
@@ -165,10 +182,10 @@ export function parseEdcDailyReport(source: string): EdcDailyReport {
   const feeAmountSatang = transactions.reduce((sum, item) => sum + item.feeAmountSatang, 0)
   const feeVatSatang = transactions.reduce((sum, item) => sum + item.feeVatSatang, 0)
   const netAmountSatang = transactions.reduce((sum, item) => sum + item.netAmountSatang, 0)
-  const revenueDays = Array.from(new Set(transactions.map(item => item.transactionTime.slice(0, 10))))
+  const revenueDays = Array.from(new Set(transactions.map(item => effectiveRevenueDate(item.transactionTime.slice(0, 10), first.settlementDate))))
     .sort()
     .map((date): EdcRevenueDay => {
-      const items = transactions.filter(item => item.transactionTime.slice(0, 10) === date)
+      const items = transactions.filter(item => effectiveRevenueDate(item.transactionTime.slice(0, 10), first.settlementDate) === date)
       return {
         revenueDate: date,
         transactionCount: items.length,
