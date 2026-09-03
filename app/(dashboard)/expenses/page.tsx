@@ -64,9 +64,13 @@ interface ItemRow {
   quantity: string
   unit: string
   price_per_unit: string
+  has_vat: boolean // this line item is subject to VAT — lets one bill mix VAT and non-VAT
+  // items (e.g. a shopping-mall invoice with VAT-exempt rent + VAT-able service fee) without
+  // the auto-VAT-suggestion below wrongly taxing the non-VAT lines too. Entry-time only —
+  // not persisted; editing an existing expense resets every row back to true.
 }
 
-const emptyItemRow = (): ItemRow => ({ category: '', description: '', quantity: '1', unit: '', price_per_unit: '' })
+const emptyItemRow = (): ItemRow => ({ category: '', description: '', quantity: '1', unit: '', price_per_unit: '', has_vat: true })
 // A fresh form always seeds one blank row, so items.length is never 0 — this checks
 // for "nothing typed yet" instead, so bill-photo OCR still knows it's safe to fill
 // the form in without clobbering something staff already entered by hand.
@@ -99,6 +103,12 @@ const emptyForm = () => ({
 // base for VAT auto-calc, and as the expense's amount_satang on submit.
 function itemsTotal(items: ItemRow[]): number {
   return items.reduce((sum, i) => sum + (parseFloat(i.quantity) || 0) * (parseFloat(i.price_per_unit) || 0), 0)
+}
+
+// Subtotal of only the line items marked "has_vat" — the correct base for auto-suggesting
+// the bill's VAT amount when some items on the same bill aren't subject to VAT at all.
+function vatableItemsTotal(items: ItemRow[]): number {
+  return items.reduce((sum, i) => sum + (i.has_vat ? (parseFloat(i.quantity) || 0) * (parseFloat(i.price_per_unit) || 0) : 0), 0)
 }
 
 // จำนวนเงินรวมทั้งสิ้น (ยอดที่ต้องชำระจริง ก่อนหัก ณ ที่จ่าย) — หักส่วนลดจากยอดสินค้าก่อน
@@ -351,6 +361,7 @@ export default function ExpensesPage() {
               quantity: String(i.quantity ?? 1),
               unit: i.unit || 'รายการ',
               price_per_unit: String(i.pricePerUnit ?? 0),
+              has_vat: true,
             })),
           }))
         }
@@ -443,7 +454,7 @@ export default function ExpensesPage() {
       wht: exp.wht_satang ? String(exp.wht_satang / 100) : '',
       // Placeholder single row for an expense saved before line items existed —
       // replaced below with the real breakdown if this expense actually has one.
-      items: [{ category: exp.category, description: exp.category, quantity: '1', unit: 'รายการ', price_per_unit: String(exp.amount_satang / 100) }],
+      items: [{ category: exp.category, description: exp.category, quantity: '1', unit: 'รายการ', price_per_unit: String(exp.amount_satang / 100), has_vat: true }],
       bank_account_id: exp.bank_account_id || '',
       recipient_name: exp.recipient_name || '',
       recipient_address: exp.recipient_address || '',
@@ -472,6 +483,7 @@ export default function ExpensesPage() {
             quantity: String(r.quantity),
             unit: r.unit || 'รายการ',
             price_per_unit: String(r.price_per_unit_satang / 100),
+            has_vat: true,
           })),
         }))
       }
@@ -1004,6 +1016,21 @@ export default function ExpensesPage() {
                           onChange={e => setForm(f => ({ ...f, items: f.items.map((it, i) => i === idx ? { ...it, price_per_unit: e.target.value } : it) }))}
                           className="flex-1 border rounded-lg px-2 py-1.5 text-sm text-right" style={{ borderColor: 'var(--border)' }} />
                       </div>
+                      {form.has_vat && (
+                        <label className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                          <input type="checkbox" checked={item.has_vat}
+                            onChange={e => {
+                              const checked = e.target.checked
+                              setForm(f => {
+                                const items = f.items.map((it, i) => i === idx ? { ...it, has_vat: checked } : it)
+                                const net = vatableItemsTotal(items) - (parseFloat(f.discount) || 0)
+                                const autoVat = net > 0 ? (f.vat_inclusive ? net - net / 1.07 : net * 0.07).toFixed(2) : ''
+                                return { ...f, items, vat: autoVat }
+                              })
+                            }} />
+                          รายการนี้มี VAT
+                        </label>
+                      )}
                       <p className="text-right text-xs" style={{ color: 'var(--muted-foreground)' }}>
                         รวม {((parseFloat(item.quantity) || 0) * (parseFloat(item.price_per_unit) || 0)).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท
                       </p>
@@ -1041,7 +1068,7 @@ export default function ExpensesPage() {
                       const checked = e.target.checked
                       setForm(f => {
                         if (!checked) return { ...f, has_vat: false, vat: '' }
-                        const net = itemsTotal(f.items) - (parseFloat(f.discount) || 0)
+                        const net = vatableItemsTotal(f.items) - (parseFloat(f.discount) || 0)
                         const autoVat = net > 0 ? (f.vat_inclusive ? net - net / 1.07 : net * 0.07).toFixed(2) : ''
                         return { ...f, has_vat: true, vat: f.vat || autoVat }
                       })
@@ -1057,7 +1084,7 @@ export default function ExpensesPage() {
                       onChange={e => {
                         const inclusive = e.target.value === '1'
                         setForm(f => {
-                          const net = itemsTotal(f.items) - (parseFloat(f.discount) || 0)
+                          const net = vatableItemsTotal(f.items) - (parseFloat(f.discount) || 0)
                           const autoVat = net > 0 ? (inclusive ? net - net / 1.07 : net * 0.07).toFixed(2) : ''
                           return { ...f, vat_inclusive: inclusive, vat: autoVat }
                         })
