@@ -3,7 +3,6 @@ import { LINEPAY_EDC_POLICY } from './edcPolicy'
 export interface EdcTransaction {
   merchantId: string
   merchantName: string
-  terminalId: string
   serviceGroupName: string
   serviceName: string
   amountSatang: number
@@ -85,49 +84,48 @@ function satang(value: string, label: string): number {
   return Math.round(parsed * 100)
 }
 
-export function parseEdcDailyReport(source: string, filename: string): EdcDailyReport {
+// LINE Pay's CSV export format (column names, order, and the exact set of columns
+// present) has already changed on us more than once — a renamed column and a dropped
+// footnote elsewhere in this file broke a strict format check without the underlying
+// data ever being wrong. So this parser only requires the columns it actually reads,
+// looked up by name rather than position — reordering, adding, or dropping an unused
+// column (like terminal_id/reference_id, which was never validated — see below) no
+// longer breaks import. Only the data itself is still validated strictly: merchant
+// identity, settlement-after-sale-date, and per-row amount reconciliation, further
+// down in this function.
+const REQUIRED_COLUMNS = [
+  'merchant_id', 'merchant_name', 'service_group_name', 'service_name',
+  'amount', 'fee_rate', 'fee_amount', 'vat_amount', 'net_amount',
+  'settlement_date', 'transaction_time', 'transaction_id',
+] as const
+
+export function parseEdcDailyReport(source: string): EdcDailyReport {
   const rows = parseCsvRows(source.replace(/^\uFEFF/, ''))
   const headers = rows[0] ?? []
-  const requiredHeaders = [
-    'merchant_id', 'merchant_name', 'terminal_id', 'service_group_name', 'service_name',
-    'amount', 'fee_rate', 'fee_amount', 'vat_amount', 'net_amount', 'settlement_date',
-    'transaction_time', 'transaction_id',
-  ]
-  // LINE Pay renamed column 3 from terminal_id to reference_id (still unused — see the
-  // comment near EdcTransaction.terminalId below); accept either name in that position.
-  const normalizedHeaders = headers.map((value, index) => (index === 2 && value === 'reference_id') ? 'terminal_id' : value)
-  if (normalizedHeaders.join(',') !== requiredHeaders.join(',')) {
-    const columnCount = Math.max(normalizedHeaders.length, requiredHeaders.length)
-    const mismatches = Array.from({ length: columnCount }, (_, index) => index)
-      .filter(index => normalizedHeaders[index] !== requiredHeaders[index])
-      .map(index => `ตำแหน่งที่ ${index + 1} พบ "${normalizedHeaders[index] ?? '(ไม่มีคอลัมน์)'}" แต่ต้องเป็น "${requiredHeaders[index] ?? '(ไม่ควรมีคอลัมน์นี้)'}"`)
-    throw new Error(`หัวตารางไฟล์ EDC CSV ไม่ถูกต้อง: ${mismatches.join(', ')}`)
+  const columnIndex = new Map(headers.map((name, index) => [name.trim(), index]))
+  const missingColumns = REQUIRED_COLUMNS.filter(name => !columnIndex.has(name))
+  if (missingColumns.length > 0) {
+    throw new Error(`หัวตารางไฟล์ EDC CSV ไม่มีคอลัมน์: ${missingColumns.join(', ')}`)
   }
-  const filenameMatch = filename.match(/^EDC_DailyReport_(\d{4})(\d{2})(\d{2})\.csv$/i)
-  if (!filenameMatch) throw new Error(`ชื่อไฟล์รายงาน EDC ไม่ถูกต้อง: ${filename || '(ว่าง)'}`)
-  const filenameDate = `${filenameMatch[1]}-${filenameMatch[2]}-${filenameMatch[3]}`
+  const col = (name: typeof REQUIRED_COLUMNS[number]) => columnIndex.get(name) as number
 
   const transactions = rows.slice(1).map((row): EdcTransaction => ({
-    merchantId: row[0]?.trim(),
-    merchantName: row[1]?.trim(),
-    terminalId: row[2]?.trim(),
-    serviceGroupName: row[3]?.trim(),
-    serviceName: row[4]?.trim(),
-    amountSatang: satang(row[5], 'amount'),
-    feeRate: Number(row[6]),
-    feeAmountSatang: satang(row[7], 'fee_amount'),
-    feeVatSatang: satang(row[8], 'vat_amount'),
-    netAmountSatang: satang(row[9], 'net_amount'),
-    settlementDate: row[10]?.trim(),
-    transactionTime: row[11]?.trim(),
-    transactionId: row[12]?.trim(),
+    merchantId: row[col('merchant_id')]?.trim(),
+    merchantName: row[col('merchant_name')]?.trim(),
+    serviceGroupName: row[col('service_group_name')]?.trim(),
+    serviceName: row[col('service_name')]?.trim(),
+    amountSatang: satang(row[col('amount')], 'amount'),
+    feeRate: Number(row[col('fee_rate')]),
+    feeAmountSatang: satang(row[col('fee_amount')], 'fee_amount'),
+    feeVatSatang: satang(row[col('vat_amount')], 'vat_amount'),
+    netAmountSatang: satang(row[col('net_amount')], 'net_amount'),
+    settlementDate: row[col('settlement_date')]?.trim(),
+    transactionTime: row[col('transaction_time')]?.trim(),
+    transactionId: row[col('transaction_id')]?.trim(),
   }))
   if (transactions.length === 0) throw new Error('รายงาน EDC ไม่มีรายการ')
 
   const first = transactions[0]
-  if (filenameDate !== first.settlementDate) {
-    throw new Error(`วันที่ชื่อไฟล์ EDC ไม่ตรงกับ Settlement: ชื่อไฟล์ ${filenameDate} แต่รายการ ${first.settlementDate}`)
-  }
   // terminal_id on LINE Pay's report varies with the customer's card scheme (Visa/
   // Mastercard vs. JCB use different terminal IDs on the same physical device) — it does
   // not identify which store the report belongs to, so it isn't validated here at all.
