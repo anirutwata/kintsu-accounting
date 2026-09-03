@@ -3,7 +3,7 @@ import {
   createApprovedJournal, createCashInvoice, getCashInvoice, getChartOfAccounts, voidCashInvoice,
 } from './flowaccount'
 import {
-  expectedEdcDates, isExpectedEdcReport, selectSingleEdcCsvAttachment,
+  expectedEdcDates, importLinePayEdcAttachment, isExpectedEdcReport, selectSingleEdcCsvAttachment,
   replaceEdcCashSaleForTaxInvoice, syncEdcReportToFlowAccount,
 } from './linePayEdcImport'
 
@@ -46,6 +46,61 @@ function makeSyncSupabase(report: SyncRow, revenueDays: SyncRow[]) {
     }),
   }
 }
+
+type ImportEqChain = { filters: Array<[string, unknown]>; eq(field: string, value: unknown): ImportEqChain; maybeSingle(): Promise<{ data: unknown; error: null }> }
+
+function makeImportSupabase(options: {
+  existingBySettlement?: Record<string, unknown> | null
+  storedDays?: Array<Record<string, unknown>>
+  insertError?: unknown
+  insertedId?: string
+}) {
+  return {
+    from: (table: string) => {
+      if (table === 'linepay_edc_reports') {
+        return {
+          select: () => {
+            const chain: ImportEqChain = {
+              filters: [],
+              eq(field, value) { this.filters.push([field, value]); return this },
+              async maybeSingle() {
+                if (this.filters.some(([field]) => field === 'settlement_date')) {
+                  return { data: options.existingBySettlement ?? null, error: null }
+                }
+                return { data: null, error: null }
+              },
+            }
+            return chain
+          },
+        }
+      }
+      if (table === 'linepay_edc_report_revenue_days') {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                order: async () => ({ data: options.storedDays ?? [], error: null }),
+              }),
+            }),
+          }),
+        }
+      }
+      throw new Error(`unexpected table ${table}`)
+    },
+    rpc: async (name: string) => {
+      if (name === 'import_linepay_edc_report') {
+        return options.insertError
+          ? { data: null, error: options.insertError }
+          : { data: options.insertedId ?? 'new-id', error: null }
+      }
+      throw new Error(`unexpected rpc ${name}`)
+    },
+  }
+}
+
+const importCsvHeader = 'merchant_id,merchant_name,service_group_name,service_name,amount,fee_rate,fee_amount,vat_amount,net_amount,settlement_date,transaction_time,transaction_id'
+const importCsvRow = '59IlGmY3YE2dsy1aUflYJI8WDrpyoA,คินสึ ยากินิคุ เซ็นทรัล ขอนแก่น แคมปัส,EDC,CREDIT_CARD_LOCAL,6917,0.023,159.09,11.14,6746.77,2026-08-25,2026-08-24 13:07:51,tx-local'
+const importCsv = [importCsvHeader, importCsvRow].join('\n')
 
 describe('LINE Pay EDC import schedule', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -213,5 +268,43 @@ describe('LINE Pay EDC import schedule', () => {
     expect(voidCashInvoice).toHaveBeenCalledWith(90)
     expect(result).toMatchObject({ revenueDate: '2026-08-23', recordId: 104, documentSerial: 'CA-NET' })
     expect(day).toMatchObject({ cash_sale_synced_amount_satang: 1_979_700, cash_sale_sync_state: 'synced' })
+  })
+
+  it('treats a resent settlement (different email, same settlement_date) as already imported instead of crashing on a raw duplicate-key error', async () => {
+    // Real-world case: LINE Pay resent a corrected CSV (fixed transaction_time, same totals)
+    // under a new message with new attachment bytes, after the original had already been
+    // imported. Message ID and file hash both differ, so only matching on settlement_date
+    // (which is uniquely constrained per active report) recognizes this as the same
+    // settlement instead of falling through to the DB's unique-constraint violation.
+    const existingReport = {
+      id: 'report-existing', revenue_date: '2026-08-24', settlement_date: '2026-08-25',
+      gross_amount_satang: 691_700, fee_amount_satang: 15_909, fee_vat_satang: 1_114, net_amount_satang: 674_677,
+    }
+    const storedDays = [{
+      revenue_date: '2026-08-24', gross_amount_satang: 691_700,
+      fee_amount_satang: 15_909, fee_vat_satang: 1_114, net_amount_satang: 674_677,
+    }]
+    const supabase = makeImportSupabase({ existingBySettlement: existingReport, storedDays })
+
+    const result = await importLinePayEdcAttachment(
+      supabase as never,
+      { messageId: 'new-corrected-email', attachmentName: 'EDC_DailyReport.csv', content: Buffer.from(importCsv) },
+      { enforceExpected: false },
+    )
+
+    expect(result).toMatchObject({ imported: false, reportId: 'report-existing' })
+  })
+
+  it('surfaces a raw Postgrest insert error as its real message instead of "[object Object]"', async () => {
+    const supabase = makeImportSupabase({
+      existingBySettlement: null,
+      insertError: { message: 'duplicate key value violates unique constraint "linepay_edc_reports_settlement_date_uidx"', code: '23505' },
+    })
+
+    await expect(importLinePayEdcAttachment(
+      supabase as never,
+      { messageId: 'msg-1', attachmentName: 'EDC_DailyReport.csv', content: Buffer.from(importCsv) },
+      { enforceExpected: false },
+    )).rejects.toThrow('duplicate key value violates unique constraint')
   })
 })

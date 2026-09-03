@@ -65,6 +65,24 @@ function requiredEnv(name: string): string {
   return value
 }
 
+// Supabase/Postgrest errors (e.g. a unique-constraint violation) are plain objects with a
+// `.message` string, not `Error` instances — `error instanceof Error ? error.message :
+// String(error)` (used throughout this pipeline) turns those into the literal text
+// "[object Object]" instead of the real message. These two helpers keep a readable message
+// through every catch/throw in this file so that pattern always works as intended.
+function messageOf(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (error && typeof error === 'object') {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message) return message
+  }
+  return String(error)
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(messageOf(error))
+}
+
 interface MailAttachment {
   filename?: string
   content: Buffer
@@ -111,7 +129,7 @@ async function findReportMessages(): Promise<Array<{ messageId: string; attachme
 
 async function resolveEdcChannel(supabase: SupabaseClient): Promise<{ id: number; name: string }> {
   const { data: settings, error } = await supabase.rpc('get_settings')
-  if (error) throw error
+  if (error) throw toError(error)
   const id = Number(settings?.default_edc_channel_id)
   const name = String(settings?.default_edc_channel_name || '')
   if (!id || !name) throw new Error('ยังไม่ได้ตั้งค่าช่องทางเครื่องรูดบัตร EDC')
@@ -157,8 +175,8 @@ async function ensureJournalVoided(recordId: number): Promise<void> {
   try {
     await voidJournalEntry(recordId)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (!message.includes('invalid status')) throw error
+    const message = messageOf(error)
+    if (!message.includes('invalid status')) throw toError(error)
   }
   const response = await getJournalEntry(recordId)
   const document = response?.list?.[0] ?? response
@@ -213,7 +231,7 @@ async function syncCashSale(supabase: SupabaseClient, revenueDay: StoredEdcReven
       } catch (cleanupError) {
         await supabase.from('linepay_edc_revenue_days').update({
           cash_sale_sync_state: 'cleanup_pending', cash_sale_cleanup_record_id: created.recordId,
-          cash_sale_sync_error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+          cash_sale_sync_error: messageOf(cleanupError),
         }).eq('id', current.id).eq('cash_sale_sync_state', 'creating')
         throw new Error(`มี Cash Sale EDC รอ Void: ${created.recordId}`)
       }
@@ -221,10 +239,10 @@ async function syncCashSale(supabase: SupabaseClient, revenueDay: StoredEdcReven
     }
     return { revenueDate: current.revenue_date, ...created, created: true }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = messageOf(error)
     await supabase.from('linepay_edc_revenue_days').update({ cash_sale_sync_state: 'error', cash_sale_sync_error: message })
       .eq('id', current.id).eq('cash_sale_sync_state', 'creating')
-    throw error
+    throw toError(error)
   }
 }
 
@@ -253,7 +271,7 @@ export async function replaceEdcCashSaleForTaxInvoice(
   }).eq('id', revenueDay.id).eq('cash_sale_sync_state', 'synced')
     .eq('cash_sale_record_id', revenueDay.cash_sale_record_id).select('*').maybeSingle()
   if (error || !claimed) {
-    throw error || new Error(`Cash Sale EDC วันที่ ${revenueDay.revenue_date} ถูกแก้ไขพร้อมกัน`)
+    throw error ? toError(error) : new Error(`Cash Sale EDC วันที่ ${revenueDay.revenue_date} ถูกแก้ไขพร้อมกัน`)
   }
   return syncCashSale(supabase, claimed as StoredEdcRevenueDay)
 }
@@ -292,7 +310,7 @@ async function syncSettlement(supabase: SupabaseClient, report: StoredEdcReport)
       } catch (cleanupError) {
         await supabase.from('linepay_edc_reports').update({
           settlement_sync_state: 'cleanup_pending', settlement_cleanup_record_id: created.recordId,
-          settlement_sync_error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+          settlement_sync_error: messageOf(cleanupError),
         }).eq('id', report.id).eq('settlement_sync_state', 'creating')
         throw new Error(`มี JV Settlement EDC รอ Void: ${created.recordId}`)
       }
@@ -300,10 +318,10 @@ async function syncSettlement(supabase: SupabaseClient, report: StoredEdcReport)
     }
     return { ...created, created: true }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = messageOf(error)
     await supabase.from('linepay_edc_reports').update({ settlement_sync_state: 'error', settlement_sync_error: message })
       .eq('id', report.id).eq('settlement_sync_state', 'creating')
-    throw error
+    throw toError(error)
   }
 }
 
@@ -316,12 +334,12 @@ export async function syncEdcReportToFlowAccount(supabase: SupabaseClient, repor
     const { data: contributions, error: contributionsError } = await supabase.from('linepay_edc_report_revenue_days')
       .select('revenue_day_id').eq('report_id', reportId).eq('is_deleted', false)
     if (contributionsError || !contributions?.length) {
-      throw contributionsError || new Error('ไม่พบวันขายในรายงาน EDC')
+      throw contributionsError ? toError(contributionsError) : new Error('ไม่พบวันขายในรายงาน EDC')
     }
     const { data: revenueDays, error: revenueDaysError } = await supabase.from('linepay_edc_revenue_days')
       .select('*').in('id', contributions.map(item => item.revenue_day_id))
       .eq('is_deleted', false).order('revenue_date')
-    if (revenueDaysError || !revenueDays?.length) throw revenueDaysError || new Error('ไม่พบยอดรวมวันขาย EDC')
+    if (revenueDaysError || !revenueDays?.length) throw revenueDaysError ? toError(revenueDaysError) : new Error('ไม่พบยอดรวมวันขาย EDC')
     const cashSales = []
     for (const revenueDay of revenueDays as StoredEdcRevenueDay[]) {
       cashSales.push(await syncCashSale(supabase, revenueDay))
@@ -329,7 +347,7 @@ export async function syncEdcReportToFlowAccount(supabase: SupabaseClient, repor
     const settlement = await syncSettlement(supabase, storedReport)
     return { ok: true as const, cashSales, settlement }
   } catch (syncError) {
-    return { ok: false as const, error: syncError instanceof Error ? syncError.message : String(syncError) }
+    return { ok: false as const, error: messageOf(syncError) }
   }
 }
 
@@ -351,7 +369,15 @@ export async function importLinePayEdcAttachment(
     .eq('gmail_message_id', input.messageId).eq('is_deleted', false).maybeSingle()
   const { data: existingByHash } = existingByMessage ? { data: null } : await supabase.from('linepay_edc_reports').select('*')
     .eq('attachment_sha256', sha256).eq('is_deleted', false).maybeSingle()
-  const existing = existingByMessage ?? existingByHash
+  // LINE Pay has resent a corrected file for a settlement already imported under a
+  // different email/attachment (e.g. a same-settlement-date transaction_time correction) —
+  // settlement_date is uniquely constrained per active report, so it's the authoritative
+  // match even when the message ID and file hash both differ. Falling through to the insert
+  // below in that case hits the DB unique-constraint violation instead of this function's
+  // own "does it actually match" comparison further down.
+  const { data: existingBySettlement } = (existingByMessage || existingByHash) ? { data: null } : await supabase.from('linepay_edc_reports').select('*')
+    .eq('settlement_date', report.settlementDate).eq('is_deleted', false).maybeSingle()
+  const existing = existingByMessage ?? existingByHash ?? existingBySettlement
   if (existing) {
     if (existing.revenue_date !== report.revenueDate || existing.settlement_date !== report.settlementDate
       || Number(existing.gross_amount_satang) !== report.grossAmountSatang
@@ -363,7 +389,7 @@ export async function importLinePayEdcAttachment(
     const { data: storedDays, error: storedDaysError } = await supabase.from('linepay_edc_report_revenue_days')
       .select('revenue_date,gross_amount_satang,fee_amount_satang,fee_vat_satang,net_amount_satang')
       .eq('report_id', existing.id).eq('is_deleted', false).order('revenue_date')
-    if (storedDaysError || !storedDays) throw storedDaysError || new Error('ไม่พบวันขายในรายงาน EDC เดิม')
+    if (storedDaysError || !storedDays) throw storedDaysError ? toError(storedDaysError) : new Error('ไม่พบวันขายในรายงาน EDC เดิม')
     const storedShape = storedDays.map(day => [
       day.revenue_date, Number(day.gross_amount_satang), Number(day.fee_amount_satang),
       Number(day.fee_vat_satang), Number(day.net_amount_satang),
@@ -401,7 +427,7 @@ export async function importLinePayEdcAttachment(
       fee_vat_satang: transaction.feeVatSatang, net_amount_satang: transaction.netAmountSatang,
     })),
   })
-  if (error || !insertedId) throw error || new Error('บันทึกรายงาน EDC ไม่สำเร็จ')
+  if (error || !insertedId) throw error ? toError(error) : new Error('บันทึกรายงาน EDC ไม่สำเร็จ')
   return {
     imported: true, reportId: String(insertedId), revenueDate: report.revenueDate,
     revenueDates: report.revenueDays.map(day => day.revenueDate),
@@ -414,7 +440,7 @@ export async function importLinePayEdcAttachment(
 // so the day's Cash Sale is created net of what these invoices already carved out.
 export async function reconcilePendingEdcTaxInvoices(supabase: SupabaseClient, revenueDate: string) {
   const { data, error } = await supabase.rpc('reconcile_pending_edc_tax_invoices', { p_revenue_date: revenueDate })
-  if (error) throw error
+  if (error) throw toError(error)
   return data as { completed_ids: string[]; manual_review_ids: string[] }
 }
 
