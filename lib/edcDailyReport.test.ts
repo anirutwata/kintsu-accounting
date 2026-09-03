@@ -116,11 +116,23 @@ describe('LINE Pay EDC daily report', () => {
     expect(() => parseEdcDailyReport(delayedSettlement)).not.toThrow()
   })
 
-  it('rejects a transaction dated on or after its own settlement date', () => {
-    // Confirmed real-world case: a CSV where every transaction_time matched
-    // settlement_date exactly instead of being the day before it.
-    const sameDayAsSettlement = sample.replace('2026-08-24 21:24:49', '2026-08-25 09:11:26')
-    expect(() => parseEdcDailyReport(sameDayAsSettlement))
+  it('treats a transaction dated exactly on its own settlement date as belonging to the day before', () => {
+    // Confirmed real-world case (2026-09-03): every transaction_time in the settlement
+    // exactly equaled settlement_date instead of preceding it — LINE Pay's batch/
+    // settlement processing moment, not the real point-of-sale time. The store's own
+    // POS credit-card total for settlement_date minus one day matched this settlement's
+    // total to the baht, confirming the sale actually happened the day before.
+    const bothSameDayAsSettlement = sample.replaceAll('2026-08-24', '2026-08-25')
+    const report = parseEdcDailyReport(bothSameDayAsSettlement)
+    expect(report.revenueDate).toBe('2026-08-24')
+    expect(report.revenueDays).toEqual([
+      expect.objectContaining({ revenueDate: '2026-08-24', transactionCount: 2 }),
+    ])
+  })
+
+  it('still rejects a transaction genuinely dated after its own settlement date', () => {
+    const afterSettlement = sample.replace('2026-08-24 21:24:49', '2026-08-26 09:11:26')
+    expect(() => parseEdcDailyReport(afterSettlement))
       .toThrow('Settlement EDC ต้องอยู่หลังวันขายทุกรายการ')
   })
 
