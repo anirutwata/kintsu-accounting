@@ -46,6 +46,7 @@ function CategoriesContent() {
   const [bizCategories, setBizCategories] = useState<FlowAccountCategory[]>([])
   const [bizLoadError, setBizLoadError] = useState('')
   const [mappingId, setMappingId] = useState<string | null>(null)
+  const [mappingError, setMappingError] = useState('')
 
   useEffect(() => { load() }, [type])
   useEffect(() => {
@@ -68,13 +69,20 @@ function CategoriesContent() {
     setLoading(false)
   }
 
+  // ผังบัญชีทั่วไป picks the actual posting account (creditId/debitId) — it must never
+  // touch categoryId/systemCode. Those two are a separate, independent FlowAccount
+  // validation code (see migration 020_expense_category_accounting_mapping.sql): most
+  // accounting-view entries carry them as null, so writing this selection's categoryId/
+  // systemCode wholesale used to silently blow away a correct value picked via the
+  // "หมวดหมู่นักธุรกิจ" dropdown below (or set by a migration) — the exact bug behind
+  // "ผูกหมวดหมู่ไม่ได้": pick a specific account here, and the required categoryId/
+  // systemCode would vanish with no error shown.
   async function handleMapFlowAccount(catId: string, faDebitId: string) {
     setMappingId(catId)
+    setMappingError('')
     const fa = faCategories.find(c => c.debitId === Number(faDebitId))
     const body = fa
       ? {
-          flowaccount_category_id: fa.categoryId,
-          flowaccount_system_code: fa.systemCode,
           flowaccount_credit_id: fa.creditId,
           flowaccount_credit_category: fa.creditCategory,
           flowaccount_debit_id: fa.debitId,
@@ -82,8 +90,6 @@ function CategoriesContent() {
           flowaccount_category_name: fa.nameLocal,
         }
       : {
-          flowaccount_category_id: null,
-          flowaccount_system_code: null,
           flowaccount_credit_id: null,
           flowaccount_credit_category: null,
           flowaccount_debit_id: null,
@@ -96,40 +102,41 @@ function CategoriesContent() {
       body: JSON.stringify(body),
     })
     if (res.ok) load()
+    else setMappingError((await res.json().catch(() => null))?.error || 'ผูกผังบัญชีทั่วไปไม่สำเร็จ')
     setMappingId(null)
   }
 
-  // Same mapping shape as handleMapFlowAccount above, keyed by categoryId (unique
-  // within the business list) instead of debitId — every entry here always carries a
-  // non-null systemCode/categoryId, so a category mapped this way is guaranteed to sync.
+  // หมวดหมู่นักธุรกิจ supplies categoryId/systemCode — the validation code FlowAccount
+  // requires on every line item (independent of which account actually posts, see the
+  // comment on handleMapFlowAccount above). When this category doesn't have a specific
+  // posting account chosen yet, also seed one from this business category's own default
+  // so picking just this dropdown alone (the recommended path) is enough on its own —
+  // but never override an account someone already picked via "ผังบัญชีทั่วไป".
   async function handleMapBusiness(catId: string, faCategoryId: string) {
     setMappingId(catId)
+    setMappingError('')
     const fa = bizCategories.find(c => c.categoryId === Number(faCategoryId))
+    const hasOwnAccount = categories.find(c => c.id === catId)?.flowaccount_debit_id != null
     const body = fa
       ? {
           flowaccount_category_id: fa.categoryId,
           flowaccount_system_code: fa.systemCode,
-          flowaccount_credit_id: fa.creditId,
-          flowaccount_credit_category: fa.creditCategory,
-          flowaccount_debit_id: fa.debitId,
-          flowaccount_debit_category: fa.debitCategory,
-          flowaccount_category_name: fa.nameLocal,
+          ...(hasOwnAccount ? {} : {
+            flowaccount_credit_id: fa.creditId,
+            flowaccount_credit_category: fa.creditCategory,
+            flowaccount_debit_id: fa.debitId,
+            flowaccount_debit_category: fa.debitCategory,
+            flowaccount_category_name: fa.nameLocal,
+          }),
         }
-      : {
-          flowaccount_category_id: null,
-          flowaccount_system_code: null,
-          flowaccount_credit_id: null,
-          flowaccount_credit_category: null,
-          flowaccount_debit_id: null,
-          flowaccount_debit_category: null,
-          flowaccount_category_name: null,
-        }
+      : { flowaccount_category_id: null, flowaccount_system_code: null }
     const res = await fetch(`/api/categories/${catId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
     if (res.ok) load()
+    else setMappingError((await res.json().catch(() => null))?.error || 'ผูกหมวดหมู่นักธุรกิจไม่สำเร็จ')
     setMappingId(null)
   }
 
@@ -247,6 +254,13 @@ function CategoriesContent() {
         <div className="p-3 rounded-xl bg-red-50 text-red-700 text-sm flex justify-between">
           <span>❌ {deleteError}</span>
           <button onClick={() => setDeleteError('')} className="text-red-400 ml-2">✕</button>
+        </div>
+      )}
+
+      {mappingError && (
+        <div className="p-3 rounded-xl bg-red-50 text-red-700 text-sm flex justify-between">
+          <span>❌ {mappingError}</span>
+          <button onClick={() => setMappingError('')} className="text-red-400 ml-2">✕</button>
         </div>
       )}
 
