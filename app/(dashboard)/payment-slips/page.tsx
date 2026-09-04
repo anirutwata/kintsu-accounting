@@ -160,14 +160,14 @@ export default function PaymentSlipsPage() {
                 <div>
                   <p className="font-semibold text-blue-700">{group.serial}</p>
                   <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                    {group.status === 'paid' ? 'ชำระ' : 'ครบกำหนด'} {thaiDate(group.payment_date)} · {group.expenses.length} เอกสาร
+                    {group.status === 'cancelled' ? 'ยกเลิก' : group.status === 'paid' ? 'ชำระ' : 'ครบกำหนด'} {thaiDate(group.payment_date)} · {group.expenses.length} เอกสาร
                   </p>
                   {group.payment_channel && <p className="text-xs mt-1 text-gray-500">{group.payment_channel}</p>}
                 </div>
                 <div className="text-right">
-                  <p className="font-bold" style={{ color: 'var(--charcoal)' }}>{formatBaht(group.total_satang)}</p>
-                  <span className={`text-xs ${group.status === 'paid' ? 'text-green-700' : group.status === 'awaiting_flowaccount' ? 'text-blue-700' : 'text-amber-700'}`}>
-                    {group.status === 'paid' ? 'ชำระเงินแล้ว' : group.status === 'awaiting_flowaccount' ? 'ชำระแล้ว — รอบันทึก FlowAccount' : 'รอชำระ'}
+                  <p className="font-bold" style={{ color: group.status === 'cancelled' ? 'var(--muted-foreground)' : 'var(--charcoal)' }}>{formatBaht(group.total_satang)}</p>
+                  <span className={`text-xs ${group.status === 'cancelled' ? 'text-gray-500' : group.status === 'paid' ? 'text-green-700' : group.status === 'awaiting_flowaccount' ? 'text-blue-700' : 'text-amber-700'}`}>
+                    {group.status === 'cancelled' ? 'ยกเลิกทั้งชุด' : group.status === 'paid' ? 'ชำระเงินแล้ว' : group.status === 'awaiting_flowaccount' ? 'ชำระแล้ว — รอบันทึก FlowAccount' : 'รอชำระ'}
                   </span>
                   {group.gross_total_satang !== group.total_satang && (
                     <p className="text-[10px] text-gray-400">ก่อนหัก WHT {formatBaht(group.gross_total_satang)}</p>
@@ -195,19 +195,29 @@ export default function PaymentSlipsPage() {
                     )}
                   </div>
                 )}
-                {group.expenses.map(expense => (
-                  <div key={expense.id} className="py-2.5 border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
-                    <div className="flex justify-between gap-3 text-sm">
-                      <div className="min-w-0">
-                        <p className="font-medium">{expense.flowaccount_document_serial}</p>
-                        <p className="truncate text-xs text-gray-500">{expense.recipient_name || 'ไม่ระบุผู้ขาย'}</p>
-                        <p className="text-xs text-gray-400">เอกสาร {thaiDate(expense.document_date)}{expense.flowaccount_reference ? ` · ${expense.flowaccount_reference}` : ''}</p>
+                {group.expenses.map(expense => {
+                  const cancelled = expense.flowaccount_payment_status === 'cancelled'
+                  return (
+                    <div key={expense.id} className="py-2.5 border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
+                      <div className="flex justify-between gap-3 text-sm">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className={`font-medium ${cancelled ? 'text-gray-400' : ''}`}>{expense.flowaccount_document_serial}</p>
+                            {cancelled && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-gray-100 text-gray-500 border border-gray-200">
+                                ยกเลิก
+                              </span>
+                            )}
+                          </div>
+                          <p className={`truncate text-xs ${cancelled ? 'text-gray-400' : 'text-gray-500'}`}>{expense.recipient_name || 'ไม่ระบุผู้ขาย'}</p>
+                          <p className="text-xs text-gray-400">เอกสาร {thaiDate(expense.document_date)}{expense.flowaccount_reference ? ` · ${expense.flowaccount_reference}` : ''}</p>
+                        </div>
+                        <span className={`shrink-0 ${cancelled ? 'text-gray-400 line-through' : ''}`}>{formatBaht(expense.total_satang)}</span>
                       </div>
-                      <span className="shrink-0">{formatBaht(expense.total_satang)}</span>
                     </div>
-                  </div>
-                ))}
-                {group.status !== 'paid' && payingSerial !== group.serial && (
+                  )
+                })}
+                {group.status !== 'paid' && group.status !== 'cancelled' && payingSerial !== group.serial && (
                   <button type="button" onClick={() => openPaymentForm(group)}
                     className="my-2 w-full rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white">
                     {group.local_payment ? 'แก้ไขข้อมูลการชำระ' : 'ชำระและแนบสลิป'}

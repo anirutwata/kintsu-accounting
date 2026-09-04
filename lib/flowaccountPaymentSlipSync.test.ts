@@ -48,6 +48,18 @@ describe('withPaymentSlipReferences', () => {
     expect(result.referencedToMe).toEqual([{ documentType: 37, documentSerial: 'PAY2026090005' }])
   })
 
+  it('also looks up a cancelled document, in case it was voided after being grouped into a PAY', async () => {
+    getExpenseDocument.mockClear()
+    getExpenseDocument.mockResolvedValue({ referencedToMe: [{ documentType: 37, documentSerial: 'PAY2026080017' }] })
+    const cancelled: FlowAccountExpenseDocument = { ...pendingNoReference, recordId: 4, status: 'void', statusString: undefined }
+    const supabase = makeSupabase([])
+
+    const [result] = await withPaymentSlipReferences(supabase as never, [cancelled])
+
+    expect(getExpenseDocument).toHaveBeenCalledWith(cancelled.recordId)
+    expect(result.referencedToMe).toEqual([{ documentType: 37, documentSerial: 'PAY2026080017' }])
+  })
+
   it('leaves documents untouched when they are not payment-slip eligible or already carry referencedToMe', async () => {
     getExpenseDocument.mockClear()
     const awaiting: FlowAccountExpenseDocument = { ...pendingNoReference, recordId: 2, status: '1', statusString: 'awaiting' }

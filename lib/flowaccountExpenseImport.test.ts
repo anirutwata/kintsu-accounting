@@ -3,6 +3,7 @@ import {
   mapFlowAccountExpense,
   selectImportCandidates,
   isEligibleForPaymentSlipSync,
+  needsPaymentSlipLookup,
   type FlowAccountExpenseDocument,
 } from './flowaccountExpenseImport'
 
@@ -116,5 +117,31 @@ describe('FlowAccount payment-slip expense import', () => {
       new Map([[444011608, 'วัตถุดิบทางตรง-อื่นๆ']]),
     )
     expect(mapped.expense.is_paid).toBe(true)
+  })
+
+  // A document cancelled in FlowAccount after being grouped into a PAY still carries
+  // that PAY's referencedToMe entry — it should still import (so the PAY number stays
+  // connected instead of showing a gap), just flagged cancelled instead of paid/pending.
+  it('still needs a detail lookup for a cancelled document, but not for an unrelated one', () => {
+    expect(needsPaymentSlipLookup({ ...paidBySlip, status: 'void', statusString: undefined })).toBe(true)
+    expect(needsPaymentSlipLookup({ ...paidBySlip, status: 'awaiting', statusString: undefined })).toBe(false)
+    expect(needsPaymentSlipLookup({ ...paidBySlip, status: 'void', statusString: undefined, isDelete: true })).toBe(false)
+  })
+
+  it('imports a cancelled PAY-linked document flagged cancelled, not paid or pending', () => {
+    const cancelled = { ...paidBySlip, status: 'void', statusString: undefined }
+    expect(selectImportCandidates([cancelled], new Set())).toHaveLength(1)
+
+    const mapped = mapFlowAccountExpense(cancelled, new Map([[444011608, 'วัตถุดิบทางตรง-อื่นๆ']]))
+    expect(mapped.expense).toMatchObject({
+      is_paid: false,
+      flowaccount_payment_status: 'cancelled',
+      flowaccount_payment_slip_serial: 'PAY2026080017',
+    })
+  })
+
+  it('does not import a cancelled document that never belonged to a PAY', () => {
+    const cancelled = { ...paidBySlip, status: 'void', statusString: undefined, referencedToMe: [] }
+    expect(selectImportCandidates([cancelled], new Set())).toHaveLength(0)
   })
 })

@@ -18,7 +18,7 @@ export interface PaymentSlipGroup {
   payment_channel: string | null
   total_satang: number
   gross_total_satang: number
-  status: 'pending' | 'awaiting_flowaccount' | 'paid'
+  status: 'pending' | 'awaiting_flowaccount' | 'paid' | 'cancelled'
   local_payment: PaymentSlipLocalPayment | null
   expenses: PaymentSlipExpense[]
 }
@@ -68,8 +68,13 @@ export function groupExpensesByPaymentSlip(
       local_payment: null,
       expenses: [],
     }
-    group.gross_total_satang += expense.total_satang
-    group.total_satang += expense.total_satang - expense.wht_satang
+    // A cancelled EXP still belongs to its PAY for reconciliation — keep it in the
+    // group's expense list, just leave it out of the amounts so it doesn't inflate
+    // the actual bank transfer.
+    if (expense.flowaccount_payment_status !== 'cancelled') {
+      group.gross_total_satang += expense.total_satang
+      group.total_satang += expense.total_satang - expense.wht_satang
+    }
     if (expense.flowaccount_payment_status === 'pendingPayment') group.status = 'pending'
     group.expenses.push(expense)
     group.local_payment = localPaymentBySerial.get(serial) ?? null
@@ -78,7 +83,9 @@ export function groupExpensesByPaymentSlip(
   return [...groups.values()]
     .map(group => ({
       ...group,
-      status: group.status === 'pending' && group.local_payment ? 'awaiting_flowaccount' as const : group.status,
+      status: group.expenses.every(expense => expense.flowaccount_payment_status === 'cancelled')
+        ? 'cancelled' as const
+        : group.status === 'pending' && group.local_payment ? 'awaiting_flowaccount' as const : group.status,
       expenses: group.expenses.sort((a, b) => a.document_date.localeCompare(b.document_date)),
     }))
     .sort((a, b) => comparePaymentSlipSerialDesc(a.serial, b.serial))

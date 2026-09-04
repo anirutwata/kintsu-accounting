@@ -106,6 +106,7 @@ function statusTokens(document: FlowAccountExpenseDocument): string[] {
 
 const PENDING_PAYMENT_TOKENS = new Set(['4', 'pendingpayment'])
 const PAID_BY_PAYMENT_SLIP_TOKENS = new Set(['6', 'paidbypaymentslip'])
+const CANCELLED_TOKENS = new Set(['void', 'cancelled', 'canceled'])
 
 // Status-only check (no PAY serial required) — used to decide which documents
 // are worth a per-document detail fetch when the list response didn't already
@@ -120,6 +121,27 @@ function isPaidByPaymentSlipStatus(document: FlowAccountExpenseDocument): boolea
   return statusTokens(document).some(token => PAID_BY_PAYMENT_SLIP_TOKENS.has(token))
 }
 
+function isCancelledStatus(document: FlowAccountExpenseDocument): boolean {
+  return statusTokens(document).some(token => CANCELLED_TOKENS.has(token))
+}
+
+// Broader than isEligibleForPaymentSlipSync: also covers a voided/cancelled EXP,
+// since a document cancelled in FlowAccount after it was grouped into a PAY
+// (ใบเตรียมจ่าย) still carries that PAY's referencedToMe entry — worth a detail
+// fetch so the cancellation shows up in KINTSU instead of the PAY number just
+// silently having a gap.
+export function needsPaymentSlipLookup(document: FlowAccountExpenseDocument): boolean {
+  if (document.isDelete) return false
+  return isEligibleForPaymentSlipSync(document) || isCancelledStatus(document)
+}
+
+function normalizedPaymentStatus(document: FlowAccountExpenseDocument): string {
+  if (isCancelledStatus(document)) return 'cancelled'
+  if (isPaidByPaymentSlipStatus(document)) return 'paidByPaymentSlip'
+  if (statusTokens(document).some(token => PENDING_PAYMENT_TOKENS.has(token))) return 'pendingPayment'
+  return document.statusString || String(document.status ?? '')
+}
+
 function paymentMethod(value: number | string | undefined, paid: boolean): ImportedExpenseRow['payment_method'] {
   if (!paid) return 'เครดิต'
   if (String(value) === '1') return 'เงินสด'
@@ -130,7 +152,7 @@ function paymentMethod(value: number | string | undefined, paid: boolean): Impor
 }
 
 export function isPaidByPaymentSlip(document: FlowAccountExpenseDocument): boolean {
-  return isEligibleForPaymentSlipSync(document) && paymentSlipSerial(document) !== null
+  return needsPaymentSlipLookup(document) && paymentSlipSerial(document) !== null
 }
 
 export function selectImportCandidates(
@@ -199,7 +221,7 @@ export function mapFlowAccountExpense(
       flowaccount_record_id: document.recordId,
       flowaccount_document_serial: document.documentSerial,
       flowaccount_payment_slip_serial: paySerial,
-      flowaccount_payment_status: document.statusString || 'paidByPaymentSlip',
+      flowaccount_payment_status: normalizedPaymentStatus(document),
       flowaccount_payment_channel: document.payments?.paymentChannel || document.payments?.pettyCashName || null,
       flowaccount_reference: document.reference || null,
       flowaccount_synced_at: new Date().toISOString(),

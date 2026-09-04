@@ -2,7 +2,7 @@ import { listFlowAccountExpenses, getExpenseDocument } from './flowaccount'
 import {
   mapFlowAccountExpense,
   selectImportCandidates,
-  isEligibleForPaymentSlipSync,
+  needsPaymentSlipLookup,
   type FlowAccountExpenseDocument,
 } from './flowaccountExpenseImport'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -47,15 +47,16 @@ function normalizeVendor(value: string | null | undefined): string {
 }
 
 // The bulk /expenses list drops referencedToMe, so a pendingPayment/paidByPaymentSlip
-// document doesn't carry which PAY (ใบเตรียมจ่าย) it belongs to. Backfill it: reuse the
-// PAY serial already stored locally for a document we've imported before (no API call),
-// otherwise re-fetch that one document's detail, which does return referencedToMe.
+// (or since-cancelled) document doesn't carry which PAY (ใบเตรียมจ่าย) it belongs to.
+// Backfill it: reuse the PAY serial already stored locally for a document we've
+// imported before (no API call), otherwise re-fetch that one document's detail,
+// which does return referencedToMe.
 export async function withPaymentSlipReferences(
   supabase: SupabaseClient,
   documents: FlowAccountExpenseDocument[],
 ): Promise<FlowAccountExpenseDocument[]> {
   const needsLookup = documents.filter(document =>
-    isEligibleForPaymentSlipSync(document) && !(document.referencedToMe?.length),
+    needsPaymentSlipLookup(document) && !(document.referencedToMe?.length),
   )
   if (needsLookup.length === 0) return documents
 

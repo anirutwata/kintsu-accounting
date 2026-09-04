@@ -11,14 +11,13 @@ export async function GET(req: Request) {
     .eq('source', 'flowaccount_payment_slip')
     .eq('is_deleted', false)
     .not('flowaccount_payment_slip_serial', 'is', null)
-    .order('date', { ascending: false })
+    .order('flowaccount_payment_slip_serial', { ascending: false })
 
+  // Group by the month embedded in the PAY serial itself (PAY2026080006 -> August),
+  // not by when it was actually paid — a PAY raised in one month can settle in the
+  // next, and staff expect it to stay under the month it was created in FlowAccount.
   if (month) {
-    const [year, monthNumber] = month.split('-').map(Number)
-    const nextMonth = monthNumber === 12
-      ? `${year + 1}-01-01`
-      : `${year}-${String(monthNumber + 1).padStart(2, '0')}-01`
-    query = query.gte('date', `${month}-01`).lt('date', nextMonth)
+    query = query.like('flowaccount_payment_slip_serial', `PAY${month.replace('-', '')}%`)
   }
 
   const [{ data, error }, { data: localPayments, error: localPaymentsError }] = await Promise.all([
