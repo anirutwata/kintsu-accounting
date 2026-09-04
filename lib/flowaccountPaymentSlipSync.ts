@@ -1,7 +1,8 @@
-import { listFlowAccountExpenses } from './flowaccount'
+import { listFlowAccountExpenses, getExpenseDocument } from './flowaccount'
 import {
   mapFlowAccountExpense,
   selectImportCandidates,
+  isEligibleForPaymentSlipSync,
   type FlowAccountExpenseDocument,
 } from './flowaccountExpenseImport'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -45,9 +46,52 @@ function normalizeVendor(value: string | null | undefined): string {
   return (value || '').replace(/บริษัท|จำกัด|\(มหาชน\)|\s+/g, '').toLowerCase()
 }
 
+// The bulk /expenses list drops referencedToMe, so a pendingPayment/paidByPaymentSlip
+// document doesn't carry which PAY (ใบเตรียมจ่าย) it belongs to. Backfill it: reuse the
+// PAY serial already stored locally for a document we've imported before (no API call),
+// otherwise re-fetch that one document's detail, which does return referencedToMe.
+export async function withPaymentSlipReferences(
+  supabase: SupabaseClient,
+  documents: FlowAccountExpenseDocument[],
+): Promise<FlowAccountExpenseDocument[]> {
+  const needsLookup = documents.filter(document =>
+    isEligibleForPaymentSlipSync(document) && !(document.referencedToMe?.length),
+  )
+  if (needsLookup.length === 0) return documents
+
+  const recordIds = needsLookup.map(document => document.recordId)
+  const { data, error } = await supabase
+    .from('expenses')
+    .select('flowaccount_record_id, flowaccount_payment_slip_serial')
+    .in('flowaccount_record_id', recordIds)
+  if (error) throw new Error(error.message)
+  const knownSerialByRecordId = new Map<number, string>(
+    (data ?? [])
+      .filter(row => row.flowaccount_payment_slip_serial)
+      .map(row => [Number(row.flowaccount_record_id), String(row.flowaccount_payment_slip_serial)]),
+  )
+
+  const enrichedByRecordId = new Map<number, FlowAccountExpenseDocument>()
+  for (const document of needsLookup) {
+    const knownSerial = knownSerialByRecordId.get(document.recordId)
+    if (knownSerial) {
+      enrichedByRecordId.set(document.recordId, {
+        ...document,
+        referencedToMe: [{ documentType: '37', documentSerial: knownSerial }],
+      })
+      continue
+    }
+    const detail = await getExpenseDocument(document.recordId) as FlowAccountExpenseDocument
+    enrichedByRecordId.set(document.recordId, { ...document, referencedToMe: detail.referencedToMe })
+  }
+
+  return documents.map(document => enrichedByRecordId.get(document.recordId) ?? document)
+}
+
 export async function previewFlowAccountPaymentSlipSync(supabase: SupabaseClient) {
   const rawDocuments = await fetchFlowAccountExpenses()
-  const documents = selectImportCandidates(rawDocuments, new Set())
+  const enrichedDocuments = await withPaymentSlipReferences(supabase, rawDocuments)
+  const documents = selectImportCandidates(enrichedDocuments, new Set())
   const recordIds = documents.map(document => document.recordId)
   const { data, error } = recordIds.length === 0
     ? { data: [], error: null }
@@ -69,7 +113,8 @@ export async function previewFlowAccountPaymentSlipSync(supabase: SupabaseClient
 
 export async function syncFlowAccountPaymentSlips(supabase: SupabaseClient) {
   const rawDocuments = await fetchFlowAccountExpenses()
-  const documents = selectImportCandidates(rawDocuments, new Set())
+  const enrichedDocuments = await withPaymentSlipReferences(supabase, rawDocuments)
+  const documents = selectImportCandidates(enrichedDocuments, new Set())
   const activeRecordIds = new Set(documents.map(document => document.recordId))
   const categories = await categoryMap(supabase)
   let created = 0

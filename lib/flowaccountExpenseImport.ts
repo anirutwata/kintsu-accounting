@@ -92,6 +92,34 @@ function paymentSlipSerial(document: FlowAccountExpenseDocument): string | null 
   )?.documentSerial ?? null
 }
 
+// FlowAccount's /expenses list endpoint returns status as a single field —
+// sometimes the numeric code ('4'/'6'), sometimes the word directly
+// ('pendingPayment'/'paidByPaymentSlip') — while the single-document GET
+// returns both `status` (numeric) and `statusString` (word) separately.
+// Check every field/casing so eligibility doesn't depend on which shape a
+// given call happens to return.
+function statusTokens(document: FlowAccountExpenseDocument): string[] {
+  return [document.status, document.statusString]
+    .filter((value): value is string | number => value !== undefined && value !== null)
+    .map(value => String(value).toLowerCase())
+}
+
+const PENDING_PAYMENT_TOKENS = new Set(['4', 'pendingpayment'])
+const PAID_BY_PAYMENT_SLIP_TOKENS = new Set(['6', 'paidbypaymentslip'])
+
+// Status-only check (no PAY serial required) — used to decide which documents
+// are worth a per-document detail fetch when the list response didn't already
+// carry referencedToMe. See isPaidByPaymentSlip for the full eligibility check.
+export function isEligibleForPaymentSlipSync(document: FlowAccountExpenseDocument): boolean {
+  if (document.isDelete) return false
+  const tokens = statusTokens(document)
+  return tokens.some(token => PENDING_PAYMENT_TOKENS.has(token) || PAID_BY_PAYMENT_SLIP_TOKENS.has(token))
+}
+
+function isPaidByPaymentSlipStatus(document: FlowAccountExpenseDocument): boolean {
+  return statusTokens(document).some(token => PAID_BY_PAYMENT_SLIP_TOKENS.has(token))
+}
+
 function paymentMethod(value: number | string | undefined, paid: boolean): ImportedExpenseRow['payment_method'] {
   if (!paid) return 'เครดิต'
   if (String(value) === '1') return 'เงินสด'
@@ -102,9 +130,7 @@ function paymentMethod(value: number | string | undefined, paid: boolean): Impor
 }
 
 export function isPaidByPaymentSlip(document: FlowAccountExpenseDocument): boolean {
-  return !document.isDelete &&
-    (['4', '6'].includes(String(document.status)) || ['pendingPayment', 'paidByPaymentSlip'].includes(document.statusString || '')) &&
-    paymentSlipSerial(document) !== null
+  return isEligibleForPaymentSlipSync(document) && paymentSlipSerial(document) !== null
 }
 
 export function selectImportCandidates(
@@ -144,7 +170,7 @@ export function mapFlowAccountExpense(
   const vatSatang = toSatang(document.vatAmount)
   const totalSatang = toSatang(document.grandTotal)
   const amountSatang = Math.max(1, totalSatang - (document.isVatInclusive ? 0 : vatSatang) + discountSatang)
-  const paid = String(document.status) === '6' || document.statusString === 'paidByPaymentSlip'
+  const paid = isPaidByPaymentSlipStatus(document)
   const primaryCategory = items.length === 0
     ? fallbackCategory
     : [...new Set(items.map(item => item.category))].length === 1

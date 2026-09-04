@@ -147,6 +147,13 @@ export async function listFlowAccountExpenses(
   }
 }
 
+// The bulk /expenses list above does not populate referencedToMe (which PAY
+// document — ใบเตรียมจ่าย — an EXP belongs to), only the single-document GET
+// does. The payment-slip sync calls this per document it needs to re-check.
+export async function getExpenseDocument(recordId: number): Promise<unknown> {
+  return flowAccountFetch(`/expenses/${recordId}`)
+}
+
 export interface ExpenseCategory {
   // Only populated for the curated "business category" subset — most of the accounting
   // chart of accounts has no systemCode/categoryId and posts via creditId/debitId alone.

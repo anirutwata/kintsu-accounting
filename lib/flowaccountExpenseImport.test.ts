@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   mapFlowAccountExpense,
   selectImportCandidates,
+  isEligibleForPaymentSlipSync,
   type FlowAccountExpenseDocument,
 } from './flowaccountExpenseImport'
 
@@ -96,5 +97,24 @@ describe('FlowAccount payment-slip expense import', () => {
       payments: { paymentDate: '2026-08-22', paymentMethod: '11', pettyCashName: 'เงินสดย่อย Kintsu' },
     }, new Map([[444011608, 'วัตถุดิบทางตรง-อื่นๆ']]))
     expect(mapped.expense).toMatchObject({ payment_method: 'เงินสด', flowaccount_payment_channel: 'เงินสดย่อย Kintsu' })
+  })
+
+  // The bulk /expenses list has been observed returning the status word directly in
+  // `status` (e.g. "pendingPayment") with no separate `statusString` at all — unlike the
+  // single-document GET, which returns both. Eligibility must not depend on which shape
+  // a given call happens to return.
+  it('recognizes pendingPayment/paidByPaymentSlip when the word is in `status` with no `statusString`', () => {
+    expect(isEligibleForPaymentSlipSync({ ...paidBySlip, status: 'pendingPayment', statusString: undefined })).toBe(true)
+    expect(isEligibleForPaymentSlipSync({ ...paidBySlip, status: 'paidByPaymentSlip', statusString: undefined })).toBe(true)
+    expect(isEligibleForPaymentSlipSync({ ...paidBySlip, status: 'awaiting', statusString: undefined })).toBe(false)
+    expect(isEligibleForPaymentSlipSync({ ...paidBySlip, status: 'paidByPaymentSlip', statusString: undefined, isDelete: true })).toBe(false)
+  })
+
+  it('marks an expense paid when only `status` (not `statusString`) carries paidByPaymentSlip', () => {
+    const mapped = mapFlowAccountExpense(
+      { ...paidBySlip, status: 'paidByPaymentSlip', statusString: undefined },
+      new Map([[444011608, 'วัตถุดิบทางตรง-อื่นๆ']]),
+    )
+    expect(mapped.expense.is_paid).toBe(true)
   })
 })
