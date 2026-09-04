@@ -35,6 +35,32 @@
 - ถ้า OCR ล้มเหลวหรือเกิด 5xx ให้หยุด request เพิ่ม ตรวจ logs แบบไม่เปิดเผยข้อมูล และเตรียม rollback ไป last-known-good deployment `dpl_GNyyukQfvHrsDFCk8kBLVyXmgpuf`; migration 053 เป็น additive ห้ามลบ objects แบบฉุกเฉิน.
 - เมื่อ smoke test ผ่านจึงถือว่าการลดต้นทุนสลิปทำงานจริง. OCR ของ bill/VAT/vendor/items/asset/transfer routes อื่นยังไม่ได้ย้ายและยังเป็น Phase 2.
 
+## PAY REFERENCE BACKFILL — `974dd44` (2026-09-04)
+- Root cause of "FlowAccount data ไม่ครบ / ใบเตรียมจ่ายขาดช่วง": FlowAccount's bulk
+  `/expenses` list no longer returns `referencedToMe` on any row — verified live
+  against Production (QSOLA): `EXP2026080158` shows no PAY link via the list, but
+  `GET /expenses/{id}` returns `referencedToMe` → `PAY2026090005`, an 11-document
+  batch that was completely missing from `/payment-slips`. Every
+  `pendingPayment`/`paidByPaymentSlip` document synced through the list was
+  silently dropped by `selectImportCandidates` since `paymentSlipSerial()` always
+  came back null — no error surfaced, it just never imported.
+- Fix in `lib/flowaccountPaymentSlipSync.ts` (`withPaymentSlipReferences`): for
+  each pendingPayment/paidByPaymentSlip document lacking `referencedToMe`, reuse
+  the PAY serial already stored locally (`expenses.flowaccount_payment_slip_serial`)
+  when that record was imported before — no extra call — otherwise re-fetch just
+  that document via the new `getExpenseDocument()` (`GET /expenses/{id}`), the
+  only endpoint that still returns the reference.
+- Also hardened the pendingPayment/paidByPaymentSlip status check
+  (`isEligibleForPaymentSlipSync` in `lib/flowaccountExpenseImport.ts`): the list
+  endpoint was observed returning the status word directly in `status` with no
+  separate `statusString` (unlike the detail endpoint, which returns both) — the
+  old check only matched `statusString`, so this was silently missed too.
+- Not yet run against Production: this sandbox has no `FLOWACCOUNT_*`/Supabase
+  credentials. Next deploy + the daily cron (`30 23 * * *` UTC = 06:30 Asia/Bangkok)
+  or a manual "ซิงก์" will backfill the missing PAY groups (e.g. `PAY2026090005`
+  and any others silently dropped since the list endpoint changed shape).
+  Recommend a manual sync + a spot-check of `/payment-slips` afterward.
+
 ## PAYMENT SLIP DISPLAY ORDER — `b750f29` (2026-08-30)
 - `/payment-slips` now orders grouped PAY documents by the numeric `PAY...` serial descending, so the latest document number appears first regardless of payment date.
 - Regression test covers `PAY2026080022`, `PAY2026080018`, `PAY2026080006`. Commit pushed to `main`; no user-pending files were staged.
