@@ -159,6 +159,9 @@ function buildExpenseInput(expense: any, items: any[], contactName: string, cont
 // Shared by the manual "ส่งเข้า FlowAccount" button and the automatic sync that
 // runs right after an expense is saved. Looks up the FlowAccount category mapping,
 // creates the expense document, and best-effort attaches the slip/receipt photos.
+// Deliberately does NOT mark the document paid — it's left "รอดำเนินการ (Awaiting)" in
+// FlowAccount so staff can still fix mistakes there (via updateFlowAccountSync below)
+// before confirming payment through payFlowAccountSync's "ชำระเงิน" button.
 export async function syncExpenseToFlowAccount(supabase: any, expenseId: string) {
   const { data: expense, error: expenseError } = await supabase
     .from('expenses')
@@ -191,33 +194,6 @@ export async function syncExpenseToFlowAccount(supabase: any, expenseId: string)
       }
     }
 
-    // Mark the document paid when the local record already says it was paid on
-    // the spot (see resolvePaymentChannel). Same best-effort treatment as the
-    // attachment step above: the document itself is already created either
-    // way, a failure here just leaves it "awaiting" in FlowAccount instead of
-    // blocking the sync.
-    const paymentChannel = await resolvePaymentChannel(supabase, expense)
-    if (paymentChannel.ok) {
-      try {
-        // "collected" is the net amount that actually moved through this channel —
-        // when the vendor's bill already nets out withholding tax, that's grandTotal
-        // minus the withheld amount, not the full invoice total (the withheld portion
-        // never reaches the vendor's bank account at all).
-        const collected = Number(result.grandTotal) - (expense.wht_satang ?? 0) / 100
-        await payExpense(result.recordId, expense.document_date || expense.date, collected, paymentChannel.channel)
-      } catch (payErr: any) {
-        sendTelegram(
-          `⚠️ ส่ง ${result.documentSerial} เข้า FlowAccount สำเร็จ แต่บันทึกชำระเงินไม่สำเร็จ: ${payErr.message}\nต้องลงชำระเองใน FlowAccount`,
-          'expenses',
-        )
-      }
-    } else if (paymentChannel.error) {
-      sendTelegram(
-        `⚠️ ส่ง ${result.documentSerial} เข้า FlowAccount สำเร็จ แต่ลงชำระเงินไม่ได้: ${paymentChannel.error}`,
-        'expenses',
-      )
-    }
-
     const { data: updated, error: updateError } = await supabase
       .from('expenses')
       .update({
@@ -238,11 +214,10 @@ export async function syncExpenseToFlowAccount(supabase: any, expenseId: string)
 
 // Called from the expense PATCH route right after a local edit — only does anything if
 // the expense was already synced (flowaccount_record_id set). FlowAccount's PUT only
-// works while the document is still "รอดำเนินการ (Awaiting)" — true for every expense
-// except 'เงินสด' ones, which syncExpenseToFlowAccount marks paid right after creating
-// (see resolvePaymentChannel). Editing a paid one now fails here as expected; treated
-// as a soft error (Telegram alert telling staff to fix it directly in FlowAccount),
-// not something that blocks the local edit from saving.
+// works while the document is still "รอดำเนินการ (Awaiting)" — true until staff confirm
+// payment via payFlowAccountSync below. Editing one that's already been marked paid
+// fails here as expected; treated as a soft error (Telegram alert telling staff to fix
+// it directly in FlowAccount), not something that blocks the local edit from saving.
 export async function updateFlowAccountSync(supabase: any, expenseId: string) {
   const { data: expense, error: expenseError } = await supabase
     .from('expenses')
@@ -263,6 +238,51 @@ export async function updateFlowAccountSync(supabase: any, expenseId: string) {
     await updateExpense(expense.flowaccount_record_id, buildExpenseInput(expense, resolvedItems.items, contactName, contact))
     await supabase.from('expenses').update({ flowaccount_synced_at: new Date().toISOString() }).eq('id', expenseId)
     return { ok: true as const }
+  } catch (err: any) {
+    return { ok: false as const, error: err.message }
+  }
+}
+
+// Called from the "ชำระเงิน" button on the expense detail page — the deliberate,
+// staff-triggered step that marks an already-synced, still-"รอดำเนินการ (Awaiting)"
+// FlowAccount document as paid. Kept separate from syncExpenseToFlowAccount (instead of
+// paying automatically right after create) precisely so staff get a chance to review or
+// fix a mistake first: FlowAccount's PUT only works pre-payment, so once this runs,
+// updateFlowAccountSync above can no longer correct anything — it has to be fixed
+// directly in FlowAccount.
+export async function payFlowAccountSync(supabase: any, expenseId: string) {
+  const { data: expense, error: expenseError } = await supabase
+    .from('expenses')
+    .select('*')
+    .eq('id', expenseId)
+    .eq('is_deleted', false)
+    .single()
+  if (expenseError || !expense) {
+    return { ok: false as const, error: expenseError?.message || 'ไม่พบรายการค่าใช้จ่าย' }
+  }
+  if (!expense.flowaccount_record_id) return { ok: false as const, error: 'ยังไม่ได้ส่งเข้า FlowAccount' }
+  if (expense.flowaccount_paid_at) return { ok: true as const, data: expense } // already paid — nothing to do
+
+  const paymentChannel = await resolvePaymentChannel(supabase, expense)
+  if (!paymentChannel.ok) {
+    return { ok: false as const, error: paymentChannel.error || 'ไม่รู้จักวิธีชำระเงินนี้ — ต้องลงชำระเองใน FlowAccount' }
+  }
+
+  try {
+    // total_satang (จำนวนเงินรวมทั้งสิ้น) already carries VAT/discount the same way
+    // FlowAccount's own grandTotal does — the net amount that actually moved through
+    // this channel is that minus any withheld tax (the withheld portion never reaches
+    // the vendor's bank account at all).
+    const collected = expense.total_satang / 100 - (expense.wht_satang ?? 0) / 100
+    await payExpense(expense.flowaccount_record_id, expense.document_date || expense.date, collected, paymentChannel.channel)
+    const { data: updated, error: updateError } = await supabase
+      .from('expenses')
+      .update({ flowaccount_paid_at: new Date().toISOString() })
+      .eq('id', expenseId)
+      .select()
+      .single()
+    if (updateError) return { ok: false as const, error: updateError.message }
+    return { ok: true as const, data: updated }
   } catch (err: any) {
     return { ok: false as const, error: err.message }
   }

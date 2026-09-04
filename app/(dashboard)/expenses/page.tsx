@@ -157,6 +157,8 @@ export default function ExpensesPage() {
   const [syncingFa, setSyncingFa] = useState(false)
   const [syncFaError, setSyncFaError] = useState('')
   const [syncingPaymentSlips, setSyncingPaymentSlips] = useState(false)
+  const [payingFa, setPayingFa] = useState(false)
+  const [payFaError, setPayFaError] = useState('')
 
   async function handleSyncFlowAccount(id: string) {
     setSyncingFa(true)
@@ -169,6 +171,25 @@ export default function ExpensesPage() {
       loadExpenses()
     } finally {
       setSyncingFa(false)
+    }
+  }
+
+  // Confirms payment on an already-synced FlowAccount document — kept as a separate,
+  // deliberate step (not automatic at sync time) because FlowAccount only allows
+  // editing a document while it's still "รอดำเนินการ (Awaiting)"; once this runs, any
+  // further correction has to happen directly in FlowAccount.
+  async function handlePayFlowAccount(id: string) {
+    if (!confirm('ยืนยันชำระเงินใน FlowAccount?\nหลังจากนี้จะแก้ไขรายการนี้ใน FlowAccount ไม่ได้อีก ต้องแก้ในระบบ FlowAccount เองแทน')) return
+    setPayingFa(true)
+    setPayFaError('')
+    try {
+      const res = await fetch(`/api/expenses/${id}/flowaccount-pay`, { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) { setPayFaError(json.error || 'ชำระเงินไม่สำเร็จ'); return }
+      setSelectedExpense(json)
+      loadExpenses()
+    } finally {
+      setPayingFa(false)
     }
   }
 
@@ -735,6 +756,12 @@ export default function ExpensesPage() {
               {selectedExpense.flowaccount_document_serial && (
                 <DetailRow label="FlowAccount" value={`✅ ${selectedExpense.flowaccount_document_serial}`} />
               )}
+              {selectedExpense.flowaccount_record_id && selectedExpense.source !== 'flowaccount_payment_slip' && (
+                <DetailRow
+                  label="สถานะใน FlowAccount"
+                  value={selectedExpense.flowaccount_paid_at ? '✅ ชำระแล้ว' : '🟡 รอดำเนินการ (ยังไม่ชำระ)'}
+                />
+              )}
               {selectedExpense.flowaccount_payment_slip_serial && (
                 <DetailRow label="ใบเตรียมจ่าย" value={selectedExpense.flowaccount_payment_slip_serial} />
               )}
@@ -786,6 +813,17 @@ export default function ExpensesPage() {
                     style={{ borderColor: '#2563EB', color: '#2563EB' }}>
                     {syncingFa ? 'กำลังส่ง...' : selectedExpense.flowaccount_document_serial ? '🔁 ส่งเข้า FlowAccount อีกครั้ง' : '📤 ส่งเข้า FlowAccount'}
                   </button>
+                  {selectedExpense.flowaccount_record_id && !selectedExpense.flowaccount_paid_at && (
+                    <>
+                      {payFaError && <p className="text-xs text-red-500">❌ {payFaError}</p>}
+                      <button onClick={() => handlePayFlowAccount(selectedExpense.id)}
+                        disabled={payingFa}
+                        className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
+                        style={{ background: '#16A34A' }}>
+                        {payingFa ? 'กำลังชำระเงิน...' : '💵 ชำระเงิน (FlowAccount)'}
+                      </button>
+                    </>
+                  )}
                 </>
               )}
 
