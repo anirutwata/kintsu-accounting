@@ -156,7 +156,6 @@ export default function ExpensesPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [syncingFa, setSyncingFa] = useState(false)
   const [syncFaError, setSyncFaError] = useState('')
-  const [syncingPaymentSlips, setSyncingPaymentSlips] = useState(false)
   const [payingFa, setPayingFa] = useState(false)
   const [payFaError, setPayFaError] = useState('')
 
@@ -190,21 +189,6 @@ export default function ExpensesPage() {
       loadExpenses()
     } finally {
       setPayingFa(false)
-    }
-  }
-
-  async function handleSyncPaymentSlips() {
-    setSyncingPaymentSlips(true)
-    try {
-      const res = await fetch('/api/flowaccount/payment-slips/sync', { method: 'POST' })
-      const json = await res.json()
-      if (!res.ok && res.status !== 207) throw new Error(json.error || 'Sync ไม่สำเร็จ')
-      await loadExpenses()
-      alert(`Sync ใบเตรียมจ่ายสำเร็จ\nเพิ่มใหม่ ${json.created || 0} รายการ\nอัปเดต ${json.updated || 0} รายการ${json.errors?.length ? `\nผิดพลาด ${json.errors.length} รายการ` : ''}`)
-    } catch (error) {
-      alert(`Sync ใบเตรียมจ่ายไม่สำเร็จ: ${String(error)}`)
-    } finally {
-      setSyncingPaymentSlips(false)
     }
   }
 
@@ -568,12 +552,6 @@ export default function ExpensesPage() {
         className="w-full py-3 rounded-2xl font-semibold text-white"
         style={{ background: 'var(--flame-red)' }}>
         + บันทึกค่าใช้จ่าย
-      </button>
-
-      <button onClick={handleSyncPaymentSlips} disabled={syncingPaymentSlips}
-        className="w-full py-3 rounded-2xl font-semibold border-2 disabled:opacity-50"
-        style={{ borderColor: '#2563EB', color: '#2563EB', background: '#EFF6FF' }}>
-        {syncingPaymentSlips ? 'กำลัง Sync ใบเตรียมจ่าย...' : '🔄 Sync ใบเตรียมจ่ายจาก FlowAccount'}
       </button>
 
       <Link href="/payment-slips" className="block w-full py-3 rounded-2xl font-semibold text-center border"

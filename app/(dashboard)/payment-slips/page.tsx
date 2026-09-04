@@ -21,6 +21,7 @@ export default function PaymentSlipsPage() {
   const [savingPayment, setSavingPayment] = useState(false)
   const [uploadingSlip, setUploadingSlip] = useState(false)
   const [paymentError, setPaymentError] = useState('')
+  const [syncing, setSyncing] = useState(false)
   const [paymentForm, setPaymentForm] = useState({
     payment_date: getTodayBKK(), bank_account_id: '', amount: '', slip_image_url: '', note: '',
   })
@@ -42,6 +43,21 @@ export default function PaymentSlipsPage() {
   useEffect(() => {
     fetch('/api/bank-accounts').then(response => response.json()).then(data => setBanks(Array.isArray(data) ? data : []))
   }, [])
+
+  async function handleSync() {
+    setSyncing(true)
+    try {
+      const response = await fetch('/api/flowaccount/payment-slips/sync', { method: 'POST' })
+      const json = await response.json()
+      if (!response.ok && response.status !== 207) throw new Error(json.error || 'Sync ไม่สำเร็จ')
+      await loadGroups()
+      alert(`Sync ใบเตรียมจ่ายสำเร็จ\nเพิ่มใหม่ ${json.created || 0} รายการ\nอัปเดต ${json.updated || 0} รายการ${json.errors?.length ? `\nผิดพลาด ${json.errors.length} รายการ` : ''}`)
+    } catch (error) {
+      alert(`Sync ใบเตรียมจ่ายไม่สำเร็จ: ${String(error)}`)
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   function openPaymentForm(group: PaymentSlipGroup) {
     const payment = group.local_payment
@@ -127,6 +143,12 @@ export default function PaymentSlipsPage() {
           })}
         </select>
       </div>
+
+      <button onClick={handleSync} disabled={syncing}
+        className="w-full py-3 rounded-2xl font-semibold border-2 disabled:opacity-50"
+        style={{ borderColor: '#2563EB', color: '#2563EB', background: '#EFF6FF' }}>
+        {syncing ? 'กำลัง Sync ใบเตรียมจ่าย...' : '🔄 Sync ใบเตรียมจ่ายจาก FlowAccount'}
+      </button>
 
       {loading && <div className="text-center py-12 text-gray-400">กำลังโหลด...</div>}
       {!loading && groups.map(group => {
