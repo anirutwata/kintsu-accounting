@@ -1,4 +1,4 @@
-import type { SlipOcrData } from './types'
+import type { SlipOcrData } from '@anirutwata/ocr-kit'
 
 export interface LegacyOcrResponse extends SlipOcrData {
   cached: boolean

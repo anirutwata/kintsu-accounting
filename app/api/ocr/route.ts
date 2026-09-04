@@ -8,10 +8,11 @@ import {
   extractDocument,
   OcrError,
   validateImage,
+  hasBlockingSlipIssues,
+  normalizeAndValidateSlip,
   type OcrAttemptMetadata,
-} from '@/lib/ocr'
+} from '@anirutwata/ocr-kit'
 import { toLegacyOcrResponse } from '@/lib/ocr/routeResponse'
-import { hasBlockingSlipIssues, normalizeAndValidateSlip } from '@/lib/ocr/validation'
 import { verifyOcrSessionToken } from '@/lib/ocr/session'
 
 const PROFILE = 'thai_transfer_slip' as const

@@ -1,5 +1,5 @@
 import { extractUrlDocument, expenseBillSchemaVersion } from './ocr/server'
-import type { ExpenseBillItemOcrData } from './ocr/types'
+import type { ExpenseBillItemOcrData } from '@anirutwata/ocr-kit'
 
 export type ExtractedBillItem = ExpenseBillItemOcrData
 

@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto'
 import { createAdminClient } from '../supabase/admin'
-import { configuredMaxImageBytes, validateImage } from './image'
-import { createOcrCacheKey } from './cache'
-import { extractDocument } from './index'
-import { OcrError, type OcrAttemptMetadata, type OcrDataByProfile, type OcrProfileName } from './types'
+import {
+  configuredMaxImageBytes, validateImage, createOcrCacheKey, extractDocument,
+  OcrError, type OcrAttemptMetadata, type OcrDataByProfile, type OcrProfileName,
+} from '@anirutwata/ocr-kit'
 
 type Context = { categoryNames?: string[] }
 

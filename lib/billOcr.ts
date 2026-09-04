@@ -1,7 +1,7 @@
 import { extractUrlDocument, expenseBillSchemaVersion } from './ocr/server'
-import type { ExpenseBillOcrData, TaxInvoiceBillOcrData } from './ocr/types'
+import type { ExpenseBillOcrData, TaxInvoiceBillOcrData } from '@anirutwata/ocr-kit'
 
-export { parseTaxInvoiceBillJson } from './ocr/profiles/taxInvoiceBill'
+export { parseTaxInvoiceBillJson } from '@anirutwata/ocr-kit'
 export type ExtractedBillVat = Pick<ExpenseBillOcrData, 'hasVat' | 'vatSatang' | 'vatInclusive' | 'hasWht' | 'whtSatang' | 'hasDiscount' | 'discountSatang' | 'totalSatang' | 'confidence'>
 export type ExtractedTaxInvoiceBill = TaxInvoiceBillOcrData
 

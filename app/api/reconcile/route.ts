@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { extractDocument } from '@/lib/ocr'
+import { extractDocument } from '@anirutwata/ocr-kit'
 
 interface StatementEntry {
   date: string
