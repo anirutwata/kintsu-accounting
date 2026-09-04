@@ -67,6 +67,20 @@ describe('payment slip grouping', () => {
     })
   })
 
+  it('excludes a cancelled document from the group total but still lists it', () => {
+    const cancelled = { ...base, id: '2', flowaccount_document_serial: 'EXP2', total_satang: 999_000, flowaccount_payment_status: 'cancelled' }
+    const [group] = groupExpensesByPaymentSlip([base, cancelled])
+
+    expect(group.total_satang).toBe(100_000)
+    expect(group.gross_total_satang).toBe(100_000)
+    expect(group.expenses.map(expense => expense.flowaccount_document_serial)).toEqual(['EXP1', 'EXP2'])
+  })
+
+  it('marks a PAY as cancelled when every one of its documents is cancelled', () => {
+    const [group] = groupExpensesByPaymentSlip([{ ...base, flowaccount_payment_status: 'cancelled' }])
+    expect(group).toMatchObject({ status: 'cancelled', total_satang: 0, gross_total_satang: 0 })
+  })
+
   it('uses FlowAccount paid status as final even when a local transfer exists', () => {
     const [group] = groupExpensesByPaymentSlip([base], [{
       id: 'local-1',
