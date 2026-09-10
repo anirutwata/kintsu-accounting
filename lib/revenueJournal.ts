@@ -43,8 +43,8 @@ export function buildRevenueJournal(input: RevenueJournalInput): FlowAccountJour
   if (input.source === 'cash' && input.debitAccount.code !== '11112') {
     throw new Error('รายรับเงินสดต้องเดบิต 11112 เงินสดคงเหลือ')
   }
-  if (input.source === 'ttb_promptpay' && input.debitAccount.code !== '11122.07') {
-    throw new Error('รายรับพร้อมเพย์ต้องเดบิต 11122.07 ทหารไทยธนชาต 7602315983')
+  if (input.source === 'ttb_promptpay' && input.debitAccount.code !== '11122.08') {
+    throw new Error('รายรับพร้อมเพย์ต้องเดบิต 11122.08 ทหารไทยธนชาต 6297016138')
   }
 
   const source = SOURCE_TEXT[input.source]

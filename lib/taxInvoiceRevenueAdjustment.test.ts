@@ -4,7 +4,7 @@ import { buildTaxInvoiceRevenueReversal } from './taxInvoiceRevenueAdjustment'
 const accounts = {
   revenue: { chartOfAccountId: 10, code: '41210', label: 'รายได้จากการให้บริการ' },
   cash: { chartOfAccountId: 11, code: '11112', label: 'เงินสดคงเหลือ' },
-  transfer: { chartOfAccountId: 12, code: '11122.07', label: 'TTB 7602315983' },
+  transfer: { chartOfAccountId: 12, code: '11122.08', label: 'TTB 6297016138' },
 }
 
 describe('buildTaxInvoiceRevenueReversal', () => {

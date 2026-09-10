@@ -7,14 +7,14 @@ describe('revenue journal', () => {
       source: 'ttb_promptpay',
       date: '2026-08-24',
       amountSatang: 1_970_800,
-      debitAccount: { chartOfAccountId: 449281559, code: '11122.07', label: 'ทหารไทยธนชาต 7602315983' },
+      debitAccount: { chartOfAccountId: 456882266, code: '11122.08', label: 'ทหารไทยธนชาต 6297016138' },
       revenueAccount: { chartOfAccountId: 12345, code: '41210', label: 'รายได้จากการให้บริการ' },
     })).toMatchObject({
       documentDate: '2026-08-24',
       documentType: 51,
       reference: 'KINTSU-TTB-20260824',
       bookOfAccounts: [
-        { debitCredit: 1, chartOfAccountId: 449281559, value: 19708 },
+        { debitCredit: 1, chartOfAccountId: 456882266, value: 19708 },
         {
           debitCredit: 3,
           chartOfAccountId: 12345,
@@ -47,7 +47,7 @@ describe('revenue journal', () => {
     const createApprovedJournal = vi.fn()
     const result = await syncRevenueJournal({
       source: 'ttb_promptpay', date: '2026-08-24', amountSatang: 1_970_800,
-      debitAccount: { chartOfAccountId: 1, code: '11122.07', label: 'TTB' },
+      debitAccount: { chartOfAccountId: 1, code: '11122.08', label: 'TTB' },
       revenueAccount: { chartOfAccountId: 2, code: '41210', label: 'รายได้จากการให้บริการ' },
       flowAccountRecordId: 263011073, flowAccountDocumentSerial: 'JV2026080099',
     }, { createApprovedJournal })
