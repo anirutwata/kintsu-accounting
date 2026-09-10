@@ -120,7 +120,7 @@ export async function processApprovedTaxInvoice(
         paymentMethod: request.payment_method,
         totalSatang: Number(request.total_satang),
         invoiceSerial: invoice.documentSerial,
-        accounts: { revenue: account('41210'), cash: account('11112'), transfer: account('11122.07') },
+        accounts: { revenue: account('41210'), cash: account('11112'), transfer: account('11122.08') },
       }))
     },
     saveCorrection: async (id, correction) => {

@@ -31,7 +31,7 @@ export function buildTaxInvoiceRevenueReversal(input: TaxInvoiceRevenueReversalI
     throw new Error('บัญชีรายได้ต้องเป็น 41210 รายได้จากการให้บริการ')
   }
   const receiving = input.paymentMethod === 'cash' ? input.accounts.cash : input.accounts.transfer
-  const requiredReceivingCode = input.paymentMethod === 'cash' ? '11112' : '11122.07'
+  const requiredReceivingCode = input.paymentMethod === 'cash' ? '11112' : '11122.08'
   if (receiving.code !== requiredReceivingCode) {
     throw new Error(`บัญชีรับเงินต้องเป็น ${requiredReceivingCode}`)
   }

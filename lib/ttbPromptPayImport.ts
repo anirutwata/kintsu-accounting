@@ -66,8 +66,8 @@ async function resolveConfiguredBank(supabase: SupabaseClient) {
     .select('id, bank_name, account_number, flowaccount_chart_of_account_id')
     .eq('id', settings.ttb_promptpay_bank_account_id).eq('is_active', true).single()
   if (error || !bank) throw new Error('ไม่พบบัญชี TTB Smart Shop ที่ตั้งค่าไว้')
-  if (String(bank.account_number || '').replace(/\D/g, '') !== '7602315983') {
-    throw new Error('บัญชี TTB Smart Shop ต้องเป็น 760-2-31598-3 เท่านั้น')
+  if (String(bank.account_number || '').replace(/\D/g, '') !== '6297016138') {
+    throw new Error('บัญชี TTB Smart Shop ต้องเป็น 629-7-01613-8 เท่านั้น')
   }
   if (!bank.flowaccount_chart_of_account_id) throw new Error('บัญชี TTB Smart Shop ยังไม่ได้ผูกกับผังบัญชี FlowAccount')
   return bank
@@ -87,8 +87,8 @@ async function resolveJournalAccounts(bankChartId: number): Promise<{ debit: Rev
   const revenue = chart.find(account => account.code === '41210')
   if (!revenue) throw new Error('ไม่พบบัญชี 41210 รายได้จากการให้บริการใน FlowAccount')
   const debit = chart.find(account => account.id === bankChartId)
-  if (!debit || debit.code !== '11122.07') {
-    throw new Error('บัญชี TTB 7602315983 ต้องผูกกับผังบัญชี 11122.07 เท่านั้น')
+  if (!debit || debit.code !== '11122.08') {
+    throw new Error('บัญชี TTB 6297016138 ต้องผูกกับผังบัญชี 11122.08 เท่านั้น')
   }
   return {
     debit: { chartOfAccountId: debit.id, code: debit.code, label: debit.nameLocal },

@@ -177,7 +177,7 @@ export default function SystemSettingsPage() {
             <p className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>ยอดจากรายงานอีเมลทุกวัน 03:00 น. และใช้บัญชีนี้รับชำระใน FlowAccount</p>
             <select value={ttbPromptpayBankId} onChange={e => setTtbPromptpayBankId(e.target.value)}
               className="w-full border rounded-xl px-3 py-2 text-xs" style={{ borderColor: 'var(--border)' }}>
-              <option value="">-- เลือกบัญชี TTB 7602315983 --</option>
+              <option value="">-- เลือกบัญชี TTB 6297016138 --</option>
               {banks.map(b => <option key={b.id} value={b.id}>{b.bank_name} {b.account_number} · {b.account_name}</option>)}
             </select>
           </div>
