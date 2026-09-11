@@ -21,8 +21,11 @@ export function expectedTtbReportDate(): string {
   return formatter.format(new Date(Date.now() - 86_400_000))
 }
 
-function requiredEnv(name: string): string {
-  const value = process.env[name]
+export function requiredEnv(name: string): string {
+  // Vercel dashboard entry (especially from a mobile keyboard) can silently append
+  // whitespace/newlines to a value — trim so that doesn't turn into a spurious
+  // "password incorrect"/auth failure downstream.
+  const value = process.env[name]?.trim()
   if (!value) throw new Error(`ยังไม่ได้ตั้งค่า ${name}`)
   return value
 }

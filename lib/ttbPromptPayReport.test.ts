@@ -48,6 +48,12 @@ describe('TTB Smart Shop report', () => {
     expect(() => assertTtbFilenameMatchesReportDate('Report_Kintsu.xlsx', '2026-08-27')).not.toThrow()
   })
 
+  it('accepts the real bank filename shape with a shop label containing spaces', () => {
+    expect(reportDateFromTtbFilename('Report_KINTSU YAKINIKU-10-09-2026.xlsx')).toBe('2026-09-10')
+    expect(() => assertTtbFilenameMatchesReportDate('Report_KINTSU YAKINIKU-10-09-2026.xlsx', '2026-09-10')).not.toThrow()
+    expect(() => assertTtbFilenameMatchesReportDate('Report_KINTSU YAKINIKU.xlsx', '2026-09-10')).not.toThrow()
+  })
+
   it('rejects a report whose summary date disagrees with its transactions', () => {
     const rows = reportRows()
     rows[10] = ['หมายเหตุ: - สรุปรายการสำหรับวันที่ 23/08/2026 ณ เวลา 23:00 น.']

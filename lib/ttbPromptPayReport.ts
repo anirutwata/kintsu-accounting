@@ -31,18 +31,24 @@ function thaiReportDate(value: ReportCell): string {
   return `${match[3]}-${match[2]}-${match[1]}`
 }
 
+// The bank's own filenames vary by shop label — e.g. "Report_Kintsu-..." vs
+// "Report_KINTSU YAKINIKU-..." — so this matches any Report_<ShopName>-DD-MM-YYYY.xlsx
+// instead of hard-coding one shop name.
+const TTB_DATED_FILENAME = /^Report_.+-(\d{2})-(\d{2})-(\d{4})\.xlsx$/i
+
 export function reportDateFromTtbFilename(filename: string): string {
-  const match = filename.trim().match(/^Report_Kintsu-(\d{2})-(\d{2})-(\d{4})\.xlsx$/i)
+  const match = filename.trim().match(TTB_DATED_FILENAME)
   if (!match) throw new Error(`ชื่อไฟล์รายงาน TTB ไม่ถูกต้อง: ${filename || '(ว่าง)'}`)
   return thaiReportDate(`${match[1]}/${match[2]}/${match[3]}`)
 }
 
 export function assertTtbFilenameMatchesReportDate(filename: string, reportDate: string): void {
+  const trimmed = filename.trim()
   // TTB's "resend on request" email (used to backfill a day whose automatic 03:00
-  // report never arrived) attaches a generic Report_Kintsu.xlsx with no date in the
+  // report never arrived) attaches a generic Report_<ShopName>.xlsx with no date in the
   // name — fall back to the workbook's own date checks (summary date vs. transaction
   // date, already enforced in parseTtbSmartShopRows) instead of a filename cross-check.
-  if (/^Report_Kintsu\.xlsx$/i.test(filename.trim())) return
+  if (/^Report_.+\.xlsx$/i.test(trimmed) && !TTB_DATED_FILENAME.test(trimmed)) return
   const filenameDate = reportDateFromTtbFilename(filename)
   if (filenameDate !== reportDate) {
     throw new Error(`วันที่ชื่อไฟล์ TTB ไม่ตรงกับวันที่รับเงิน: ชื่อไฟล์ ${filenameDate} แต่รายการ ${reportDate}`)
