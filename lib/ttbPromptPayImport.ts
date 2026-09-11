@@ -252,8 +252,18 @@ async function importAttachment(supabase: SupabaseClient, input: { messageId: st
 export async function importTtbPromptPayFromGmail(supabase: SupabaseClient) {
   const messages = await findReportMessages()
   const results = []
+  const skipped: Array<{ attachmentName: string; error: string }> = []
   for (const message of messages) {
-    const imported = await importAttachment(supabase, message)
+    // A single unreadable attachment (e.g. a stale report still in the 3-day lookback
+    // window from before a merchant account migration, encrypted with the old account's
+    // password) must not block every other report in this batch — skip and keep going.
+    let imported
+    try {
+      imported = await importAttachment(supabase, message)
+    } catch (error) {
+      skipped.push({ attachmentName: message.attachmentName, error: error instanceof Error ? error.message : String(error) })
+      continue
+    }
     const { data: reconciliation, error: reconciliationError } = await supabase
       .rpc('reconcile_pending_ttb_tax_invoices_v3', { p_revenue_date: imported.reportDate })
     if (reconciliationError) throw reconciliationError
@@ -268,7 +278,10 @@ export async function importTtbPromptPayFromGmail(supabase: SupabaseClient) {
   }
   const expectedDate = expectedTtbReportDate()
   const expected = results.find(result => result.reportDate === expectedDate)
-  if (!expected) throw new Error(`ไม่พบรายงาน TTB Smart Shop ของวันที่ ${expectedDate}`)
+  if (!expected) {
+    const skippedNote = skipped.length ? ` (มีไฟล์แนบที่เปิดไม่ได้ ${skipped.length} ฉบับ: ${skipped.map(item => item.attachmentName).join(', ')})` : ''
+    throw new Error(`ไม่พบรายงาน TTB Smart Shop ของวันที่ ${expectedDate}${skippedNote}`)
+  }
   if (!expected.sync.ok) throw new Error(expected.sync.error)
-  return { scanned: messages.length, results, current: expected }
+  return { scanned: messages.length, results, skipped, current: expected }
 }
