@@ -104,7 +104,15 @@ async function findReportMessages(): Promise<Array<{ messageId: string; attachme
   })
   const found: Array<{ messageId: string; attachmentName: string; content: Buffer }> = []
   await client.connect()
-  const lock = await client.getMailboxLock('INBOX')
+  // A Gmail filter can label this sender's mail (e.g. "EDC Line Pay") and skip the inbox
+  // (per the Gmail filter's "Skip Inbox" action), which leaves the message out of INBOX
+  // entirely — searching only INBOX then reports "no report found" for a report that did
+  // arrive. All Mail includes every non-Spam/Trash message regardless of label or inbox
+  // routing, so resolve it by its special-use flag instead of hardcoding a locale-specific
+  // folder name like "[Gmail]/All Mail".
+  const mailboxes = await client.list()
+  const allMailPath = mailboxes.find(mailbox => mailbox.specialUse === '\\All')?.path || 'INBOX'
+  const lock = await client.getMailboxLock(allMailPath)
   try {
     const uids = await client.search({
       gmraw: `from:${REPORT_SENDER} subject:"รายงานสรุปยอดขาย EDC" newer_than:3d has:attachment`,
