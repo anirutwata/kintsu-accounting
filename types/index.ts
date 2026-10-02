@@ -183,6 +183,8 @@ export interface PettyCashTransaction {
 export interface DailySales {
   id: string
   date: string
+  manual_entered_at?: string | null
+  manual_entered_by_name?: string | null
   dine_in_revenue_satang: number
   dine_in_covers: number
   dine_in_bills: number

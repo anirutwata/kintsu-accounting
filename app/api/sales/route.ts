@@ -5,6 +5,7 @@ import { calcGrabNet } from '@/lib/money'
 import { sendTelegram, buildSalesMessage } from '@/lib/telegram'
 import { syncCashRevenueToFlowAccount } from '@/lib/cashRevenueSync'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { missingSalesDates, SALES_LOCK_START_DATE, thaiShortDate } from '@/lib/dailySalesLock'
 
 export async function GET(req: Request) {
   const supabase = await createClient()
@@ -59,11 +60,26 @@ export async function POST(req: Request) {
   const body = await req.json()
   const { date, foodstory, papaya, grabfood, takeaway } = body
 
-  if (!date) return NextResponse.json({ error: 'กรุณาระบุวันที่' }, { status: 400 })
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return NextResponse.json({ error: 'กรุณาระบุวันที่' }, { status: 400 })
 
   // Check if record exists (for update vs new notification)
-  const { data: existing } = await supabase.from('daily_sales').select('id').eq('id', date).maybeSingle()
+  const { data: existing } = await supabase.from('daily_sales').select('id, manual_entered_at').eq('id', date).maybeSingle()
   const isUpdate = !!existing
+
+  // Days must be entered in order: refuse while an earlier day has never been entered.
+  // Applies to every role, owner included.
+  if (!existing?.manual_entered_at && date > SALES_LOCK_START_DATE) {
+    const { data: entered, error: enteredError } = await supabase.from('daily_sales')
+      .select('id').gte('id', SALES_LOCK_START_DATE).lt('id', date).not('manual_entered_at', 'is', null)
+    if (enteredError) return NextResponse.json({ error: enteredError.message }, { status: 500 })
+    const missing = missingSalesDates((entered || []).map(row => row.id), date)
+    if (missing.length) {
+      return NextResponse.json({
+        error: `ยังไม่ได้บันทึกรายรับวันที่ ${thaiShortDate(missing[0])} กรุณาบันทึกวันนั้นก่อน (ร้านปิดให้กรอก 0 แล้วกดบันทึก)`,
+        missing_dates: missing,
+      }, { status: 409 })
+    }
+  }
 
   // Fetch current GP rate from settings
   const { data: settings } = await supabase.from('settings').select('grabfood_gp_bps').eq('id', 1).single()
@@ -128,6 +144,8 @@ export async function POST(req: Request) {
     total_net_satang: totalNet,
     total_vat_satang: (foodstory?.vat_satang || 0) + (papaya?.vat_satang || 0) + (grabfood?.vat_satang || 0),
     source: 'manual',
+    manual_entered_at: new Date().toISOString(),
+    manual_entered_by_name: cookieStore.get('kintsu_acc_name')?.value || 'ไม่ระบุ',
     updated_at: new Date().toISOString(),
   }
 

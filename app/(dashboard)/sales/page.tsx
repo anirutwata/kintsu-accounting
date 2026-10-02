@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { formatBaht, toSatang, calcGrabNet, fmtInput, parseInput } from '@/lib/money'
 import { getTodayBKK } from '@/lib/utils'
+import { thaiShortDate } from '@/lib/dailySalesLock'
 import type { DailySales } from '@/types'
 
 interface POSForm {
@@ -46,6 +47,7 @@ export default function SalesPage() {
   const [ttbMessage, setTtbMessage] = useState('')
   const [syncingEdc, setSyncingEdc] = useState(false)
   const [edcMessage, setEdcMessage] = useState('')
+  const [missingDates, setMissingDates] = useState<string[]>([])
 
   async function handleSyncTtb() {
     setSyncingTtb(true); setTtbMessage('')
@@ -106,6 +108,17 @@ export default function SalesPage() {
   const [takeawayOrders, setTakeawayOrders] = useState('')
 
   useEffect(() => { loadSales() }, [date])
+
+  function loadMissingDates() {
+    return fetch(`/api/sales/missing?before=${date}`)
+      .then(res => res.json())
+      .then(json => setMissingDates(Array.isArray(json.missing_dates) ? json.missing_dates : []))
+  }
+  useEffect(() => {
+    loadMissingDates()
+    // date is the only input; loadMissingDates is recreated each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date])
 
   async function loadSales() {
     const res = await fetch(`/api/sales?date=${date}`)
@@ -221,16 +234,20 @@ export default function SalesPage() {
         if (result.partialErrors?.cash) {
           setSaveError(`บันทึกยอดแล้ว แต่ส่งเงินสดเข้า FlowAccount ไม่สำเร็จ: ${result.partialErrors.cash}`)
         }
-        await loadSales()
+        await Promise.all([loadSales(), loadMissingDates()])
         setSaved(true)
       } else {
         const err = await res.json()
         setSaveError(err.error || 'บันทึกไม่สำเร็จ')
+        if (Array.isArray(err.missing_dates)) setMissingDates(err.missing_dates)
       }
     } finally {
       setLoading(false)
     }
   }
+
+  // A day that was already entered can always be corrected; a new day waits for earlier gaps.
+  const blockedByMissing = !existing?.manual_entered_at && missingDates.length > 0
 
   return (
     <div className="space-y-4 py-4">
@@ -238,13 +255,28 @@ export default function SalesPage() {
         <h1 className="text-lg font-bold" style={{ color: 'var(--charcoal)' }}>บันทึกรายรับ</h1>
         {role === 'cashier' ? (
           <span className="text-sm px-2 py-1.5 rounded-lg" style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
-            {new Date(today).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}
+            {thaiShortDate(date)}
           </span>
         ) : (
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
             className="text-sm border rounded-lg px-2 py-1.5" style={{ borderColor: 'var(--border)' }} />
         )}
       </div>
+
+      {blockedByMissing && (
+        <div className="p-3 rounded-xl border border-red-300 bg-red-50 text-red-700 text-sm space-y-2">
+          <p className="font-semibold">🔒 ยังบันทึกวันที่ {thaiShortDate(date)} ไม่ได้</p>
+          <p>ต้องบันทึกรายรับของวันที่ค้างอยู่ให้ครบก่อน: {missingDates.map(thaiShortDate).join(', ')}</p>
+          <p className="text-xs">ถ้าวันนั้นร้านปิด ให้กรอก 0 แล้วกดบันทึก</p>
+          <button type="button" onClick={() => setDate(missingDates[0])}
+            className="w-full py-2 rounded-xl bg-red-600 text-white font-semibold">
+            ไปบันทึกวันที่ {thaiShortDate(missingDates[0])}
+          </button>
+        </div>
+      )}
+      {role === 'cashier' && date !== today && (
+        <button type="button" onClick={() => setDate(today)} className="text-xs text-blue-600">← กลับไปวันนี้</button>
+      )}
 
       {saved && (
         <div className="p-3 rounded-xl bg-green-50 text-green-700 text-sm font-medium">
@@ -465,10 +497,10 @@ export default function SalesPage() {
           </div>
         )}
 
-        <button type="submit" disabled={loading}
+        <button type="submit" disabled={loading || blockedByMissing}
           className="w-full py-3 rounded-2xl font-semibold text-white disabled:opacity-60"
           style={{ background: 'var(--flame-red)' }}>
-          {loading ? 'กำลังบันทึก...' : existing ? 'อัปเดตรายรับ' : 'บันทึกรายรับ'}
+          {loading ? 'กำลังบันทึก...' : blockedByMissing ? `🔒 บันทึกวันที่ ${thaiShortDate(missingDates[0])} ก่อน` : existing?.manual_entered_at ? 'อัปเดตรายรับ' : 'บันทึกรายรับ'}
         </button>
       </form>
     </div>
