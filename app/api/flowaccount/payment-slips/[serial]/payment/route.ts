@@ -51,6 +51,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ serial:
     (sum, expense) => sum + Number(expense.total_satang) - Number(expense.wht_satang || 0),
     0,
   )
+  if (amount_satang !== expectedAmountSatang) {
+    return NextResponse.json({
+      error: `ยอดโอนต้องตรงกับยอดที่ต้องจ่าย ${(expectedAmountSatang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท เท่านั้น`,
+      expected_amount_satang: expectedAmountSatang,
+    }, { status: 400 })
+  }
   const payment = {
     payment_date,
     bank_account_id,
