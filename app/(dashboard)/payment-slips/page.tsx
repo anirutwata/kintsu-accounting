@@ -4,8 +4,16 @@ import Link from 'next/link'
 import { formatBaht, toSatang } from '@/lib/money'
 import { formatThaiMonth, getMonthKey, getTodayBKK } from '@/lib/utils'
 import { compressImageFile } from '@/lib/compressImage'
+import { accountNumbersMatch, findBankAccount } from '@/lib/bankAccountMatch'
 import type { PaymentSlipGroup } from '@/lib/paymentSlipGrouping'
 import type { BankAccount } from '@/types'
+
+interface SlipOcrResult {
+  date?: string | null
+  amount_satang?: number | null
+  sender_bank?: string | null
+  sender_account?: string | null
+}
 
 function thaiDate(value: string) {
   return new Date(`${value}T00:00:00`).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })
@@ -21,6 +29,7 @@ export default function PaymentSlipsPage() {
   const [savingPayment, setSavingPayment] = useState(false)
   const [uploadingSlip, setUploadingSlip] = useState(false)
   const [paymentError, setPaymentError] = useState('')
+  const [bankMatchWarning, setBankMatchWarning] = useState('')
   const [syncing, setSyncing] = useState(false)
   const [paymentForm, setPaymentForm] = useState({
     payment_date: getTodayBKK(), bank_account_id: '', amount: '', slip_image_url: '', note: '',
@@ -62,6 +71,7 @@ export default function PaymentSlipsPage() {
   function openPaymentForm(group: PaymentSlipGroup) {
     const payment = group.local_payment
     setPaymentError('')
+    setBankMatchWarning('')
     setPaymentForm({
       payment_date: payment?.payment_date || getTodayBKK(),
       bank_account_id: payment?.bank_account_id || '',
@@ -79,15 +89,49 @@ export default function PaymentSlipsPage() {
       const compressed = await compressImageFile(file)
       const formData = new FormData()
       formData.append('file', compressed)
+      const ocrData = new FormData()
+      ocrData.append('file', compressed)
+      // OCR runs alongside the upload; a failed read must not block attaching the slip.
+      const ocrPromise = readSlip(ocrData)
       const response = await fetch('/api/upload/receipt', { method: 'POST', body: formData })
       const json = await response.json()
       if (!response.ok) throw new Error(json.error || 'อัปโหลดสลิปไม่สำเร็จ')
       setPaymentForm(form => ({ ...form, slip_image_url: json.url }))
+      applySlipOcr(await ocrPromise)
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : 'อัปโหลดสลิปไม่สำเร็จ')
     } finally {
       setUploadingSlip(false)
     }
+  }
+
+  async function readSlip(formData: FormData): Promise<SlipOcrResult | null> {
+    try {
+      const response = await fetch('/api/ocr', { method: 'POST', body: formData })
+      return response.ok ? await response.json() : null
+    } catch {
+      return null
+    }
+  }
+
+  function applySlipOcr(data: SlipOcrResult | null) {
+    setBankMatchWarning('')
+    if (!data) return
+    const senderBank = data.sender_bank || ''
+    const senderAccount = data.sender_account || ''
+    // findBankAccount needs a bank name; when OCR missed it, fall back to the account digits alone.
+    const match = senderBank
+      ? findBankAccount(banks, senderBank, senderAccount)
+      : banks.find(bank => senderAccount && accountNumbersMatch(bank.account_number, senderAccount))
+    if ((senderBank || senderAccount) && !match) {
+      setBankMatchWarning(`ไม่พบบัญชี "${[senderBank, senderAccount].filter(Boolean).join(' ')}" ในระบบ — กรุณาเลือกเอง`)
+    }
+    setPaymentForm(form => ({
+      ...form,
+      payment_date: data.date || form.payment_date,
+      amount: data.amount_satang ? (data.amount_satang / 100).toFixed(2) : form.amount,
+      bank_account_id: match?.id || form.bank_account_id,
+    }))
   }
 
   async function savePayment(event: React.FormEvent) {
@@ -233,11 +277,12 @@ export default function PaymentSlipsPage() {
                     </label>
                     <label className="block text-xs text-gray-600">บัญชีธนาคารที่ชำระ
                       <select required value={paymentForm.bank_account_id}
-                        onChange={event => setPaymentForm(form => ({ ...form, bank_account_id: event.target.value }))}
+                        onChange={event => { setBankMatchWarning(''); setPaymentForm(form => ({ ...form, bank_account_id: event.target.value })) }}
                         className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm">
                         <option value="">เลือกบัญชี</option>
                         {banks.map(bank => <option key={bank.id} value={bank.id}>{bank.bank_name} · {bank.account_number}</option>)}
                       </select>
+                      {bankMatchWarning && <span className="mt-1 block text-xs text-amber-600">{bankMatchWarning}</span>}
                     </label>
                     <label className="block text-xs text-gray-600">ยอดโอนจริง
                       <input type="number" required min="0.01" step="0.01" value={paymentForm.amount}
@@ -255,7 +300,7 @@ export default function PaymentSlipsPage() {
                           <img src={paymentForm.slip_image_url} alt="สลิปการโอน" className="max-h-48 rounded-lg object-contain" />
                         )}
                         {uploadingSlip
-                          ? '⏳ กำลังอัปโหลดสลิป...'
+                          ? '⏳ กำลังอัปโหลดและอ่านสลิป...'
                           : paymentForm.slip_image_url
                             ? '✅ แนบสลิปแล้ว · กดเพื่อเปลี่ยน'
                             : '📎 กดเพื่อแนบสลิป'}
