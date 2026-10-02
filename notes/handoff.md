@@ -1,8 +1,35 @@
-# Handoff — KINTSU Accounting (2026-08-30)
+# Handoff — KINTSU Accounting (2026-10-02)
 
-> ฉบับนี้อัปเดตล่าสุดวันที่ 2026-08-30 หลังเปิด OCR Provider Phase 1 บน Production และปรับลำดับหน้า Payment Slips
+> ฉบับนี้อัปเดตล่าสุดวันที่ 2026-10-02 หลัง PR #46 (OCR สลิปหน้า PAY + บังคับยอดตรง) และ PR #47 (ล็อกการบันทึกรายรับรายวัน + migration 057)
 
-## SESSION RESTART SNAPSHOT — CURRENT — อ่านส่วนนี้ก่อน
+## SESSION UPDATE — 2026-10-02 (cloud session, PR #46 + #47) — อ่านก่อน snapshot ด้านล่าง
+- `main = origin/main = 261815d` (PR #47 squash). ก่อนหน้า `5bdcc8b` (PR #46). GitHub push → Vercel auto-deploy.
+- Supabase Production: **migration 057 apply แล้ว** (ผู้ใช้รันเองใน SQL Editor 2026-10-02 ~23:19 BKK) ตรวจผลแล้ว: `2026-10-01` และ `2026-10-02` มี `manual_entered_at` ครบ
+- ทั้งสองงานยังไม่ได้ทดสอบบนแอปจริงหลัง deploy — ดู "จุดตรวจครั้งหน้า" ในแต่ละหัวข้อ
+
+### PAY SLIP OCR + EXACT AMOUNT — PR #46 `5bdcc8b`
+- Root cause: ฟอร์ม "บันทึกการชำระ" ใน `app/(dashboard)/payment-slips/page.tsx` อัปโหลดรูปผ่าน `/api/upload/receipt` อย่างเดียว ไม่เคยเรียก OCR → ช่อง "บัญชีธนาคารที่ชำระ" ว่างทุกครั้ง
+- ตอนนี้ส่งรูป (ที่ compress แล้ว) ไป `/api/ocr` คู่ขนานกับการอัปโหลด แล้วจับคู่ `sender_bank`/`sender_account` ด้วย `findBankAccount` (`lib/bankAccountMatch.ts`, ตัวเดียวกับหน้าโอนเงิน; ถ้า OCR ไม่ได้ชื่อธนาคาร fallback ใช้ `accountNumbersMatch` กับเลขบัญชีอย่างเดียว). เติมวันที่ชำระ + ยอดโอนจริงจากสลิปด้วย. ไม่เจอบัญชี → ข้อความสีส้มใต้ช่องบัญชี. OCR ล้มเหลวไม่ขวางการแนบสลิป
+- **นโยบายใหม่ (ผู้ใช้สั่ง): ยอดโอนต้องเท่ากับยอดสุทธิ PAY (หลังหัก WHT) เท่านั้น** — หน้าเว็บแสดงกรอบแดง + ปิดปุ่มยืนยัน; `POST /api/flowaccount/payment-slips/[serial]/payment` ตอบ 400 ถ้า `amount_satang !== expectedAmountSatang`. ไม่มี tolerance แม้ 1 สตางค์ — ถ้าต้องจ่ายไม่เต็ม (ส่วนลด/แบ่งจ่าย) ต้องแก้เอกสารใน FlowAccount ก่อน
+- จุดตรวจครั้งหน้า: แนบสลิป `PAY2026100003` (KBIZ กสิกรไทย xxx-x-x5555-x, 10,950.44, 2 ต.ค. 69) ควรเลือกบัญชี/วันที่/ยอดให้อัตโนมัติ
+
+### DAILY REVENUE ENTRY LOCK — PR #47 `261815d`
+- ปัญหา: พนักงานลืมบันทึกรายรับบางวัน. ผู้ใช้ตัดสินใจ: ล็อกตามลำดับวัน, **ล็อกทุก role รวม owner**, ร้านปิดให้กรอก 0 แล้วกดบันทึก (ไม่มีปุ่มร้านปิดแยก), เริ่มบังคับ `2026-10-01`, มี Telegram เตือนตอนเช้า
+- ทำไมต้องมีคอลัมน์ใหม่: TTB PromptPay / LINE Pay EDC import ก็ `upsert` แถว `daily_sales` (และ `source` default เป็น `'manual'`) จึงใช้ "มีแถว" หรือ `source` แยกไม่ได้ว่าพนักงานกรอกแล้ว
+- Migration `057_daily_sales_manual_entry.sql`: `manual_entered_at timestamptz`, `manual_entered_by_name text`; backfill วัน ≥ 2026-10-01 ที่ `total_gross_satang > 0` (มีแค่ `POST /api/sales` ที่เขียนคอลัมน์นี้) ด้วย `updated_at` — timestamp ของ 2 วันที่ backfill จึงเป็นเวลาแก้ไขล่าสุด ไม่ใช่เวลากรอกจริง
+- Logic กลาง `lib/dailySalesLock.ts` (`SALES_LOCK_START_DATE`, `missingSalesDates`, `addDays`, `thaiShortDate`) + test `lib/dailySalesLock.test.ts` (4 tests)
+- `POST /api/sales`: ถ้าวันนั้นยังไม่มี `manual_entered_at` และมีวันก่อนหน้า (ตั้งแต่ start) ที่ยังไม่กรอก → 409 + `missing_dates`. วันที่กรอกแล้วแก้ไขได้เสมอ. ทุก save เซ็ต `manual_entered_at` + ชื่อจาก cookie `kintsu_acc_name`
+- `GET /api/sales/missing?before=YYYY-MM-DD` → หน้า `/sales` แสดงกรอบแดง 🔒 + ปุ่ม "ไปบันทึกวันที่ …" (role `cashier` ที่ปกติเห็นแค่วันนี้ใช้ปุ่มนี้ย้อนไปกรอก + ลิงก์ "← กลับไปวันนี้")
+- Cron ใหม่ `/api/cron/sales-reminder` `0 3 * * *` UTC = 10:00 BKK → Telegram topic `sales` เฉพาะเมื่อมีวันค้าง (ใช้ `CRON_SECRET` แบบเดียวกับ cron อื่น)
+- ข้อจำกัดที่รู้: `/api/sales/import` (CSV Foodstory, API key) ไม่ผ่าน lock และไม่เซ็ต `manual_entered_at`; ลบข้อมูลวัน (`DELETE /api/sales/[date]`) จะทำให้วันนั้นกลับเป็นค้าง
+- จุดตรวจครั้งหน้า: หน้า `/sales` วันที่ 3 ต.ค. ต้องไม่มีกรอบแดง; เลือกวันล่วงหน้า (เช่น 5 ต.ค.) ต้องเห็นล็อก; เช้า 10:00 มี Telegram เฉพาะเมื่อมีวันค้าง
+
+### Verification / environment notes (cloud session)
+- Sandbox ติดตั้ง `@anirutwata/ocr-kit` (GitHub Packages, private) ไม่ได้ (401) → `npm ci` ล้ม. ใช้ deps ชุดอื่นใน scratch dir (`npm install --legacy-peer-deps` หลังตัด ocr-kit) เพื่อรัน tsc/eslint/vitest; error ที่เหลือมาจาก ocr-kit เท่านั้น
+- ESLint หน้า `/sales` มี error/warning เดิม 2 รายการ (`setRole` ใน effect, deps ของ `loadSales`) — ไม่ใช่จากงานนี้
+- ไม่มี GitHub Actions CI ใน repo; check บน PR มีแค่ Vercel Preview Comments
+
+## SESSION RESTART SNAPSHOT — 2026-08-30 (ส่วนที่ยังใช้ได้ — commit/deployment ล่าสุดดู SESSION UPDATE 2026-10-02 ด้านบน)
 - Repo: `/Users/anirut/Documents/kintsu-accounting`; live: https://kintsu-accounting.vercel.app; branch `main`.
 - `main = origin/main = b750f29`. OCR Phase 1 commits: `81b7953`, `507090d`; merge `8a155b5`. Vercel Production OCR deployment `dpl_HE1Deqwr9sUPoLRqAzgmUH33qiyz` was deployed Ready; later pushes may have produced a newer active deployment, so verify the live alias before any mutation. GitHub push triggers auto-deploy; do not use manual `vercel deploy`.
 - Supabase Production migrations 052 and 053 are applied. Migration 053 added versioned OCR cache/RPC, actor+global quotas, usage telemetry, and service-role-only access. Public slip storage remains a temporary accepted production risk; private attachment migration is a separate blocker.
@@ -247,7 +274,7 @@
   4. พนักงานบัญชีบันทึกการชำระรวมหนึ่งยอดใน FlowAccount ด้วยมือ
   5. Sync พบ PAY ชำระแล้วและเปลี่ยนสถานะเป็น `ชำระเงินแล้ว`; สลิป local ยังผูกกับ PAY/EXP group เดิม
 - หนึ่ง active local payment ต่อหนึ่ง PAY; รองรับแก้ไขก่อน FlowAccount ยืนยัน และไม่มี hard delete
-- ถ้ายอดโอนจริงต่างจากยอดสุทธิ PAY ระบบแสดงคำเตือน แต่เก็บยอดจริงตามสลิป
+- ~~ถ้ายอดโอนจริงต่างจากยอดสุทธิ PAY ระบบแสดงคำเตือน แต่เก็บยอดจริงตามสลิป~~ — เปลี่ยนแล้วใน PR #46 (2026-10-02): ยอดต้องตรงเท่านั้น ระบบไม่ยอมบันทึก
 - ปุ่มแนบสลิปเป็นกรอบเส้นประขนาดใหญ่บนมือถือ พร้อมสถานะ uploading/success
 - ระบบนี้ไม่เรียก FlowAccount payment API และไม่สร้างรายการบัญชีธนาคารซ้ำ
 
