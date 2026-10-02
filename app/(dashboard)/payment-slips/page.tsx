@@ -141,6 +141,11 @@ export default function PaymentSlipsPage() {
       setPaymentError('กรุณาแนบสลิปการโอน')
       return
     }
+    const payingGroup = groups.find(group => group.serial === payingSerial)
+    if (payingGroup && toSatang(Number(paymentForm.amount)) !== payingGroup.total_satang) {
+      setPaymentError(`ยอดโอนต้องตรงกับยอดที่ต้องจ่าย ${formatBaht(payingGroup.total_satang)} เท่านั้น`)
+      return
+    }
     setSavingPayment(true)
     setPaymentError('')
     try {
@@ -267,7 +272,9 @@ export default function PaymentSlipsPage() {
                     {group.local_payment ? 'แก้ไขข้อมูลการชำระ' : 'ชำระและแนบสลิป'}
                   </button>
                 )}
-                {payingSerial === group.serial && (
+                {payingSerial === group.serial && (() => {
+                  const amountMismatch = paymentForm.amount !== '' && toSatang(Number(paymentForm.amount)) !== group.total_satang
+                  return (
                   <form onSubmit={savePayment} className="my-2 space-y-3 rounded-xl border p-3" style={{ borderColor: 'var(--border)' }}>
                     <p className="text-sm font-semibold">บันทึกการชำระ {group.serial}</p>
                     <label className="block text-xs text-gray-600">วันที่ชำระ
@@ -287,7 +294,12 @@ export default function PaymentSlipsPage() {
                     <label className="block text-xs text-gray-600">ยอดโอนจริง
                       <input type="number" required min="0.01" step="0.01" value={paymentForm.amount}
                         onChange={event => setPaymentForm(form => ({ ...form, amount: event.target.value }))}
-                        className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
+                        className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm ${amountMismatch ? 'border-red-500 bg-red-50' : ''}`} />
+                      {amountMismatch && (
+                        <span className="mt-1 block font-medium text-red-600">
+                          ⚠️ ยอดไม่ตรง — ต้องจ่าย {formatBaht(group.total_satang)} แต่สลิป/ยอดที่กรอกคือ {formatBaht(toSatang(Number(paymentForm.amount)))}
+                        </span>
+                      )}
                     </label>
                     <div className="text-xs text-gray-600">สลิปการโอน
                       <input id={`payment-slip-${group.serial}`} type="file" accept="image/*" className="sr-only"
@@ -314,13 +326,14 @@ export default function PaymentSlipsPage() {
                     {paymentError && <p className="text-xs text-red-600">{paymentError}</p>}
                     <div className="flex gap-2">
                       <button type="button" onClick={() => setPayingSerial(null)} className="flex-1 rounded-lg border py-2 text-sm">ยกเลิก</button>
-                      <button type="submit" disabled={savingPayment || uploadingSlip}
+                      <button type="submit" disabled={savingPayment || uploadingSlip || amountMismatch}
                         className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white disabled:opacity-50">
                         {uploadingSlip ? 'กำลังอัปโหลด...' : savingPayment ? 'กำลังบันทึก...' : 'ยืนยันการชำระ'}
                       </button>
                     </div>
                   </form>
-                )}
+                  )
+                })()}
               </div>
             )}
           </div>
