@@ -36,6 +36,27 @@ export interface PaymentSlipLocalPayment {
   recorded_by_name: string | null
 }
 
+type PayableCheckExpense = Pick<PaymentSlipExpense, 'total_satang' | 'wht_satang' | 'flowaccount_payment_status'>
+
+// Decide whether a local transfer can be recorded against a PAY. Cancelled EXPs stay
+// attached to their PAY (see groupExpensesByPaymentSlip) but are not part of the
+// transfer, so they neither block recording nor count toward the expected amount.
+export function paymentSlipPayableAmount(
+  expenses: PayableCheckExpense[],
+): { ok: true, expected_amount_satang: number } | { ok: false } {
+  const active = expenses.filter(expense => expense.flowaccount_payment_status !== 'cancelled')
+  if (!active.length || active.some(expense => expense.flowaccount_payment_status !== 'pendingPayment')) {
+    return { ok: false }
+  }
+  return {
+    ok: true,
+    expected_amount_satang: active.reduce(
+      (sum, expense) => sum + Number(expense.total_satang) - Number(expense.wht_satang || 0),
+      0,
+    ),
+  }
+}
+
 function comparePaymentSlipSerialDesc(left: string, right: string): number {
   const leftNumber = /^PAY(\d+)$/i.exec(left)?.[1]
   const rightNumber = /^PAY(\d+)$/i.exec(right)?.[1]

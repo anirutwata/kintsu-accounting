@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupExpensesByPaymentSlip, type PaymentSlipExpense } from './paymentSlipGrouping'
+import { groupExpensesByPaymentSlip, paymentSlipPayableAmount, type PaymentSlipExpense } from './paymentSlipGrouping'
 
 const base: PaymentSlipExpense = {
   id: '1',
@@ -97,5 +97,24 @@ describe('payment slip grouping', () => {
 
     expect(group.status).toBe('paid')
     expect(group.local_payment?.slip_image_url).toBe('https://example.com/slip.jpg')
+  })
+})
+
+describe('paymentSlipPayableAmount', () => {
+  const pending = { ...base, flowaccount_payment_status: 'pendingPayment' }
+
+  it('ignores a cancelled EXP when checking status and expected transfer', () => {
+    expect(paymentSlipPayableAmount([
+      { ...pending, total_satang: 107_000, wht_satang: 3_000 },
+      { ...base, total_satang: 999_000, flowaccount_payment_status: 'cancelled' },
+    ])).toEqual({ ok: true, expected_amount_satang: 104_000 })
+  })
+
+  it('rejects when a remaining EXP is no longer pending', () => {
+    expect(paymentSlipPayableAmount([pending, base])).toEqual({ ok: false })
+  })
+
+  it('rejects when every EXP is cancelled', () => {
+    expect(paymentSlipPayableAmount([{ ...base, flowaccount_payment_status: 'cancelled' }])).toEqual({ ok: false })
   })
 })
