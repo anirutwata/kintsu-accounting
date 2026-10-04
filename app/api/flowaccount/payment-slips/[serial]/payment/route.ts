@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
+import { paymentSlipPayableAmount } from '@/lib/paymentSlipGrouping'
 
 interface PaymentBody {
   payment_date?: string
@@ -43,14 +44,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ serial:
   if (expensesError) return NextResponse.json({ error: expensesError.message }, { status: 500 })
   if (bankError || !bank) return NextResponse.json({ error: 'ไม่พบบัญชีธนาคารที่เลือก' }, { status: 400 })
   if (!expenses?.length) return NextResponse.json({ error: 'ไม่พบใบเตรียมจ่ายนี้' }, { status: 404 })
-  if (expenses.some(expense => expense.flowaccount_payment_status !== 'pendingPayment')) {
+  const payable = paymentSlipPayableAmount(expenses)
+  if (!payable.ok) {
     return NextResponse.json({ error: 'สถานะใบเตรียมจ่ายเปลี่ยนแล้ว กรุณา Sync ก่อนบันทึก' }, { status: 409 })
   }
 
-  const expectedAmountSatang = expenses.reduce(
-    (sum, expense) => sum + Number(expense.total_satang) - Number(expense.wht_satang || 0),
-    0,
-  )
+  const expectedAmountSatang = payable.expected_amount_satang
   if (amount_satang !== expectedAmountSatang) {
     return NextResponse.json({
       error: `ยอดโอนต้องตรงกับยอดที่ต้องจ่าย ${(expectedAmountSatang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท เท่านั้น`,
