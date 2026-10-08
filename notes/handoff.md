@@ -1,6 +1,15 @@
-# Handoff — KINTSU Accounting (2026-10-02)
+# Handoff — KINTSU Accounting (2026-10-08)
 
 > ฉบับนี้อัปเดตล่าสุดวันที่ 2026-10-02 หลัง PR #46 (OCR สลิปหน้า PAY + บังคับยอดตรง) และ PR #47 (ล็อกการบันทึกรายรับรายวัน + migration 057)
+
+## SESSION UPDATE — 2026-10-08 (sync PR จากมือถือเข้าเครื่อง; main = `7b02cbb`) — อ่านก่อน
+PR ที่ merge ผ่าน Claude Code บนมือถือ/cloud แล้ว (เครื่องนี้ ff จาก `006fe58` → `7b02cbb`):
+- **#44 / #45 (2026-09-15)**: Gmail filter ติด label แล้วข้าม inbox ทำให้ cron ไม่เจออีเมลรายงาน → `findReportMessages` ใน `lib/linePayEdcImport.ts` (#44) และ `lib/ttbPromptPayImport.ts` (#45) ค้นใน "All Mail" (resolve ด้วย `\All` special-use flag) แทน `INBOX`. ยังไม่ได้รัน full test (ocr-kit ติดตั้งใน sandbox ไม่ได้); ยังไม่ยืนยันบน cron จริงว่าเจอเมลที่ข้าม inbox
+- **#46 / #47 / #48 (2026-10-02)**: รายละเอียดอยู่ในหัวข้อ 2026-10-02 ถัดลงไป (migration 057 apply แล้ว)
+- **#49 `7b02cbb` (2026-10-04)**: บันทึกสลิปโอนของ PAY ไม่ได้ ("สถานะใบเตรียมจ่ายเปลี่ยนแล้ว") เมื่อ EXP ใดใน PAY ถูกยกเลิกใน FlowAccount (เช่น PAY2026100001) — หลัง #42 PAY เก็บ EXP ที่ยกเลิกไว้ แต่ API payment ยังบังคับให้ทุก EXP เป็น `pendingPayment` และรวมยอด EXP ที่ยกเลิกเข้า expected amount. แก้: `paymentSlipPayableAmount()` ใน `lib/paymentSlipGrouping.ts` ข้าม EXP ที่ยกเลิก, ต้องที่เหลือเป็น `pendingPayment` ทั้งหมด, คืนยอดสุทธิ (total − WHT); ใช้ทั้งเช็คสถานะและเช็คยอดใน `POST /api/flowaccount/payment-slips/[serial]/payment`. ยังปฏิเสธเมื่อทุก EXP ถูกยกเลิก. Test 10/10 (เพิ่ม 3)
+- **ยังไม่ได้ตรวจบนแอปจริง**: บันทึกสลิป PAY2026100001 (มี EXP ยกเลิก); lock รายรับรายวัน + Telegram เตือน 10:00 BKK; OCR สลิปหน้า PAY (PAY2026100003); cron อ่านเมลที่ข้าม inbox
+- ไฟล์ untracked ในเครื่อง (ไม่ใช่งานนี้): `notes/flowaccount-journal-attachment-research-2026-08-25.md`, `รหัส-fixed.gs`, `supabase/.temp/`
+- สภาพแวดล้อม: sandbox ติดตั้ง `@anirutwata/ocr-kit` ไม่ได้ (401) → full suite/lint ต้องรันบนเครื่องนี้; repo ไม่มี CI
 
 ## SESSION UPDATE — 2026-10-02 (cloud session, PR #46 + #47) — อ่านก่อน snapshot ด้านล่าง
 - `main = origin/main = 261815d` (PR #47 squash). ก่อนหน้า `5bdcc8b` (PR #46). GitHub push → Vercel auto-deploy.
