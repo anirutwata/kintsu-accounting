@@ -50,17 +50,18 @@ th{background:#9d1f14;color:#fff;font-weight:600;padding:8px 10px;text-align:cen
 td{padding:8px 10px;border-bottom:1px solid #ddd;vertical-align:top}
 tr.total td{border-top:2px solid #1f1f1f;border-bottom:none;background:#f6f4ee;font-weight:700}
 .c{text-align:center}.r{text-align:right;white-space:nowrap}
-.cert{text-indent:2.5em;text-align:justify;margin:0 0 8px}
+.cert{text-indent:2.5em;margin:0 0 8px}
 .sig{margin:28px 0 0 auto;width:300px;text-align:center}
 .sig .img{height:70px;display:flex;align-items:flex-end;justify-content:center;border-bottom:1px dotted #555}
 .sig .img img{max-height:66px;max-width:100%}
 .sig div{margin-top:4px}
 .no-print{text-align:center;margin:16px}
+.no-print button.back{background:#fff;color:#9d1f14;border:1px solid #9d1f14}
 .no-print button{font:inherit;padding:8px 18px;border:0;border-radius:8px;background:#9d1f14;color:#fff;cursor:pointer}
 @media print{body{background:#fff}.page{margin:0;box-shadow:none;max-width:none;padding:0;border-top:none}.no-print{display:none}}
 @media (max-width:600px){.page{padding:24px 18px;margin:0}table{font-size:14px}}
 </style></head><body>
-<div class="no-print"><button onclick="print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button></div>
+<div class="no-print"><button class="back" onclick="if(history.length>1)history.back();else location.href='/expenses'">← กลับ</button> <button onclick="print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button></div>
 <div class="page">
 <div class="form-no">แบบ บก.111</div>
 <h1>ใบรับรองแทนใบเสร็จรับเงิน</h1>
