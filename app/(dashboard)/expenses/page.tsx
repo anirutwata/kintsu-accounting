@@ -778,6 +778,14 @@ export default function ExpensesPage() {
                 </div>
               )}
 
+              {(selectedExpense.receipt_image_urls?.length ?? 0) === 0 && (
+                <a href={`/api/expenses/${selectedExpense.id}/substitute-receipt`} target="_blank" rel="noreferrer"
+                  className="block text-center text-sm font-medium rounded-xl border px-3 py-2"
+                  style={{ borderColor: 'var(--border)' }}>
+                  📄 ใบรับรองแทนใบเสร็จรับเงิน (บก.111)
+                </a>
+              )}
+
               {selectedExpense.source === 'flowaccount_payment_slip' ? (
                 <p className="text-xs rounded-lg bg-blue-50 border border-blue-200 text-blue-700 px-3 py-2">
                   รายการนี้นำเข้าจาก FlowAccount และเป็นแบบอ่านอย่างเดียว แก้ไขข้อมูลต้นทางใน FlowAccount แล้วกด Sync ใหม่
