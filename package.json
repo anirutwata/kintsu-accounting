@@ -10,7 +10,7 @@
     "test": "vitest run --pool=forks --maxWorkers=1 --no-file-parallelism"
   },
   "dependencies": {
-    "@anirutwata/ocr-kit": "^0.1.0",
+    "@anirutwata/ocr-kit": "^0.2.0",
     "@anthropic-ai/sdk": "^0.98.0",
     "@google/genai": "^2.19.0",
     "@supabase/ssr": "^0.10.3",
