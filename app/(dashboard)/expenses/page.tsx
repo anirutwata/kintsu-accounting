@@ -292,12 +292,13 @@ export default function ExpensesPage() {
 
   async function handleReceiptUpload(files: FileList) {
     setUploadingReceipt(true)
-    // Only auto-detect VAT off the first bill photo attached to this entry, and only
-    // when the staff member hasn't already ticked/typed VAT themselves — never
-    // overwrite a manual entry.
-    const shouldDetectVat = form.receipt_image_urls.length === 0 && !form.has_vat && !form.vat && !form.has_wht && !form.wht
-    const shouldDetectItems = itemRowsAreEmpty(form.items)
-    const shouldDetectDocumentDate = form.receipt_image_urls.length === 0 && form.document_date === getTodayBKK()
+    // All images are pages of ONE bill. First page fills empty fields only (never overwrites manual
+    // entry); extra pages append items and raise VAT/WHT/discount to the larger value (totals are
+    // usually on the last page, and repeating header totals must not be summed).
+    const additional = form.receipt_image_urls.length > 0
+    const shouldDetectVat = additional || (!form.has_vat && !form.vat && !form.has_wht && !form.wht)
+    const shouldDetectItems = additional || itemRowsAreEmpty(form.items)
+    const shouldDetectDocumentDate = !additional && form.document_date === getTodayBKK()
     const newUrls: string[] = []
     const newPreviews: string[] = []
     for (const file of Array.from(files)) {
@@ -319,56 +320,69 @@ export default function ExpensesPage() {
     }))
     setUploadingReceipt(false)
 
-    // Read taxes and every line item from the first bill in one provider call.
-    if ((shouldDetectDocumentDate || shouldDetectVat || shouldDetectItems) && newUrls[0]) {
+    // OCR every new page (one image per request keeps each call short).
+    if ((shouldDetectDocumentDate || shouldDetectVat || shouldDetectItems) && newUrls.length > 0) {
       if (shouldDetectVat) setVatOcring(true)
       if (shouldDetectItems) setItemsOcring(true)
       try {
-        const res = await fetch('/api/ocr/bill', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: newUrls[0] }),
-        })
-        const data = await res.json()
-        if (shouldDetectDocumentDate && typeof data.documentDate === 'string') {
-          setForm(f => (f.document_date === getTodayBKK() ? { ...f, document_date: data.documentDate } : f))
+        const results = (await Promise.all(newUrls.map(async url => {
+          try {
+            const res = await fetch('/api/ocr/bill', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url }),
+            })
+            const d = await res.json()
+            return res.ok ? d : null
+          } catch { return null }
+        }))).filter(Boolean)
+        const withMax = (key: string) => results.reduce((best, d) => ((d[key] || 0) > (best?.[key] || 0) ? d : best), null as any)
+        const date = results.find(d => typeof d.documentDate === 'string')?.documentDate
+        if (shouldDetectDocumentDate && date) {
+          setForm(f => (f.document_date === getTodayBKK() ? { ...f, document_date: date } : f))
         }
-        if (data.hasVat && data.vatSatang > 0) {
+        const vatSrc = results.length ? withMax('vatSatang') : null
+        if (vatSrc?.hasVat && vatSrc.vatSatang > 0) {
+          const v = vatSrc.vatSatang / 100
           // Guard again at write time — staff may have ticked VAT manually while OCR was in flight.
-          setForm(f => (f.has_vat || f.vat ? f : { ...f, has_vat: true, vat: (data.vatSatang / 100).toFixed(2), vat_inclusive: !!data.vatInclusive }))
+          setForm(f => ((additional ? v <= Number(f.vat || 0) : (f.has_vat || f.vat)) ? f : { ...f, has_vat: true, vat: v.toFixed(2), vat_inclusive: !!vatSrc.vatInclusive }))
         }
-        if (data.hasWht && data.whtSatang > 0) {
-          setForm(f => (f.has_wht || f.wht ? f : { ...f, has_wht: true, wht: (data.whtSatang / 100).toFixed(2) }))
+        const whtSrc = results.length ? withMax('whtSatang') : null
+        if (whtSrc?.hasWht && whtSrc.whtSatang > 0) {
+          const w = whtSrc.whtSatang / 100
+          setForm(f => ((additional ? w <= Number(f.wht || 0) : (f.has_wht || f.wht)) ? f : { ...f, has_wht: true, wht: w.toFixed(2) }))
         }
-        if (data.hasDiscount && data.discountSatang > 0) {
-          setForm(f => (f.discount ? f : { ...f, discount: (data.discountSatang / 100).toFixed(2) }))
+        const discSrc = results.length ? withMax('discountSatang') : null
+        if (discSrc?.hasDiscount && discSrc.discountSatang > 0) {
+          const dsc = discSrc.discountSatang / 100
+          setForm(f => ((additional ? dsc <= Number(f.discount || 0) : f.discount) ? f : { ...f, discount: dsc.toFixed(2) }))
         }
-        if (data.vendor?.name || data.vendor?.address) {
+        const vendor = results.map(d => d.vendor).find(v => v?.name || v?.address)
+        if (vendor) {
           setForm(f => ({
             ...f,
-            recipient_name: f.recipient_name || data.vendor.name || '',
-            recipient_address: f.recipient_address || data.vendor.address || '',
+            recipient_name: f.recipient_name || vendor.name || '',
+            recipient_address: f.recipient_address || vendor.address || '',
           }))
         }
-        const extracted: Array<{
-          suggestedCategory?: string | null
-          description?: string
-          quantity?: number
-          unit?: string
-          pricePerUnit?: number
-        }> = Array.isArray(data.items) ? data.items : []
+        const extracted: ItemRow[] = results.flatMap(d => (Array.isArray(d.items) ? d.items : [])).map((i: any) => ({
+          category: i.suggestedCategory || '',
+          description: i.description || '',
+          quantity: String(i.quantity ?? 1),
+          unit: i.unit || 'รายการ',
+          price_per_unit: String(i.pricePerUnit ?? 0),
+          has_vat: true,
+        }))
         if (shouldDetectItems && extracted.length > 0) {
-          setForm(f => (!itemRowsAreEmpty(f.items) ? f : {
-            ...f,
-            items: extracted.map(i => ({
-              category: i.suggestedCategory || '',
-              description: i.description || '',
-              quantity: String(i.quantity ?? 1),
-              unit: i.unit || 'รายการ',
-              price_per_unit: String(i.pricePerUnit ?? 0),
-              has_vat: true,
-            })),
-          }))
+          // ponytail: dedupe by description+qty+price drops a genuinely repeated line; fine for one bill's pages.
+          const key = (i: ItemRow) => `${i.description}|${i.quantity}|${i.price_per_unit}`
+          setForm(f => {
+            if (!additional && !itemRowsAreEmpty(f.items)) return f // staff typed items while OCR ran
+            const base = itemRowsAreEmpty(f.items) ? [] : f.items
+            const seen = new Set(base.map(key))
+            const add = extracted.filter(i => !seen.has(key(i)) && seen.add(key(i)))
+            return { ...f, items: [...base, ...add] }
+          })
         }
       } catch { /* ignore — staff can still fill every field manually */ }
       if (shouldDetectVat) setVatOcring(false)
@@ -893,7 +907,7 @@ export default function ExpensesPage() {
                   </div>
                 )}
 
-                <button type="button" onClick={() => receiptRef.current?.click()}
+                <button type="button" disabled={uploadingReceipt || vatOcring || itemsOcring} onClick={() => receiptRef.current?.click()}
                   className="w-full py-4 border-2 border-dashed rounded-xl text-sm flex items-center justify-center gap-2"
                   style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
                   {uploadingReceipt ? (
