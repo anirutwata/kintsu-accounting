@@ -20,6 +20,16 @@ export async function GET(req: Request) {
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
 
+  // Payment state as the app shows it: own expenses → flowaccount_paid_at (the "ชำระเงิน"
+  // step); imported FlowAccount rows → is_paid (their paid_at was blanket-backfilled by 056).
+  const paid = searchParams.get('paid')
+  if (paid === 'paid') {
+    query = query.or('and(source.neq.flowaccount_payment_slip,flowaccount_paid_at.not.is.null),and(source.eq.flowaccount_payment_slip,is_paid.eq.true)')
+  } else if (paid === 'unpaid') {
+    query = query.or('and(source.neq.flowaccount_payment_slip,flowaccount_paid_at.is.null),and(source.eq.flowaccount_payment_slip,is_paid.eq.false)')
+  }
+  // Deleted/voided-in-FlowAccount rows (cancelled) are neither paid nor unpaid.
+  if (paid === 'paid' || paid === 'unpaid') query = query.or('flowaccount_payment_status.is.null,flowaccount_payment_status.neq.cancelled')
   if (date) query = query.eq('document_date', date)
   if (month) {
     const [y, m] = month.split('-').map(Number)

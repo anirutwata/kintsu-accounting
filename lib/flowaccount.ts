@@ -8,6 +8,24 @@ const CLIENT_ID = process.env.FLOWACCOUNT_CLIENT_ID!
 const CLIENT_SECRET = process.env.FLOWACCOUNT_CLIENT_SECRET!
 const SCOPE = process.env.FLOWACCOUNT_SCOPE!
 
+// Structured error so callers branch on HTTP status instead of parsing message text.
+// status undefined = no HTTP response was read (network error, timeout, unparseable body).
+// fromApiJson = the body parsed as JSON, i.e. a real FlowAccount API answer (not a proxy/HTML page).
+// notSent = failed before the request left (token fetch), so nothing can have been created.
+export class FlowAccountError extends Error {
+  constructor(message: string, readonly status?: number, readonly notSent = false, readonly fromApiJson = false) {
+    super(message)
+    this.name = 'FlowAccountError'
+  }
+}
+
+// True only when FlowAccount definitely did not create anything: the request never
+// left, or it answered with a 4xx rejection (408 Request Timeout is ambiguous).
+export function isDefiniteRejection(err: unknown): boolean {
+  if (!(err instanceof FlowAccountError)) return false
+  return err.notSent || (err.status !== undefined && err.status >= 400 && err.status < 500 && err.status !== 408)
+}
+
 let cachedToken: { accessToken: string; expiresAt: number } | null = null
 
 async function getAccessToken(forceRefresh = false): Promise<string> {
@@ -21,14 +39,24 @@ async function getAccessToken(forceRefresh = false): Promise<string> {
     client_secret: CLIENT_SECRET,
     scope: SCOPE,
   })
-  const res = await fetch(TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  })
-  const json = await res.json()
+  // Nothing has been sent to the API yet, so any failure here is notSent (safe to release a claim).
+  let res: Response
+  let json: { error?: string; access_token: string; expires_in?: number } | null
+  try {
+    res = await fetch(TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    })
+    json = await res.json()
+  } catch (e) {
+    throw new FlowAccountError(`FlowAccount token request failed: ${(e as Error).message}`, undefined, true)
+  }
+  if (!json || typeof json !== 'object') {
+    throw new FlowAccountError('FlowAccount token request failed: invalid response body', res.status, true)
+  }
   if (!res.ok || json.error) {
-    throw new Error(`FlowAccount token request failed: ${json.error ?? res.statusText}`)
+    throw new FlowAccountError(`FlowAccount token request failed: ${json.error ?? res.statusText}`, res.status, true)
   }
 
   cachedToken = {
@@ -50,20 +78,35 @@ async function flowAccountFetch(path: string, init: RequestInit = {}) {
       },
     })
     const responseText = await res.text()
-    const json = responseText
-      ? JSON.parse(responseText)
-      : { status: res.ok, data: null, message: res.statusText }
-    return { res, json }
+    let parsed: unknown = null
+    try {
+      if (responseText) parsed = JSON.parse(responseText)
+    } catch {
+      throw new FlowAccountError(`FlowAccount API error (${res.status}): unparseable response`, res.status >= 400 && res.status < 500 ? res.status : undefined)
+    }
+    // Only a non-empty body that parsed to a JSON object is a real API answer. Empty body or
+    // JSON null/array/primitive gets a synthetic envelope (so json.data can't TypeError) and
+    // fromApiJson=false (so e.g. an empty 404 can never be read as "document deleted").
+    const fromApiJson = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FlowAccount envelope is untyped
+    const json: any = fromApiJson ? parsed : { status: res.ok, data: null, message: res.statusText }
+    return { res, json, fromApiJson }
   }
 
-  let { res, json } = await attempt(false)
+  let { res, json, fromApiJson } = await attempt(false)
   // A long-lived warm serverless instance can hold a cached token past its
   // real server-side lifetime (FlowAccount's actual validity has been
   // observed to run shorter than the expires_in it reports) — every request
   // then fails with the same opaque error until the instance restarts. One
   // forced-refresh retry recovers from that without waiting for a redeploy.
-  if (!res.ok || json.status === false) {
-    ;({ res, json } = await attempt(true))
+  // Only GETs (idempotent) retry on any failure. POST/PUT/DELETE retry once solely on a definite
+  // 4xx rejection (not 408): FlowAccount answers a stale token with 401 or an opaque 400, and a
+  // rejected request created nothing. 5xx/network/unparseable/2xx-with-status:false stay ambiguous.
+  const idempotent = !init.method || init.method.toUpperCase() === 'GET'
+  const definiteReject = res.status >= 400 && res.status < 500 && res.status !== 408
+  if ((!res.ok || json.status === false) && (idempotent || definiteReject)) {
+    cachedToken = null
+    ;({ res, json, fromApiJson } = await attempt(true))
   }
   if (!res.ok || json.status === false) {
     // json.data holds real validation detail (e.g. an array of field errors)
@@ -71,7 +114,7 @@ async function flowAccountFetch(path: string, init: RequestInit = {}) {
     // literal boolean, not null/undefined) on some rejections — `??` doesn't
     // fall through to json.message for that, so it must be checked explicitly.
     const detail = json.data == null || json.data === false ? json.message : json.data
-    throw new Error(`FlowAccount API error (${res.status}): ${JSON.stringify(detail)}`)
+    throw new FlowAccountError(`FlowAccount API error (${res.status}): ${JSON.stringify(detail)}`, res.status, false, fromApiJson)
   }
   return json.data
 }

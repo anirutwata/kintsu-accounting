@@ -121,7 +121,7 @@ function isPaidByPaymentSlipStatus(document: FlowAccountExpenseDocument): boolea
   return statusTokens(document).some(token => PAID_BY_PAYMENT_SLIP_TOKENS.has(token))
 }
 
-function isCancelledStatus(document: FlowAccountExpenseDocument): boolean {
+export function isCancelledStatus(document: FlowAccountExpenseDocument): boolean {
   return statusTokens(document).some(token => CANCELLED_TOKENS.has(token))
 }
 

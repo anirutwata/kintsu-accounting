@@ -126,6 +126,7 @@ export default function ExpensesPage() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [month, setMonth] = useState(getMonthKey())
+  const [paidFilter, setPaidFilter] = useState<'' | 'paid' | 'unpaid'>('')
   const [showForm, setShowForm] = useState(false)
   const [showAddBank, setShowAddBank] = useState(false)
   const [showManageCat, setShowManageCat] = useState(false)
@@ -151,6 +152,29 @@ export default function ExpensesPage() {
       .then(rows => setSelectedExpenseItems(Array.isArray(rows) ? rows : []))
       .catch(() => setSelectedExpenseItems([]))
   }, [selectedExpense])
+  // Own expenses linked to FlowAccount: ask the server whether the document was deleted/voided there.
+  const [reloadTick, setReloadTick] = useState(0)
+  const selectedId = selectedExpense?.id
+  const needsFaCheck = !!selectedExpense && selectedExpense.source !== 'flowaccount_payment_slip'
+    && !!selectedExpense.flowaccount_record_id && selectedExpense.flowaccount_payment_status !== 'cancelled'
+  const [faStatusLoginNeededFor, setFaStatusLoginNeededFor] = useState<string | null>(null)
+  useEffect(() => {
+    if (!selectedId || !needsFaCheck) return
+    fetch(`/api/expenses/${selectedId}/flowaccount-status`, { method: 'POST' })
+      .then(res => {
+        // Legacy session without the signed cookie: the check can't run — say so instead of failing silently.
+        if (res.status === 401) setFaStatusLoginNeededFor(selectedId)
+        return res.json()
+      })
+      .then(json => {
+        if (!json.cancelled) return
+        const mark = <T extends Expense>(e: T): T => (e.id === selectedId ? { ...e, flowaccount_payment_status: 'cancelled' } : e)
+        setSelectedExpense(prev => (prev ? mark(prev) : prev))
+        setExpenses(prev => prev.map(mark))
+        setReloadTick(t => t + 1) // re-query so the row/count respect the active paid filter
+      })
+      .catch(() => {})
+  }, [selectedId, needsFaCheck])
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [bankMatchWarning, setBankMatchWarning] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -204,13 +228,13 @@ export default function ExpensesPage() {
   }, [])
 
   const loadExpenses = useCallback(async () => {
-    const res = await fetch(`/api/expenses?month=${month}&page=${page}`)
+    const res = await fetch(`/api/expenses?month=${month}&page=${page}${paidFilter ? `&paid=${paidFilter}` : ''}`)
     const json = await res.json()
     setExpenses(json.data || [])
     setTotal(json.total || 0)
-  }, [month, page])
+  }, [month, page, paidFilter])
 
-  useEffect(() => { loadExpenses() }, [loadExpenses])
+  useEffect(() => { loadExpenses() }, [loadExpenses, reloadTick])
   useEffect(() => { loadBankAccounts(); loadCategories() }, [])
 
   async function loadBankAccounts() {
@@ -533,7 +557,7 @@ export default function ExpensesPage() {
     }
   }
 
-  const totalMonth = expenses.reduce((s, e) => s + e.total_satang, 0)
+  const totalMonth = expenses.reduce((s, e) => (e.flowaccount_payment_status === 'cancelled' ? s : s + e.total_satang), 0)
 
   // Group expenses by document_date (P&L date) descending
   const grouped: Record<string, Expense[]> = {}
@@ -551,6 +575,13 @@ export default function ExpensesPage() {
           <h1 className="text-lg font-bold" style={{ color: 'var(--charcoal)' }}>รายจ่าย</h1>
           <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>รวม {formatBaht(totalMonth)}</p>
         </div>
+        <div className="flex items-center gap-2">
+        <select value={paidFilter} onChange={e => { setPaidFilter(e.target.value as '' | 'paid' | 'unpaid'); setPage(1) }}
+          className="text-sm border rounded-lg px-2 py-1.5" style={{ borderColor: 'var(--border)', background: 'white' }}>
+          <option value="">ทั้งหมด</option>
+          <option value="paid">ชำระแล้ว</option>
+          <option value="unpaid">ยังไม่ชำระ</option>
+        </select>
         <select value={month} onChange={e => { setMonth(e.target.value); setPage(1) }}
           className="text-sm border rounded-lg px-2 py-1.5" style={{ borderColor: 'var(--border)', background: 'white' }}>
           {Array.from({ length: 12 }, (_, i) => {
@@ -560,6 +591,7 @@ export default function ExpensesPage() {
             return <option key={key} value={key}>{formatThaiMonth(key)}</option>
           })}
         </select>
+        </div>
       </div>
 
       <button onClick={() => { setEditingId(null); setForm(emptyForm()); setShowForm(true) }}
@@ -580,7 +612,7 @@ export default function ExpensesPage() {
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>{formatDate(date)}</span>
               <span className="text-xs font-medium" style={{ color: 'var(--charcoal)' }}>
-                {formatBaht(grouped[date].reduce((s, e) => s + e.total_satang, 0))}
+                {formatBaht(grouped[date].reduce((s, e) => (e.flowaccount_payment_status === 'cancelled' ? s : s + e.total_satang), 0))}
               </span>
             </div>
             <div className="space-y-2">
@@ -595,6 +627,11 @@ export default function ExpensesPage() {
                           style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
                           {exp.category}
                         </span>
+                        {exp.flowaccount_payment_status === 'cancelled' && (
+                          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-600 border border-gray-300">
+                            ยกเลิก
+                          </span>
+                        )}
                         {exp.source === 'flowaccount_payment_slip' && (
                           <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-50 text-blue-700 border border-blue-200">
                             FlowAccount · {exp.flowaccount_payment_slip_serial}
@@ -751,8 +788,11 @@ export default function ExpensesPage() {
               {selectedExpense.flowaccount_record_id && selectedExpense.source !== 'flowaccount_payment_slip' && (
                 <DetailRow
                   label="สถานะใน FlowAccount"
-                  value={selectedExpense.flowaccount_paid_at ? '✅ ชำระแล้ว' : '🟡 รอดำเนินการ (ยังไม่ชำระ)'}
+                  value={selectedExpense.flowaccount_payment_status === 'cancelled' ? '🗑️ ถูกลบใน FlowAccount แล้ว (ยกเลิก)' : selectedExpense.flowaccount_paid_at ? '✅ ชำระแล้ว' : '🟡 รอดำเนินการ (ยังไม่ชำระ)'}
                 />
+              )}
+              {faStatusLoginNeededFor === selectedExpense.id && (
+                <p className="text-xs text-amber-600">⚠️ ตรวจสถานะ FlowAccount ไม่ได้ — ขอให้ออกจากระบบแล้วเข้าสู่ระบบใหม่เพื่อตรวจสถานะ FlowAccount</p>
               )}
               {selectedExpense.flowaccount_payment_slip_serial && (
                 <DetailRow label="ใบเตรียมจ่าย" value={selectedExpense.flowaccount_payment_slip_serial} />
@@ -807,13 +847,16 @@ export default function ExpensesPage() {
               ) : (
                 <>
                   {syncFaError && <p className="text-xs text-red-500">❌ {syncFaError}</p>}
-                  <button onClick={() => handleSyncFlowAccount(selectedExpense.id)}
-                    disabled={syncingFa}
-                    className="w-full py-2.5 rounded-xl text-sm font-semibold border-2 disabled:opacity-50"
-                    style={{ borderColor: '#2563EB', color: '#2563EB' }}>
-                    {syncingFa ? 'กำลังส่ง...' : selectedExpense.flowaccount_document_serial ? '🔁 ส่งเข้า FlowAccount อีกครั้ง' : '📤 ส่งเข้า FlowAccount'}
-                  </button>
-                  {selectedExpense.flowaccount_record_id && !selectedExpense.flowaccount_paid_at && (
+                  {/* Only for never-linked expenses — resending a linked one created duplicate documents. */}
+                  {!selectedExpense.flowaccount_record_id && !selectedExpense.flowaccount_document_serial && (
+                    <button onClick={() => handleSyncFlowAccount(selectedExpense.id)}
+                      disabled={syncingFa}
+                      className="w-full py-2.5 rounded-xl text-sm font-semibold border-2 disabled:opacity-50"
+                      style={{ borderColor: '#2563EB', color: '#2563EB' }}>
+                      {syncingFa ? 'กำลังส่ง...' : '📤 ส่งเข้า FlowAccount'}
+                    </button>
+                  )}
+                  {selectedExpense.flowaccount_record_id && !selectedExpense.flowaccount_paid_at && selectedExpense.flowaccount_payment_status !== 'cancelled' && (
                     <>
                       {payFaError && <p className="text-xs text-red-500">❌ {payFaError}</p>}
                       <button onClick={() => handlePayFlowAccount(selectedExpense.id)}
@@ -829,11 +872,11 @@ export default function ExpensesPage() {
 
               {/* Action buttons */}
               {selectedExpense.source !== 'flowaccount_payment_slip' && <div className="flex gap-2 pt-2">
-                <button onClick={() => openEdit(selectedExpense)}
+                {selectedExpense.flowaccount_payment_status !== 'cancelled' && <button onClick={() => openEdit(selectedExpense)}
                   className="flex-1 py-2.5 rounded-xl text-sm font-semibold border-2"
                   style={{ borderColor: 'var(--flame-red)', color: 'var(--flame-red)' }}>
                   แก้ไข
-                </button>
+                </button>}
                 {confirmDeleteId === selectedExpense.id ? (
                   <div className="flex-1 flex gap-2">
                     <button onClick={() => setConfirmDeleteId(null)}

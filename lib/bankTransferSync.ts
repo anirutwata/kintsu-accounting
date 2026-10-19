@@ -1,4 +1,4 @@
-import { createApprovedJournal, getChartOfAccounts, voidJournalEntry, type FlowAccountChartOfAccount } from './flowaccount'
+import { createApprovedJournal, getChartOfAccounts, isDefiniteRejection, voidJournalEntry, type FlowAccountChartOfAccount } from './flowaccount'
 import { syncBankTransferJournal, type JournalAccount } from './bankTransferJournal'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -104,6 +104,12 @@ export async function syncBankTransferToFlowAccount(supabase: SupabaseClient, id
     transfer.flowaccount_cleanup_record_id = null
   }
 
+  // syncBankTransferJournal only reuses a JV when BOTH are set; a record id alone would make it
+  // create a second one.
+  if (transfer.flowaccount_journal_record_id && !transfer.flowaccount_journal_serial) {
+    return { ok: false as const, error: `มี FlowAccount record ID ${transfer.flowaccount_journal_record_id} แต่ไม่มีเลขเอกสาร — ไม่ส่งซ้ำเพื่อกัน JV ซ้ำ กรุณาติดต่อผู้ดูแลระบบ` }
+  }
+
   if (!transfer.flowaccount_journal_record_id) {
     const { data: claim, error: claimError } = await supabase
       .from('bank_transfers')
@@ -128,6 +134,7 @@ export async function syncBankTransferToFlowAccount(supabase: SupabaseClient, id
     }
   }
 
+  let createAttempted = false
   try {
     const accounts = await resolveAccounts(supabase, transfer as TransferRow)
     const result = await syncBankTransferJournal({
@@ -139,7 +146,7 @@ export async function syncBankTransferToFlowAccount(supabase: SupabaseClient, id
       to: accounts.to,
       flowAccountRecordId: transfer.flowaccount_journal_record_id,
       flowAccountDocumentSerial: transfer.flowaccount_journal_serial,
-    }, { createApprovedJournal })
+    }, { createApprovedJournal: payload => { createAttempted = true; return createApprovedJournal(payload) } })
 
     if (result.created) {
       const { data: persisted, error: updateError } = await supabase.from('bank_transfers').update({
@@ -168,8 +175,17 @@ export async function syncBankTransferToFlowAccount(supabase: SupabaseClient, id
 
     return { ok: true as const, ...result }
   } catch (caught) {
-    const message = caught instanceof Error ? caught.message : 'ส่งเข้า FlowAccount ไม่สำเร็จ'
-    await supabase.from('bank_transfers').update({ flowaccount_journal_state: 'error', flowaccount_state_changed_at: new Date().toISOString(), flowaccount_sync_error: message }).eq('id', id).eq('flowaccount_journal_state', 'creating')
+    const detail = caught instanceof Error ? caught.message : 'ส่งเข้า FlowAccount ไม่สำเร็จ'
+    // Ambiguous create failure (network/timeout/5xx/unparseable): the JV may exist, so stay in
+    // 'creating' — not retryable, and edit/delete already refuse it. Only a definite rejection
+    // (or a failure before the create call) goes to the retryable 'error' state.
+    // ponytail: unlocking is manual — check FlowAccount, then set state 'error' (no JV) or
+    // fill record_id/serial + 'synced' (JV exists).
+    const ambiguous = createAttempted && !isDefiniteRejection(caught)
+    const message = ambiguous
+      ? `ส่งเข้า FlowAccount ไม่แน่ใจว่าสำเร็จหรือไม่ (${detail}) — รายการนี้ถูกล็อกไว้ กรุณาตรวจใน FlowAccount ก่อนว่ามี JV แล้วหรือยัง แล้วแจ้งผู้ดูแลระบบปลดล็อก (อย่าบันทึกซ้ำเอง)`
+      : detail
+    await supabase.from('bank_transfers').update({ flowaccount_journal_state: ambiguous ? 'creating' : 'error', flowaccount_state_changed_at: new Date().toISOString(), flowaccount_sync_error: message }).eq('id', id).eq('flowaccount_journal_state', 'creating')
     return { ok: false as const, error: message }
   }
 }

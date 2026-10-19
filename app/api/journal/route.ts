@@ -114,6 +114,7 @@ export async function GET(req: Request) {
     .from('expenses')
     .select('id, document_date, date, category, amount_satang, payment_method, sender_bank, recipient_name, note')
     .eq('is_deleted', false)
+    .or('flowaccount_payment_status.is.null,flowaccount_payment_status.neq.cancelled') // deleted/voided in FlowAccount
     .gte('document_date', startDate)
     .lt('document_date', nextMonth)
     .order('document_date')

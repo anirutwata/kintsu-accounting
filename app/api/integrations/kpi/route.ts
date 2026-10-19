@@ -32,6 +32,7 @@ export async function GET(req: Request) {
     .gte('document_date', `${month}-01`)
     .lt('document_date', `${nextMonth}-01`)
     .eq('is_deleted', false)
+    .or('flowaccount_payment_status.is.null,flowaccount_payment_status.neq.cancelled')
 
   // Line items (when an expense has them) are the source of truth for cost-bucket
   // classification, since one bill can span several categories — an expense with no

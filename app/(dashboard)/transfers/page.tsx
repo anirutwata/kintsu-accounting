@@ -464,7 +464,7 @@ export default function TransfersPage() {
                       ) : t.flowaccount_sync_error ? (
                         <div className="mt-1">
                           <p className="text-[11px] text-amber-700">ส่ง FlowAccount ไม่สำเร็จ: {t.flowaccount_sync_error}</p>
-                          {(role === 'owner' || role === 'manager') && (
+                          {(role === 'owner' || role === 'manager') && t.flowaccount_journal_state !== 'creating' && (
                             <button type="button" onClick={() => handleFlowAccountSync(t.id)} disabled={syncingId === t.id}
                               className="mt-1 text-xs font-semibold text-blue-700 disabled:opacity-50">
                               {syncingId === t.id ? 'กำลังส่ง...' : 'ส่งเข้า FlowAccount อีกครั้ง'}

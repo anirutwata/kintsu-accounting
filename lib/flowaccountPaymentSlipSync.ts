@@ -46,6 +46,28 @@ function normalizeVendor(value: string | null | undefined): string {
   return (value || '').replace(/บริษัท|จำกัด|\(มหาชน\)|\s+/g, '').toLowerCase()
 }
 
+type LocalCandidate = { id: string; recipient_name: string | null; flowaccount_record_id: number | null; flowaccount_synced_at: string | null }
+
+// Decides what to do with a PAY document that has no local row by record id, given the live
+// local (non-PAY, not deleted) rows with the same document_date + total_satang.
+// - Any such row with a create claim (synced_at set, record_id null — in flight OR locked by an
+//   ambiguous failure) → skip: that create may be producing THIS document; inserting a row now
+//   would take its record id (unique index) and the create could never save it. Vendor is not
+//   compared here on purpose — the FlowAccount contact name can differ from recipient_name.
+//   Sufficient because the claim is set BEFORE createExpense and the document list is fetched
+//   before this lookup: if this document came from a local create, at lookup time that row is
+//   either still claimed (skip) or already holds the record id (found as `existing`).
+// - Rows with their own record id are another FlowAccount document → never linked/overwritten.
+// - Otherwise link the single unclaimed exact-vendor match, or insert a new row (no match).
+// Known low-risk limitation: candidates are only pre-filtered by exact date + total (by the caller);
+// two same-day same-total rows with different vendors fall to the vendor check below.
+export function pickLocalMatch(rows: LocalCandidate[], vendor: string | null | undefined): { skip: true } | { skip: false; linkId: string | null } {
+  if (rows.some(row => row.flowaccount_synced_at && !row.flowaccount_record_id)) return { skip: true }
+  const matches = rows.filter(row => !row.flowaccount_record_id && !row.flowaccount_synced_at && normalizeVendor(row.recipient_name) === normalizeVendor(vendor))
+  if (matches.length > 1) throw new Error('พบรายการ KINTSU เดิมที่อาจซ้ำมากกว่า 1 รายการ')
+  return { skip: false, linkId: matches[0]?.id ?? null }
+}
+
 // The bulk /expenses list drops referencedToMe, so a pendingPayment/paidByPaymentSlip
 // (or since-cancelled) document doesn't carry which PAY (ใบเตรียมจ่าย) it belongs to.
 // Backfill it: reuse the PAY serial already stored locally for a document we've
@@ -127,31 +149,39 @@ export async function syncFlowAccountPaymentSlips(supabase: SupabaseClient) {
   for (const document of documents) {
     try {
       const mapped = mapFlowAccountExpense(document, categories)
-      const { data: existing } = await supabase
+      const { data: existing, error: existingError } = await supabase
         .from('expenses')
-        .select('id')
+        .select('id, source, is_deleted')
         .eq('flowaccount_record_id', document.recordId)
         .maybeSingle()
+      if (existingError) throw new Error(existingError.message)
+      // A locally deleted own expense must not be resurrected/re-sourced by the import.
+      if (existing?.is_deleted && existing.source !== 'flowaccount_payment_slip') {
+        throw new Error('รายการนี้ถูกลบในระบบแล้วแต่เอกสารยังอยู่ใน FlowAccount — ข้ามการนำเข้า กรุณาตรวจ/ลบใน FlowAccount')
+      }
 
       let linkedLocalId: string | null = null
       if (!existing) {
         const { data: possibleDuplicates, error: duplicateError } = await supabase
           .from('expenses')
-          .select('id, recipient_name')
+          .select('id, recipient_name, flowaccount_record_id, flowaccount_synced_at')
           .neq('source', 'flowaccount_payment_slip')
           .eq('is_deleted', false)
           .eq('document_date', mapped.expense.document_date)
           .eq('total_satang', mapped.expense.total_satang)
         if (duplicateError) throw new Error(duplicateError.message)
-        const exactVendorMatches = (possibleDuplicates ?? []).filter(row =>
-          normalizeVendor(row.recipient_name) === normalizeVendor(mapped.expense.recipient_name),
-        )
-        if (exactVendorMatches.length > 1) throw new Error('พบรายการ KINTSU เดิมที่อาจซ้ำมากกว่า 1 รายการ')
-        linkedLocalId = exactVendorMatches[0]?.id ?? null
+        const decision = pickLocalMatch(possibleDuplicates ?? [], mapped.expense.recipient_name)
+        if (decision.skip) {
+          throw new Error('มีรายการ KINTSU ยอด/วันที่เดียวกันกำลังส่ง (หรือค้าง) เข้า FlowAccount — ข้ามรอบนี้ จะนำเข้ารอบถัดไป ถ้าค้างนานให้ตรวจด้วยตนเอง')
+        }
+        linkedLocalId = decision.linkId
       }
 
       const expenseQuery = linkedLocalId
+        // Same conditions re-checked atomically in the UPDATE: a create claimed (or a delete)
+        // after the lookup wins → 0 rows → error below, the next run re-decides.
         ? supabase.from('expenses').update(mapped.expense).eq('id', linkedLocalId)
+          .eq('is_deleted', false).is('flowaccount_record_id', null).is('flowaccount_synced_at', null)
         : supabase.from('expenses').upsert(mapped.expense, { onConflict: 'flowaccount_record_id' })
       const { data: expense, error: expenseError } = await expenseQuery.select('id').single()
       if (expenseError || !expense) throw new Error(expenseError?.message || 'บันทึกรายจ่ายไม่สำเร็จ')

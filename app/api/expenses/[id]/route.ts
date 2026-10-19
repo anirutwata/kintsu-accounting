@@ -7,10 +7,11 @@ import { updateFlowAccountSync, deleteFlowAccountSync } from '@/lib/expenseSync'
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
-  const { data: sourceRow } = await supabase.from('expenses').select('source').eq('id', id).maybeSingle()
+  const { data: sourceRow } = await supabase.from('expenses').select('source, is_deleted').eq('id', id).maybeSingle()
   if (sourceRow?.source === 'flowaccount_payment_slip') {
     return NextResponse.json({ error: 'รายการจาก FlowAccount เป็นแบบอ่านอย่างเดียว กรุณาแก้ที่ FlowAccount แล้ว Sync ใหม่' }, { status: 409 })
   }
+  if (sourceRow?.is_deleted) return NextResponse.json({ error: 'รายการนี้ถูกลบแล้ว' }, { status: 404 })
   const cookieStore = await cookies()
   const updaterName = cookieStore.get('kintsu_acc_name')?.value || null
 
@@ -32,6 +33,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     ? items!.reduce((sum, i) => sum + Math.round(i.quantity * i.price_per_unit_satang), 0)
     : amount_satang
   const distinctCategories = hasItems ? [...new Set(items!.map((i) => i.category))] : []
+
+  // flowaccount_* link/sync/status columns are server-controlled; a client must not be able to
+  // clear them (bypassing the duplicate guard) or forge payment status.
+  for (const k of Object.keys(rest)) if (k.startsWith('flowaccount_')) delete rest[k]
+  // Soft-delete and identity/origin fields are owned by DELETE / server flows (DELETE does the
+  // FlowAccount cleanup; `source` drives the read-only guard) — never client-settable here.
+  for (const k of ['is_deleted', 'deleted_at', 'id', 'source']) delete rest[k]
 
   const updates: Record<string, unknown> = {
     ...rest,
@@ -56,15 +64,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     updates.total_satang = totalAfterDiscount + (isVatInclusive ? 0 : (vat_satang || 0))
   }
 
+  // Refused atomically while a FlowAccount create is in flight / locked (synced_at set, no
+  // record_id) — see the claim comment in syncExpenseToFlowAccount for why this plus the
+  // re-read below can't silently diverge.
   const { data, error } = await supabase
     .from('expenses')
     .update(updates)
     .eq('id', id)
     .eq('is_deleted', false)
+    .or('flowaccount_record_id.not.is.null,flowaccount_synced_at.is.null')
     .select()
-    .single()
+    .maybeSingle()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!data) {
+    if (!sourceRow) return NextResponse.json({ error: 'ไม่พบรายการค่าใช้จ่าย' }, { status: 404 })
+    return NextResponse.json({ error: 'รายการนี้กำลังส่งเข้า FlowAccount อยู่ (หรือส่งค้างไม่แน่ใจผล) — แก้ไขไม่ได้ตอนนี้ กรุณารอสักครู่แล้วลองใหม่ ถ้ายังแก้ไม่ได้ให้ตรวจใน FlowAccount ก่อนว่ามีเอกสารแล้วหรือยัง' }, { status: 409 })
+  }
 
   // items === undefined means the client didn't touch line items at all (a status-only
   // edit, etc.) — leave existing rows alone. Any array (including []) means the client
@@ -98,7 +114,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Propagate the edit to FlowAccount too, if this expense was already synced —
   // otherwise the two would silently drift apart. A failure here doesn't fail the
   // local edit (already saved above); staff are alerted to reconcile manually.
-  if (data.flowaccount_record_id) {
+  // Re-read the link AFTER all writes above (not `data`): a create may have saved record_id
+  // meanwhile — then this edit must be pushed here; if not, the create's own post-save
+  // re-read sees these writes and alerts.
+  const { data: link } = await supabase.from('expenses').select('flowaccount_record_id, flowaccount_document_serial').eq('id', id).maybeSingle()
+  if (link?.flowaccount_record_id) {
+    data.flowaccount_record_id = link.flowaccount_record_id
+    data.flowaccount_document_serial = link.flowaccount_document_serial
     const syncResult = await updateFlowAccountSync(supabase, id)
     if (syncResult.ok) {
       data.flowaccount_synced_at = new Date().toISOString()
@@ -124,6 +146,14 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const cookieStore = await cookies()
   const userId = cookieStore.get('kintsu_acc_user_id')?.value
 
+  if (!sourceRow) return NextResponse.json({ error: 'ไม่พบรายการค่าใช้จ่าย' }, { status: 404 })
+
+  // Refuse (atomically, in the same UPDATE) while a FlowAccount create is in flight —
+  // flowaccount_synced_at set but no record_id yet. Deleting then would let the create finish
+  // and attach a new document to a deleted row (orphaned in FlowAccount). Chosen over
+  // "delete the just-created document afterwards" because that cleanup can itself fail.
+  // Trade-off: a row locked by an ambiguous create failure can't be deleted until someone
+  // checks FlowAccount and clears/links it by hand.
   const { data, error } = await supabase
     .from('expenses')
     .update({
@@ -131,10 +161,14 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       deleted_at: new Date().toISOString(),
     })
     .eq('id', id)
+    .or('flowaccount_record_id.not.is.null,flowaccount_synced_at.is.null')
     .select()
-    .single()
+    .maybeSingle()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!data) {
+    return NextResponse.json({ error: 'รายการนี้กำลังส่งเข้า FlowAccount อยู่ (หรือส่งค้างไม่แน่ใจผล) — ลบไม่ได้ตอนนี้ กรุณารอสักครู่แล้วลองใหม่ ถ้ายังลบไม่ได้ให้ตรวจใน FlowAccount ก่อนว่ามีเอกสารแล้วหรือยัง' }, { status: 409 })
+  }
 
   // Telegram notification
   if (data) {
@@ -146,7 +180,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   // it would keep showing up in FlowAccount forever with no trace it was ever removed
   // here. A failure doesn't undo the local delete (already soft-deleted above); staff
   // are alerted to void/delete it manually in FlowAccount instead.
-  if (data?.flowaccount_record_id) {
+  if (data?.flowaccount_record_id && data.flowaccount_payment_status !== 'cancelled') {
     const delResult = await deleteFlowAccountSync(data.flowaccount_record_id)
     if (!delResult.ok) {
       sendTelegram(

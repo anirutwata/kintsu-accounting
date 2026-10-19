@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { withPaymentSlipReferences } from './flowaccountPaymentSlipSync'
+import { pickLocalMatch, withPaymentSlipReferences } from './flowaccountPaymentSlipSync'
 import type { FlowAccountExpenseDocument } from './flowaccountExpenseImport'
 
 const { getExpenseDocument } = vi.hoisted(() => ({ getExpenseDocument: vi.fn() }))
@@ -74,5 +74,20 @@ describe('withPaymentSlipReferences', () => {
 
     expect(result).toEqual([awaiting, alreadyEnriched])
     expect(getExpenseDocument).not.toHaveBeenCalled()
+  })
+})
+
+describe('pickLocalMatch (PAY line vs local rows with same date + total)', () => {
+  const row = (id: string, o: Partial<{ recipient_name: string; flowaccount_record_id: number; flowaccount_synced_at: string }> = {}) =>
+    ({ id, recipient_name: 'ร้าน A', flowaccount_record_id: null, flowaccount_synced_at: null, ...o })
+
+  it('skips while any same date/total row has a create claim (in flight or locked), whatever its vendor', () => {
+    expect(pickLocalMatch([row('a'), row('b', { recipient_name: 'อื่น', flowaccount_synced_at: '2026-10-19T00:00:00Z' })], 'ร้าน A')).toEqual({ skip: true })
+  })
+
+  it('never links a row that already has its own record id; links only an unclaimed exact-vendor row', () => {
+    expect(pickLocalMatch([row('a', { flowaccount_record_id: 5, flowaccount_synced_at: 'x' })], 'ร้าน A')).toEqual({ skip: false, linkId: null })
+    expect(pickLocalMatch([row('a'), row('b', { recipient_name: 'อื่น' })], 'บริษัท ร้าน A จำกัด')).toEqual({ skip: false, linkId: 'a' })
+    expect(() => pickLocalMatch([row('a'), row('b')], 'ร้าน A')).toThrow()
   })
 })

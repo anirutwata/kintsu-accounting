@@ -1,6 +1,7 @@
-import { createExpense, updateExpense, deleteExpenseDocument, attachExpenseFiles, findContact, payExpense, type FlowAccountContact, type ExpensePaymentChannel } from '@/lib/flowaccount'
+import { FlowAccountError, isDefiniteRejection, getExpenseDocument, createExpense, updateExpense, deleteExpenseDocument, attachExpenseFiles, listFlowAccountExpenses, findContact, payExpense, type FlowAccountContact, type ExpensePaymentChannel } from '@/lib/flowaccount'
 import { extractVendorInfoFromReceipt } from '@/lib/vendorOcr'
 import { sendTelegram } from '@/lib/telegram'
+import { isCancelledStatus, type FlowAccountExpenseDocument } from './flowaccountExpenseImport'
 
 // Resolves this expense's local payment_method to a FlowAccount payment channel.
 // Only applies to expenses entered directly in this app (paid on the spot by
@@ -156,6 +157,12 @@ function buildExpenseInput(expense: any, items: any[], contactName: string, cont
   }
 }
 
+// Everything the FlowAccount document is derived from (incl. resolveContact's inputs), to
+// detect an edit made while a create was in flight.
+function syncSnapshot(expense: Parameters<typeof buildExpenseInput>[0], items: Parameters<typeof buildExpenseInput>[1]) {
+  return JSON.stringify([buildExpenseInput(expense, items, '', null), expense.recipient_name, expense.sender_name, expense.recipient_address, expense.receipt_image_urls?.[0] ?? null])
+}
+
 // Shared by the manual "ส่งเข้า FlowAccount" button and the automatic sync that
 // runs right after an expense is saved. Looks up the FlowAccount category mapping,
 // creates the expense document, and best-effort attaches the slip/receipt photos.
@@ -163,37 +170,88 @@ function buildExpenseInput(expense: any, items: any[], contactName: string, cont
 // FlowAccount so staff can still fix mistakes there (via updateFlowAccountSync below)
 // before confirming payment through payFlowAccountSync's "ชำระเงิน" button.
 export async function syncExpenseToFlowAccount(supabase: any, expenseId: string) {
-  const { data: expense, error: expenseError } = await supabase
+  const { data: current, error: expenseError } = await supabase
     .from('expenses')
     .select('*')
     .eq('id', expenseId)
     .eq('is_deleted', false)
     .single()
-  if (expenseError || !expense) {
+  if (expenseError || !current) {
     return { ok: false as const, error: expenseError?.message || 'ไม่พบรายการค่าใช้จ่าย' }
   }
+  // Idempotency: this function only ever CREATES a FlowAccount document. Re-running it on
+  // an already-linked expense used to create a second (third…) document and overwrite
+  // the stored serial, orphaning the earlier ones. Edits go through updateFlowAccountSync.
+  if (current.flowaccount_record_id || current.flowaccount_document_serial) {
+    return { ok: false as const, error: `รายการนี้ส่งเข้า FlowAccount แล้ว (${current.flowaccount_document_serial ?? current.flowaccount_record_id}) — ส่งซ้ำไม่ได้ ถ้าต้องแก้ไขให้กด "แก้ไข" แทน`, alreadySynced: true as const }
+  }
 
-  const resolvedItems = await resolveItems(supabase, expense)
-  if (!resolvedItems.ok) return resolvedItems
-  const { contactName, contact } = await resolveContact(expense)
+  // Atomic claim so two concurrent calls (double-tap, auto-sync on save + manual button)
+  // can't both reach createExpense. flowaccount_synced_at is only ever set together with
+  // flowaccount_record_id on expenses, so "synced_at set, record_id null" = in flight.
+  // ponytail: a crash between create and the final update leaves the row claimed with no
+  // record id — deliberately NOT auto-released (the document may exist in FlowAccount);
+  // check FlowAccount, then clear flowaccount_synced_at by hand to allow a retry.
+  // is_deleted=false here + DELETE refusing in-flight rows (expenses/[id] route) make the
+  // claim and a delete mutually exclusive at the row level: no document for a deleted row.
+  //
+  // Edits vs an in-flight create (no forwarding update — two pushers could land out of order):
+  // PATCH refuses (409) while claimed, atomically in its UPDATE, and pushes its own edit only
+  // if it sees record_id after all its writes. The document is built from the row returned BY
+  // the claim (+ items read after it), so everything written before the claim is sent. After
+  // record_id is saved we re-read (C): an edit write before C shows as a diff → Telegram
+  // alert (fail-safe, manual); an edit write after C means that PATCH's final re-read also
+  // comes after C, sees record_id and pushes itself. Either way nothing diverges silently.
+  const { data: claimedRow, error: claimError } = await supabase
+    .from('expenses')
+    .update({ flowaccount_synced_at: new Date().toISOString() })
+    .eq('id', expenseId)
+    .eq('is_deleted', false)
+    .is('flowaccount_record_id', null)
+    .is('flowaccount_synced_at', null)
+    .select('*')
+    .maybeSingle()
+  if (claimError) return { ok: false as const, error: claimError.message }
+  if (!claimedRow) {
+    return { ok: false as const, error: 'รายการนี้กำลังส่ง/เคยส่งเข้า FlowAccount ค้างอยู่ — ตรวจใน FlowAccount ก่อนว่ามีเอกสารแล้วหรือยัง เพื่อไม่ให้เกิดเอกสารซ้ำ', alreadySynced: true as const }
+  }
+  const releaseClaim = () => supabase.from('expenses').update({ flowaccount_synced_at: null }).eq('id', expenseId).is('flowaccount_record_id', null)
+  const expense = claimedRow
+
+  let resolvedItems: Awaited<ReturnType<typeof resolveItems>>
+  let resolvedContact: Awaited<ReturnType<typeof resolveContact>>
+  try {
+    resolvedItems = await resolveItems(supabase, expense)
+    resolvedContact = await resolveContact(expense)
+  } catch (err) {
+    resolvedItems = { ok: false as const, error: (err as Error).message }
+    resolvedContact = { contactName: '', contact: null }
+  }
+  if (!resolvedItems.ok) {
+    await releaseClaim() // nothing sent yet
+    return resolvedItems
+  }
+  const { contactName, contact } = resolvedContact
+
+  const sentSnapshot = syncSnapshot(expense, resolvedItems.items)
+  let result: { recordId: number; documentSerial: string } | null
+  const ambiguous = (detail: string) => ({ ok: false as const, error: `ส่งเข้า FlowAccount ไม่แน่ใจว่าสำเร็จหรือไม่ (${detail}) — รายการนี้ถูกล็อกไว้ กรุณาตรวจใน FlowAccount ก่อนว่ามีเอกสารแล้วหรือยัง ก่อนส่งซ้ำ`, alreadySynced: true as const })
+  try {
+    result = await createExpense(buildExpenseInput(expense, resolvedItems.items, contactName, contact))
+  } catch (err) {
+    // Release only on a definite rejection (nothing created). Network/timeout/5xx/unparseable
+    // are ambiguous — the document may exist, so keep the row locked.
+    if (isDefiniteRejection(err)) {
+      await releaseClaim()
+      return { ok: false as const, error: (err as Error).message }
+    }
+    return ambiguous((err as Error).message)
+  }
+  // Empty 2xx body: FlowAccount may have created the document but we have no id to link.
+  if (!result?.recordId) return ambiguous('FlowAccount ตอบกลับโดยไม่มีเลขเอกสาร')
 
   try {
-    const result = await createExpense(buildExpenseInput(expense, resolvedItems.items, contactName, contact))
-
-    const imageUrls = [expense.slip_image_url, ...(expense.receipt_image_urls ?? [])].filter(Boolean)
-    if (imageUrls.length > 0) {
-      try {
-        await attachExpenseFiles(result.recordId, imageUrls)
-      } catch (attachErr: any) {
-        // Document already created — a failed attachment shouldn't fail the whole sync,
-        // just tell staff so they can attach it manually in FlowAccount if it matters.
-        sendTelegram(
-          `⚠️ ส่ง ${result.documentSerial} เข้า FlowAccount สำเร็จ แต่แนบรูปสลิป/บิลไม่สำเร็จ: ${attachErr.message}`,
-          'expenses',
-        )
-      }
-    }
-
+    // Link first: a function kill during the (slow) attach must not strand the FA doc unlinked.
     const { data: updated, error: updateError } = await supabase
       .from('expenses')
       .update({
@@ -204,11 +262,33 @@ export async function syncExpenseToFlowAccount(supabase: any, expenseId: string)
       .eq('id', expenseId)
       .select()
       .single()
-    if (updateError) return { ok: false as const, error: updateError.message }
+    if (updateError) return { ok: false as const, error: `สร้าง ${result.documentSerial} ใน FlowAccount แล้ว แต่บันทึกลงระบบไม่สำเร็จ: ${updateError.message}` }
+
+    const imageUrls = [expense.slip_image_url, ...(expense.receipt_image_urls ?? [])].filter(Boolean)
+    if (imageUrls.length > 0) {
+      try {
+        await attachExpenseFiles(result.recordId, imageUrls)
+      } catch (attachErr: any) {
+        // Document already created and linked — a failed attachment shouldn't fail the sync,
+        // just tell staff so they can attach it manually in FlowAccount if it matters.
+        sendTelegram(
+          `⚠️ ส่ง ${result.documentSerial} เข้า FlowAccount สำเร็จ แต่แนบรูปสลิป/บิลไม่สำเร็จ: ${attachErr.message}`,
+          'expenses',
+        )
+      }
+    }
+
+    // Re-read C (see the claim comment): a difference = an edit landed during the create.
+    // Alert only — never push from here.
+    const fresh = await resolveItems(supabase, updated)
+    if (!fresh.ok || syncSnapshot(updated, fresh.items) !== sentSnapshot) {
+      sendTelegram(`⚠️ รายจ่ายถูกแก้ไขระหว่างส่ง ${result.documentSerial} เข้า FlowAccount — เอกสารใน FlowAccount อาจไม่ตรงกับในระบบ\nกรุณาเปิดรายการนี้ กด "แก้ไข" แล้วบันทึกอีกครั้ง (หรือแก้ใน FlowAccount ให้ตรงกัน)`, 'expenses')
+    }
 
     return { ok: true as const, data: updated }
   } catch (err: any) {
-    return { ok: false as const, error: err.message }
+    // Document already exists in FlowAccount — keep the claim so nothing re-creates it.
+    return { ok: false as const, error: `สร้าง ${result?.documentSerial ?? ''} ใน FlowAccount แล้ว แต่บันทึกลงระบบไม่สำเร็จ: ${err.message}` }
   }
 }
 
@@ -229,6 +309,7 @@ export async function updateFlowAccountSync(supabase: any, expenseId: string) {
     return { ok: false as const, error: expenseError?.message || 'ไม่พบรายการค่าใช้จ่าย' }
   }
   if (!expense.flowaccount_record_id) return { ok: true as const } // never synced — nothing to update
+  if (expense.flowaccount_payment_status === 'cancelled') return { ok: true as const } // deleted/voided in FlowAccount — nothing to update
 
   const resolvedItems = await resolveItems(supabase, expense)
   if (!resolvedItems.ok) return resolvedItems
@@ -297,4 +378,41 @@ export async function deleteFlowAccountSync(recordId: number) {
   } catch (err: any) {
     return { ok: false as const, error: err.message }
   }
+}
+
+// Detects a document deleted/voided in FlowAccount and marks the expense cancelled
+// (flowaccount_payment_status='cancelled', same marker the PAY import uses). The serial /
+// record id are kept for audit. Read-only against FlowAccount (GET only).
+export async function refreshFlowAccountStatus(supabase: any, expenseId: string) {
+  const { data: expense } = await supabase
+    .from('expenses').select('flowaccount_record_id, flowaccount_payment_status').eq('id', expenseId).maybeSingle()
+  if (!expense?.flowaccount_record_id) return { ok: true as const, cancelled: false }
+  if (expense.flowaccount_payment_status === 'cancelled') return { ok: true as const, cancelled: true }
+
+  let cancelled = false
+  try {
+    const doc = (await getExpenseDocument(expense.flowaccount_record_id)) as FlowAccountExpenseDocument | null
+    // An empty/non-object payload is ambiguous, not "deleted".
+    if (!doc || typeof doc !== 'object' || Object.keys(doc).length === 0) return { ok: false as const, error: 'FlowAccount ตอบกลับข้อมูลเอกสารไม่ถูกต้อง' }
+    cancelled = doc.isDelete === true || isCancelledStatus(doc)
+  } catch (err) {
+    // Only a JSON-bodied 404 (fromApiJson; not HTML/proxy) from the document fetch counts as deleted; a 404 from the token
+    // request (notSent) or any other error (network, 401, 5xx) must not cancel.
+    if (!(err instanceof FlowAccountError && err.status === 404 && !err.notSent && err.fromApiJson)) return { ok: false as const, error: (err as Error).message }
+    // A JSON 404 could also mean a wrong endpoint/credentials: confirm with one cheap known-good
+    // read (1-row list) before declaring the document deleted.
+    try {
+      const today = new Date().toISOString().slice(0, 10)
+      await listFlowAccountExpenses(today, today, 1, 1)
+    } catch (healthErr) {
+      return { ok: false as const, error: `ตรวจสอบสถานะ FlowAccount ไม่ได้ (${(healthErr as Error).message})` }
+    }
+    cancelled = true
+  }
+  if (cancelled) {
+    const { error } = await supabase.from('expenses')
+      .update({ flowaccount_payment_status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', expenseId)
+    if (error) return { ok: false as const, error: error.message }
+  }
+  return { ok: true as const, cancelled }
 }

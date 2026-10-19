@@ -51,6 +51,7 @@ export async function GET(req: Request) {
       .from('expenses')
       .select('document_date, date, transfer_time, category, amount_satang, payment_method, sender_bank, sender_account, recipient_name, note, created_by_name, created_at')
       .eq('is_deleted', false)
+      .or('flowaccount_payment_status.is.null,flowaccount_payment_status.neq.cancelled') // deleted/voided in FlowAccount
       .gte('document_date', startDate)
       .lte('document_date', endDate)
       .order('document_date')
