@@ -2,6 +2,27 @@
 
 > ฉบับนี้อัปเดตล่าสุดวันที่ 2026-10-02 หลัง PR #46 (OCR สลิปหน้า PAY + บังคับยอดตรง) และ PR #47 (ล็อกการบันทึกรายรับรายวัน + migration 057)
 
+## SESSION UPDATE — 2026-10-19 (กันสร้างเอกสาร FlowAccount ซ้ำ + สถานะ "ถูกลบใน FA" + filter ชำระแล้ว/ยังไม่ชำระ; main = `5742dce`, deployed READY) — อ่านก่อน
+- **บั๊กที่เจอ**: ปุ่ม "ส่งเข้า FlowAccount อีกครั้ง" เรียก `syncExpenseToFlowAccount()` ซึ่งไม่เช็กว่าผูก FA แล้วหรือยัง → `createExpense()` สร้างเอกสารใหม่ทุกครั้ง แล้วเขียนทับ `flowaccount_record_id/serial` (เคส ร้านข้าวลุงแว่น 385฿: EXP…080 → 122 → 123, แอปจำแค่ 123). เจ้าของ void ตัวซ้ำใน FA เองแล้ว (ไม่ได้แตะ DB).
+- **แก้แล้ว (commit `5742dce`)**:
+  - `lib/expenseSync.ts`: guard ผูกแล้ว→ปฏิเสธ (route ตอบ 409); atomic claim ผ่าน `flowaccount_synced_at` (synced_at ไม่ว่าง + record_id ว่าง = กำลังส่ง/ล็อก); ล้มแบบไม่ชัดเจน (network/timeout/5xx/408/parse) **คง claim**, ปล่อยเฉพาะ rejection ชัดเจน (4xx ยกเว้น 408 หรือ `notSent`); บันทึก record_id **ก่อน** แนบรูป; `refreshFlowAccountStatus` ตั้ง `flowaccount_payment_status='cancelled'` เมื่อ JSON 404 จริง (`fromApiJson`, เช็ก health ด้วย list ก่อน) / `isDelete` / void — เก็บ serial ไว้ ไม่ล้างลิงก์.
+  - `lib/flowaccount.ts`: `FlowAccountError(.status,.notSent,.fromApiJson)` + `isDefiniteRejection`; write POST/PUT ไม่ retry อัตโนมัติ ยกเว้นครั้งเดียวด้วย token ใหม่เมื่อ 4xx ชัดเจน (กัน token ค้าง = opaque 400, ดู commit `957c4f7`); GET retry เหมือนเดิม.
+  - `app/api/expenses/[id]/route.ts`: PATCH ตัด `flowaccount_*`/`is_deleted`/`deleted_at`/`id`/`source` จาก body, 409 ระหว่างมี create ค้าง; DELETE 409 ระหว่างสร้าง; ข้ามลบเอกสาร FA ถ้า cancelled อยู่แล้ว. หลังสร้างเสร็จอ่านแถวซ้ำ ถ้าต่างจากที่ส่งไป → Telegram เตือน (ไม่ push เอง).
+  - ใหม่ `app/api/expenses/[id]/flowaccount-status/route.ts` (เรียกตอนเปิด modal); routes flowaccount-sync/status ตรวจ cookie HMAC `kintsu_acc_ocr_session` (`lib/ocr/session.ts`) → ผู้ล็อกอินค้างจากก่อนมี cookie ต้องออก/เข้าใหม่ครั้งเดียว; หน้า expenses มีข้อความแจ้งเมื่อ 401.
+  - `lib/bankTransferSync.ts`: ล้มไม่ชัดเจนคงสถานะ `creating` (ซ่อนปุ่มส่งอีกครั้งใน transfers page); `lib/flowaccountPaymentSlipSync.ts` (`pickLocalMatch`): ไม่ link/เขียนทับแถวที่ claim/ผูกแล้ว, ข้าม PAY ที่ตรงกับแถวที่กำลัง claim, UPDATE atomic + `is_deleted=false`; ข้อจำกัดที่ยอมรับ: จับคู่เฉพาะวันที่+ยอดตรงเป๊ะ.
+  - Filter `ทั้งหมด/ชำระแล้ว/ยังไม่ชำระ` (`?paid=`) กรองฝั่ง server ก่อน paginate: รายการ `source='kintsu'` ใช้ `flowaccount_paid_at`, รายการนำเข้า FA ใช้ `is_paid`; cancelled ถูกตัดออกจาก filter, ยอดรวมรายเดือน/รายวัน, KPI, `journal`, `export`. (reconcile + shift-close ยังนับ cancelled โดยตั้งใจ — เป็นเงินที่เคลื่อนจริง.)
+- **ตรวจแล้ว**: tsc ผ่าน, vitest 174 ผ่าน/3 skip, SQL prod (อ่านอย่างเดียว) `synced_at ไม่ว่าง & record_id ว่าง` = 0 แถว, `OCR_SESSION_SIGNING_SECRET` มีใน Vercel prod (sensitive), deploy READY. เจ้าของยืนยันบนมือถือ: ปุ่มส่งซ้ำหาย, filter ทำงาน (ยังไม่ชำระ ฿83,208.95 / ชำระแล้ว ฿8,419.78 ต.ค.).
+- **รีวิว**: Codex 4 รอบ (แต่ละรอบเจอข้อใหม่; ครึ่งหนึ่งของรอบ 4 มาจากกลไกที่เพิ่มรอบก่อน → รอบ 5 สั่งให้ลบ/ลดกลไกแทนการเพิ่ม). **Codex รอบ 5 ติด usage limit (ลองใหม่หลัง 19:18)** → โค้ดชุดสุดท้ายผ่านแค่ Opus review อิสระ 1 รอบ (เจอ 6 ข้อ แก้ครบ). **ทำต่อ: `/codex:review --base c93c0ba`**.
+- **ยังเปิดอยู่ (ตั้งใจ/นอกขอบเขต)**:
+  - ปลด lock ที่ค้างจากล้มไม่ชัดเจนต้องทำมือ (ตรวจ FA แล้วล้าง `flowaccount_synced_at`/ผูก record_id) — ไม่มีปุ่ม/route
+  - รายการเก่าที่ void ใน FA จะขึ้น "ยกเลิก" เมื่อมีคนเปิดดูเท่านั้น (ไม่มี cron กวาด; ถ้าคืนเอกสารใน FA สถานะ cancelled ไม่ย้อนเอง)
+  - flow อื่นที่ยังตั้งสถานะ `error` ส่งซ้ำได้หลังล้มไม่ชัดเจน: `cashRevenueSync`, `creditCardSalesSync`, `linePayEdcImport`, `ttbPromptPayImport`
+  - ช่องโหว่ทั้งระบบ: cookie `kintsu_acc_user_id` ปลอมได้, PATCH/DELETE/POST expenses ไม่มี auth, login พนักงานใช้ชื่ออย่างเดียว (ข้อเสนอ: `requireSession()` กลางจาก HMAC token + role จาก token + PIN)
+  - รูปสลิป/บิลที่แก้หลังสร้างเอกสารไม่ตามไป FA; ยอด "รวม" ด้านบนคิดจากแถวในหน้า (20/หน้า) ไม่ใช่ทั้งเดือน
+  - `EXP2026100032` (ttb สลิปโอน): กด "ชำระเงิน" ได้ FA 400 "paid with multiple payment channels… reset the payment first" — ยังไม่ได้ตรวจเอกสารใน FA (สงสัยมี payment อยู่แล้วทั้งที่แอปขึ้น pending)
+  - Apps Script `รหัส-fixed.gs` (ไฟล์ untracked ของเจ้าของ) รวมยอด export โดยไม่ข้าม cancelled
+- **กับดัก**: subagent เคยรัน `rm -rf "$TMPDIR"` ตอน TMPDIR ว่าง (พยายามลบ /var/folders — macOS ปฏิเสธส่วนใหญ่); ใช้โฟลเดอร์ tmp ตายตัวใน repo แทน. ไฟล์ untracked ที่ไม่ได้ commit: `.claude/`, `supabase/.temp/`, `notes/flowaccount-journal-attachment-research-2026-08-25.md`, `รหัส-fixed.gs`.
+
 ## SESSION UPDATE — 2026-10-15 (OCR บิลหลายหน้า + ย้ายโฟลเดอร์; main = `b4d975b`, deployed READY) — อ่านก่อน
 - **บั๊ก**: หน้า "บันทึกค่าใช้จ่าย" อ่าน OCR แค่รูปแรก — แนบหลายรูปพร้อมกันส่งแค่ `newUrls[0]`; แนบเพิ่มทีหลังถูกข้ามเพราะเงื่อนไข "first bill only" (`handleReceiptUpload` ใน `app/(dashboard)/expenses/page.tsx`). `/api/ocr/bill` ไม่มีบั๊ก (รับ 1 url/ครั้ง)
 - **ขอบเขตที่เลือก**: รูปทั้งหมดที่แนบ = **1 บิลหลายหน้า** เท่านั้น. ไม่ทำกรณีหลายบิล/สลิปเดียว (ต้องมีเลขที่เอกสารใน OCR profile + จัดกลุ่ม; ไม่มีคอลัมน์ invoice no. ใน `expenses`; แผนเต็มอยู่ในบันทึกวิเคราะห์ของ session นี้ — ถ้าจะทำ ต้องแก้ ocr-kit `expense_bill` profile ที่ใช้ร่วมกัน + bump `OCR_SCHEMA_VERSION`)
