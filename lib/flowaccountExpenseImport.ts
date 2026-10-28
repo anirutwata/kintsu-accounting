@@ -86,7 +86,7 @@ function isoDate(value: string | undefined, fallback: string): string {
   return (value || fallback).slice(0, 10)
 }
 
-function paymentSlipSerial(document: FlowAccountExpenseDocument): string | null {
+export function paymentSlipSerial(document: FlowAccountExpenseDocument): string | null {
   return document.referencedToMe?.find(reference =>
     String(reference.documentType) === '37' || reference.documentSerial?.startsWith('PAY'),
   )?.documentSerial ?? null
@@ -149,7 +149,7 @@ export function needsPaymentSlipLookup(document: FlowAccountExpenseDocument): bo
   return isEligibleForPaymentSlipSync(document) || isCancelledStatus(document)
 }
 
-function normalizedPaymentStatus(document: FlowAccountExpenseDocument): string {
+export function normalizedPaymentStatus(document: FlowAccountExpenseDocument): string {
   if (isCancelledStatus(document)) return 'cancelled'
   if (isPaidByPaymentSlipStatus(document)) return 'paidByPaymentSlip'
   if (statusTokens(document).some(token => PENDING_PAYMENT_TOKENS.has(token))) return 'pendingPayment'

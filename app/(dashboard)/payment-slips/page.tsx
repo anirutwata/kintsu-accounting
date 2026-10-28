@@ -60,7 +60,7 @@ export default function PaymentSlipsPage() {
       const json = await response.json()
       if (!response.ok && response.status !== 207) throw new Error(json.error || 'Sync ไม่สำเร็จ')
       await loadGroups()
-      alert(`Sync ใบเตรียมจ่ายสำเร็จ\nเพิ่มใหม่ ${json.created || 0} รายการ\nอัปเดต ${json.updated || 0} รายการ${json.errors?.length ? `\nผิดพลาด ${json.errors.length} รายการ` : ''}`)
+      alert(`Sync ใบเตรียมจ่ายสำเร็จ\nเพิ่มใหม่ ${json.created || 0} รายการ\nอัปเดต ${json.updated || 0} รายการ${json.errors?.length ? `\nผิดพลาด ${json.errors.length} รายการ\n${json.errors.slice(0, 5).map((e: { documentSerial: string; error: string }) => `${e.documentSerial}: ${e.error}`).join('\n')}` : ''}`)
     } catch (error) {
       alert(`Sync ใบเตรียมจ่ายไม่สำเร็จ: ${String(error)}`)
     } finally {

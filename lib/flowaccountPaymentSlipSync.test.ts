@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { pickLocalMatch, withPaymentSlipReferences, MAX_DETAIL_LOOKUPS_PER_RUN } from './flowaccountPaymentSlipSync'
+import { pickLocalMatch, withPaymentSlipReferences, isUnchangedSettledRow, MAX_DETAIL_LOOKUPS_PER_RUN } from './flowaccountPaymentSlipSync'
 import type { FlowAccountExpenseDocument } from './flowaccountExpenseImport'
 
 const { getExpenseDocument } = vi.hoisted(() => ({ getExpenseDocument: vi.fn() }))
@@ -110,5 +110,22 @@ describe('withPaymentSlipReferences backlog handling', () => {
     const result = await withPaymentSlipReferences(makeSupabase([]) as never, [doc(1), doc(2)])
     expect(result[0].referencedToMe).toBeUndefined()
     expect(result[1].referencedToMe).toHaveLength(1)
+  })
+})
+
+describe('isUnchangedSettledRow', () => {
+  const paid: FlowAccountExpenseDocument = { ...pendingNoReference, status: 23, statusString: 'receivedByPaymentSlip', referencedToMe: [{ documentType: '37', documentSerial: 'PAY2026100001' }] }
+  const row = { source: 'flowaccount_payment_slip', is_deleted: false, flowaccount_payment_status: 'paidByPaymentSlip', flowaccount_payment_slip_serial: 'PAY2026100001' }
+
+  it('skips a settled, unchanged PAY row', () => {
+    expect(isUnchangedSettledRow(row, paid)).toBe(true)
+  })
+  it('does not skip when new, soft-deleted (restore), own-source, status/serial changed, or still pending', () => {
+    expect(isUnchangedSettledRow(undefined, paid)).toBe(false)
+    expect(isUnchangedSettledRow({ ...row, is_deleted: true }, paid)).toBe(false)
+    expect(isUnchangedSettledRow({ ...row, source: 'kintsu' }, paid)).toBe(false)
+    expect(isUnchangedSettledRow({ ...row, flowaccount_payment_status: 'receivedByPaymentSlip' }, paid)).toBe(false)
+    expect(isUnchangedSettledRow({ ...row, flowaccount_payment_slip_serial: 'PAY2026100002' }, paid)).toBe(false)
+    expect(isUnchangedSettledRow(row, { ...paid, status: 4, statusString: 'pendingPayment' })).toBe(false)
   })
 })

@@ -4,6 +4,8 @@ import {
   selectImportCandidates,
   needsPaymentSlipLookup,
   isPaidStatus,
+  paymentSlipSerial,
+  normalizedPaymentStatus,
   type FlowAccountExpenseDocument,
 } from './flowaccountExpenseImport'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -49,6 +51,18 @@ async function categoryMap(supabase: SupabaseClient): Promise<Map<number, string
   if (aliasError) throw new Error(aliasError.message)
   for (const alias of aliases ?? []) result.set(Number(alias.debit_id), String(alias.category))
   return result
+}
+
+type ImportedRowState = { source: string | null; is_deleted: boolean | null; flowaccount_payment_status: string | null; flowaccount_payment_slip_serial: string | null }
+
+// A PAY-imported row whose document is already paid-by-PAY and unchanged (same status + PAY serial) needs no
+// rewrite — without this every run re-upserts hundreds of settled documents, one DB round-trip chain each.
+// ponytail: edits to an already-settled document's amount/items aren't picked up (they're locked in FA anyway).
+export function isUnchangedSettledRow(row: ImportedRowState | undefined, document: FlowAccountExpenseDocument): boolean {
+  return !!row && row.source === 'flowaccount_payment_slip' && !row.is_deleted
+    && normalizedPaymentStatus(document) === 'paidByPaymentSlip'
+    && row.flowaccount_payment_status === 'paidByPaymentSlip'
+    && row.flowaccount_payment_slip_serial === paymentSlipSerial(document)
 }
 
 function normalizeVendor(value: string | null | undefined): string {
@@ -184,9 +198,21 @@ export async function syncFlowAccountPaymentSlips(supabase: SupabaseClient, opti
   let updated = 0
   let linked = 0
   let deactivated = 0
+  let unchanged = 0
   const errors: Array<{ recordId: number; documentSerial: string; error: string }> = []
 
+  const knownRows = new Map<number, ImportedRowState>()
+  const candidateIds = documents.map(document => document.recordId)
+  for (let i = 0; i < candidateIds.length; i += 200) {
+    const { data, error } = await supabase.from('expenses')
+      .select('flowaccount_record_id, source, is_deleted, flowaccount_payment_status, flowaccount_payment_slip_serial')
+      .in('flowaccount_record_id', candidateIds.slice(i, i + 200))
+    if (error) throw new Error(error.message)
+    for (const row of data ?? []) knownRows.set(Number(row.flowaccount_record_id), row as ImportedRowState)
+  }
+
   for (const document of documents) {
+    if (isUnchangedSettledRow(knownRows.get(document.recordId), document)) { unchanged += 1; continue }
     try {
       const mapped = mapFlowAccountExpense(document, categories)
       const { data: existing, error: existingError } = await supabase
@@ -280,6 +306,7 @@ export async function syncFlowAccountPaymentSlips(supabase: SupabaseClient, opti
     sourceDocuments: documents.length,
     created,
     updated,
+    unchanged,
     linked,
     deactivated,
     errors,
