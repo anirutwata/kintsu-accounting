@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { syncFlowAccountPaymentSlips } from '@/lib/flowaccountPaymentSlipSync'
 
+// the FlowAccount fetch + per-document lookups can exceed the default function limit
+export const maxDuration = 300
+
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET
   if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) {

@@ -433,3 +433,31 @@ PR ที่ merge ผ่าน Claude Code บนมือถือ/cloud แ�
 - งาน feature/fix: `mattpocock-skills:implement` + `mattpocock-skills:tdd`
 - ก่อนส่งมอบ code change: `mattpocock-skills:code-review`
 - ปัญหา Production หรือยอดบัญชีไม่ตรง: `mattpocock-skills:diagnosing-bugs`
+
+## 2026-10-28 — FA-paid mirror shipped (`d19bb7b`, READY) + PAY / pay-lock work PLANNED (not built)
+
+### Shipped
+- Docs paid directly in FlowAccount (any channel, incl. multi-channel) are mirrored into `flowaccount_paid_at` on detail-open (`refreshFlowAccountStatus`) and by the nightly PAY cron (bulk, before PAY enrichment). Paid = FA status 5/6/11/23 (word forms too); cancelled wins over paid; status 4 = member of an unpaid PAY.
+- "ชำระเงิน" pre-checks FA: records already-paid, refuses cancelled / unpaid-PAY members / unverifiable docs. UI clears stale pay/sync errors when switching expense. Reviewed by Opus + Codex (round 1).
+- Live check pending: open EXP2026100032 (Qsola, transfer 53,665.30, FA total 55,213.34) → should show paid, no pay button.
+
+### NOT shipped (a first attempt was reviewed by Codex and reverted — don't repeat it)
+Attempt = import status 23 in the PAY importer + a pay lock using `flowaccount_paid_at` as the claim. Codex found 7 issues; the lock design is unsafe (a claim stuck before the POST = permanent false "paid"; ambiguous timeout + unknown verification could release and double-pay). Patch kept only in session scratch; rebuild from this plan instead.
+
+### Plan A — pay lock (needs migration)
+1. Add `flowaccount_pay_state` (`null | 'paying' | 'unknown'`) + `flowaccount_pay_started_at` to `expenses`. `flowaccount_paid_at` stays "confirmed paid" only.
+2. Claim = atomic `update … set pay_state='paying' where id=? and paid_at is null and pay_state is null`. Check FA status while holding it.
+3. Definite rejection / confirmed unpaid-before-POST → clear state. POST ambiguous (timeout/lost response) → `unknown`, never auto-released; verify only via FA doc status with explicit validation (empty/unknown payload ≠ unpaid). UI shows "ไม่แน่ใจ — ตรวจใน FlowAccount" + a manual "ยืนยันว่ายังไม่ชำระ → ปลดล็อก" for admins.
+4. Stale `paying` (> few minutes, no POST sent) recoverable by the same path. Tests: mutable fake, overlapping callers, unknown verification, failed release.
+
+### Plan B — PAY (ใบเตรียมจ่าย) as its own home
+Today PAY member EXPs are rows in `expenses` with `source='flowaccount_payment_slip'`; `/payment-slips` + `/api/flowaccount/payment-slips{,/[serial]/payment}` filter on that source. The importer ignores status 23 (`receivedByPaymentSlip`, FA's replacement for 6 since Sep 2026, ~357 docs) → PAYs since ~Sep may be missing. **Before building, run (read-only)**: `select flowaccount_payment_status, is_deleted, count(*) from expenses where source='flowaccount_payment_slip' group by 1,2` — look for soft-deleted `receivedByPaymentSlip` rows.
+1. Model: `payment_slips` (serial, record id, status, total, paid date, synced_at) + link EXP→PAY by `flowaccount_payment_slip_serial` (own expenses keep their `source`; never overwritten). Consumers (list, payment validation, totals) select by PAY serial, not by `source` — otherwise own-only PAYs vanish and mixed PAY totals are understated.
+2. Importer: add 23 to PAY-paid tokens; own-expense rows (existing record id **and** the `linkedLocalId` match path) get a metadata-only patch (serial, status) — never full-row upsert/items replace; keep them out of the soft-delete reconcile.
+3. Backlog: detail fetches are sequential (FA ~100 req/min, Vercel Hobby 300 s). Use a persisted cursor / per-doc `last_attempt_at` with backoff so the same first N docs can't starve the rest; a failing doc is skipped, never aborts the run; unresolved docs are never deactivated.
+4. `paymentMethod` 101 appears on real status-11/23 docs and `paymentMethod()` throws "ไม่รองรับ" → find out what 101 means (multi-channel?) and map it, else every night errors.
+5. Link to accountants' entry time: PAY ↔ the time staff post it on the PC is the original motivation for a separate PAY home — confirm the exact fields wanted with the user before modelling.
+6. Fix forward: any own expense already flipped to `source='flowaccount_payment_slip'` by the old status-6 import should be found (count first) and restored deliberately, not by the importer.
+
+### Remaining small gap
+Docs paid in FA but never opened are mirrored only at the nightly cron (~06:30), not instantly.

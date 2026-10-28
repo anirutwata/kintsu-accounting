@@ -18,13 +18,17 @@ function todayBkk(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
 }
 
-async function fetchFlowAccountExpenses(endDate = todayBkk()): Promise<FlowAccountExpenseDocument[]> {
+function daysAgoBkk(days: number): string {
+  return new Date(Date.now() - days * 86_400_000).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+}
+
+async function fetchFlowAccountExpenses(startDate = FLOWACCOUNT_IMPORT_START_DATE, endDate = todayBkk()): Promise<FlowAccountExpenseDocument[]> {
   const pageSize = 200
-  const first = await listFlowAccountExpenses(FLOWACCOUNT_IMPORT_START_DATE, endDate, 1, pageSize)
+  const first = await listFlowAccountExpenses(startDate, endDate, 1, pageSize)
   const documents = [...first.list] as FlowAccountExpenseDocument[]
   const pages = Math.ceil(first.totalDocument / pageSize)
   for (let page = 2; page <= pages; page += 1) {
-    const next = await listFlowAccountExpenses(FLOWACCOUNT_IMPORT_START_DATE, endDate, page, pageSize)
+    const next = await listFlowAccountExpenses(startDate, endDate, page, pageSize)
     documents.push(...next.list as FlowAccountExpenseDocument[])
   }
   return documents
@@ -146,8 +150,14 @@ export async function previewFlowAccountPaymentSlipSync(supabase: SupabaseClient
   }
 }
 
-export async function syncFlowAccountPaymentSlips(supabase: SupabaseClient) {
-  const rawDocuments = await fetchFlowAccountExpenses()
+// sinceDays limits the FlowAccount fetch window (by document date) for the on-page Sync button; the
+// nightly cron passes nothing = everything since the import start. Reconcile and the paid bulk-mark only
+// touch rows whose documents are in the fetched window, so a short window never deactivates older rows.
+export async function syncFlowAccountPaymentSlips(supabase: SupabaseClient, options: { sinceDays?: number } = {}) {
+  const start = options.sinceDays
+    ? [FLOWACCOUNT_IMPORT_START_DATE, daysAgoBkk(options.sinceDays)].sort().at(-1)!
+    : FLOWACCOUNT_IMPORT_START_DATE
+  const rawDocuments = await fetchFlowAccountExpenses(start)
   // Runs before the (slow, per-document) PAY enrichment so a PAY backlog/failure can't block it.
   // Own expenses paid in FlowAccount (directly or via PAY) → mirror as paid so the
   // "ยังไม่ชำระ" filter is right without anyone opening each row. Uses the list we already have.
