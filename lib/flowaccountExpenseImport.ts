@@ -106,6 +106,10 @@ function statusTokens(document: FlowAccountExpenseDocument): string[] {
 
 const PENDING_PAYMENT_TOKENS = new Set(['4', 'pendingpayment'])
 const PAID_BY_PAYMENT_SLIP_TOKENS = new Set(['6', 'paidbypaymentslip'])
+// Paid in FlowAccount by any route (direct, multi-channel, or via PAY). 23 (receivedByPaymentSlip)
+// replaced 6 in Sep 2026 but is deliberately NOT in the PAY-import set above yet: importing
+// those ~357 docs needs bounded batches + a non-overwriting path for own expenses (see handoff).
+const PAID_TOKENS = new Set(['5', '11', 'paid', 'received', '23', 'receivedbypaymentslip', ...PAID_BY_PAYMENT_SLIP_TOKENS])
 const CANCELLED_TOKENS = new Set(['void', 'cancelled', 'canceled'])
 
 // Status-only check (no PAY serial required) — used to decide which documents
@@ -119,6 +123,14 @@ export function isEligibleForPaymentSlipSync(document: FlowAccountExpenseDocumen
 
 function isPaidByPaymentSlipStatus(document: FlowAccountExpenseDocument): boolean {
   return statusTokens(document).some(token => PAID_BY_PAYMENT_SLIP_TOKENS.has(token))
+}
+
+export function isPaidStatus(document: FlowAccountExpenseDocument): boolean {
+  return !isCancelledStatus(document) && statusTokens(document).some(token => PAID_TOKENS.has(token))
+}
+
+export function isPendingPaymentSlipStatus(document: FlowAccountExpenseDocument): boolean {
+  return statusTokens(document).some(token => PENDING_PAYMENT_TOKENS.has(token))
 }
 
 export function isCancelledStatus(document: FlowAccountExpenseDocument): boolean {

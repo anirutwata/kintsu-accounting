@@ -112,7 +112,7 @@ describe('refreshFlowAccountStatus', () => {
     getExpenseDocument.mockReset().mockImplementation(fa)
     const updates: any[] = []
     const sb: any = { from: () => { const b: any = {
-      select: () => b, eq: () => b,
+      select: () => b, eq: () => b, is: () => b,
       maybeSingle: async () => ({ data: { flowaccount_record_id: 5, flowaccount_payment_status: status } }),
       update: (u: any) => { updates.push(u); return b }, then: (r: any) => r({ error: null }) }; return b } }
     const { refreshFlowAccountStatus } = await import('./expenseSync')
@@ -140,11 +140,24 @@ describe('refreshFlowAccountStatus', () => {
     const net = await run(async () => { throw new FA.FlowAccountError('FlowAccount API error (500): "x"', 500) })
     expect(net.res.ok).toBe(false); expect(net.updates).toHaveLength(0)
     expect((await run(async () => ({ status: 4 }))).updates).toHaveLength(0)
+    expect((await run(async () => ({ status: 4 }))).res).toMatchObject({ paid: false, inPaymentSlip: true })
     // ambiguous: empty/invalid payload, or "(404)" only in message text, must not cancel
     for (const fa of [async () => null, async () => ({}), async () => { throw new Error('proxy said (404) page') }]) {
       const r = await run(fa as any)
       expect(r.res.ok).toBe(false); expect(r.updates).toHaveLength(0)
     }
+  })
+  it('mirrors a document paid in FlowAccount (5/11/23/6, incl. word forms) as paid; 4/awaiting/void are not', async () => {
+    for (const doc of [{ status: 5 }, { status: 11, statusString: 'received' }, { status: 23 }, { statusString: 'receivedByPaymentSlip' }, { status: 6 }]) {
+      const r = await run(async () => doc)
+      expect(r.res).toMatchObject({ paid: true })
+      expect(r.updates[0].flowaccount_paid_at).toBeTruthy()
+    }
+    for (const doc of [{ status: 4 }, { statusString: 'awaiting' }, { status: 5, statusString: 'void' }]) {
+      expect((await run(async () => doc)).res).toMatchObject({ paid: false })
+    }
+    const r = await run(async () => ({ status: 11, payments: { paymentDate: '2026-10-26T00:00:00' } }))
+    expect(r.updates[0].flowaccount_paid_at).toBe(new Date('2026-10-26T00:00:00').toISOString())
   })
 })
 
@@ -220,5 +233,43 @@ describe('syncExpenseToFlowAccount vs concurrent delete / edit', () => {
     expect((await syncExpenseToFlowAccount(sb, 'e1')).ok).toBe(true)
     expect(updateExpense).not.toHaveBeenCalled()
     expect(sendTelegram).not.toHaveBeenCalled()
+  })
+})
+
+describe('payFlowAccountSync guards', () => {
+  const run = async (fa: () => Promise<unknown>) => {
+    const { getExpenseDocument, payExpense } = await import('@/lib/flowaccount') as any
+    getExpenseDocument.mockReset().mockImplementation(fa)
+    payExpense.mockReset().mockResolvedValue({})
+    const row = { id: 'e1', flowaccount_record_id: 5, flowaccount_payment_status: null, flowaccount_paid_at: null, payment_method: 'เงินสด', total_satang: 100, date: '2026-10-27' }
+    const sb: any = { from: () => { const b: any = {
+      select: () => b, eq: () => b, is: () => b, update: () => b,
+      single: async () => ({ data: row }), maybeSingle: async () => ({ data: row }),
+      then: (r: any) => r({ error: null }) }; return b } }
+    const { payFlowAccountSync } = await import('./expenseSync')
+    return { res: await payFlowAccountSync(sb, 'e1') as any, payExpense }
+  }
+
+  it('already paid in FlowAccount → recorded, no second payment posted', async () => {
+    const r = await run(async () => ({ status: 11 }))
+    expect(r.res.ok).toBe(true); expect(r.payExpense).not.toHaveBeenCalled()
+  })
+  it('cancelled or inside an unpaid PAY → refused, no payment posted', async () => {
+    for (const doc of [{ isDelete: true }, { status: 4 }]) {
+      const r = await run(async () => doc)
+      expect(r.res.ok).toBe(false); expect(r.payExpense).not.toHaveBeenCalled()
+    }
+  })
+  it('status check failing → refused, no payment posted (could hide an existing payment)', async () => {
+    const r = await run(async () => { throw new FA.FlowAccountError('FlowAccount API error (500): "x"', 500) })
+    expect(r.res.ok).toBe(false); expect(r.payExpense).not.toHaveBeenCalled()
+  })
+  it('deleted document that still carries a paid status is cancelled, not paid', async () => {
+    const r = await run(async () => ({ isDelete: true, status: 5 }))
+    expect(r.res.ok).toBe(false); expect(r.payExpense).not.toHaveBeenCalled()
+  })
+  it('verified awaiting document → payment posted once', async () => {
+    const r = await run(async () => ({ status: 1, statusString: 'awaiting' }))
+    expect(r.res.ok).toBe(true); expect(r.payExpense).toHaveBeenCalledTimes(1)
   })
 })

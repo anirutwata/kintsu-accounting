@@ -3,6 +3,7 @@ import {
   mapFlowAccountExpense,
   selectImportCandidates,
   needsPaymentSlipLookup,
+  isPaidStatus,
   type FlowAccountExpenseDocument,
 } from './flowaccountExpenseImport'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -136,6 +137,24 @@ export async function previewFlowAccountPaymentSlipSync(supabase: SupabaseClient
 
 export async function syncFlowAccountPaymentSlips(supabase: SupabaseClient) {
   const rawDocuments = await fetchFlowAccountExpenses()
+  // Runs before the (slow, per-document) PAY enrichment so a PAY backlog/failure can't block it.
+  // Own expenses paid in FlowAccount (directly or via PAY) → mirror as paid so the
+  // "ยังไม่ชำระ" filter is right without anyone opening each row. Uses the list we already have.
+  const paidIds = rawDocuments.filter(d => !d.isDelete && isPaidStatus(d)).map(d => d.recordId)
+  let markedPaid = 0
+  const nowIso = new Date().toISOString()
+  for (let i = 0; i < paidIds.length; i += 200) {
+    const { data, error } = await supabase.from('expenses')
+      .update({ flowaccount_paid_at: nowIso })
+      .in('flowaccount_record_id', paidIds.slice(i, i + 200))
+      .neq('source', 'flowaccount_payment_slip')
+      .is('flowaccount_paid_at', null)
+      .eq('is_deleted', false)
+      .select('id')
+    if (error) throw new Error(error.message)
+    markedPaid += data?.length ?? 0
+  }
+
   const enrichedDocuments = await withPaymentSlipReferences(supabase, rawDocuments)
   const documents = selectImportCandidates(enrichedDocuments, new Set())
   const activeRecordIds = new Set(documents.map(document => document.recordId))
@@ -236,6 +255,7 @@ export async function syncFlowAccountPaymentSlips(supabase: SupabaseClient) {
 
   return {
     ok: errors.length === 0,
+    markedPaid,
     sourceDocuments: documents.length,
     created,
     updated,

@@ -14,5 +14,5 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const supabase = await createClient()
   const result = await refreshFlowAccountStatus(supabase, id)
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 })
-  return NextResponse.json({ cancelled: result.cancelled })
+  return NextResponse.json({ cancelled: result.cancelled, paid: result.paid })
 }

@@ -1,7 +1,7 @@
 import { FlowAccountError, isDefiniteRejection, getExpenseDocument, createExpense, updateExpense, deleteExpenseDocument, attachExpenseFiles, listFlowAccountExpenses, findContact, payExpense, type FlowAccountContact, type ExpensePaymentChannel } from '@/lib/flowaccount'
 import { extractVendorInfoFromReceipt } from '@/lib/vendorOcr'
 import { sendTelegram } from '@/lib/telegram'
-import { isCancelledStatus, type FlowAccountExpenseDocument } from './flowaccountExpenseImport'
+import { isCancelledStatus, isPaidStatus, isPendingPaymentSlipStatus, type FlowAccountExpenseDocument } from './flowaccountExpenseImport'
 
 // Resolves this expense's local payment_method to a FlowAccount payment channel.
 // Only applies to expenses entered directly in this app (paid on the spot by
@@ -344,6 +344,19 @@ export async function payFlowAccountSync(supabase: any, expenseId: string) {
   if (!expense.flowaccount_record_id) return { ok: false as const, error: 'ยังไม่ได้ส่งเข้า FlowAccount' }
   if (expense.flowaccount_paid_at) return { ok: true as const, data: expense } // already paid — nothing to do
 
+  // Already paid in FlowAccount itself? Then just record it instead of posting a second payment.
+  const fa = await refreshFlowAccountStatus(supabase, expenseId)
+  // Never post a payment on an unverified document: a failed check could hide an existing payment.
+  if (!fa.ok) return { ok: false as const, error: `ตรวจสถานะใน FlowAccount ไม่ได้ จึงยังไม่ชำระ (${fa.error})` }
+  if (fa.cancelled) return { ok: false as const, error: 'เอกสารถูกลบ/ยกเลิกใน FlowAccount แล้ว' }
+  if (fa.paid) {
+    const { data: refreshed, error: refreshError } = await supabase.from('expenses').select('*').eq('id', expenseId).single()
+    if (refreshError || !refreshed) return { ok: false as const, error: refreshError?.message || 'ไม่พบรายการค่าใช้จ่าย' }
+    return { ok: true as const, data: refreshed }
+  }
+  // Part of a not-yet-paid PAY (ใบเตรียมจ่าย): paid via the PAY, never one EXP at a time.
+  if (fa.inPaymentSlip) return { ok: false as const, error: 'เอกสารนี้อยู่ในใบเตรียมจ่าย (PAY) — ให้ชำระที่ PAY ใน FlowAccount' }
+
   const paymentChannel = await resolvePaymentChannel(supabase, expense)
   if (!paymentChannel.ok) {
     return { ok: false as const, error: paymentChannel.error || 'ไม่รู้จักวิธีชำระเงินนี้ — ต้องลงชำระเองใน FlowAccount' }
@@ -385,16 +398,24 @@ export async function deleteFlowAccountSync(recordId: number) {
 // record id are kept for audit. Read-only against FlowAccount (GET only).
 export async function refreshFlowAccountStatus(supabase: any, expenseId: string) {
   const { data: expense } = await supabase
-    .from('expenses').select('flowaccount_record_id, flowaccount_payment_status').eq('id', expenseId).maybeSingle()
-  if (!expense?.flowaccount_record_id) return { ok: true as const, cancelled: false }
-  if (expense.flowaccount_payment_status === 'cancelled') return { ok: true as const, cancelled: true }
+    .from('expenses').select('flowaccount_record_id, flowaccount_payment_status, flowaccount_paid_at').eq('id', expenseId).maybeSingle()
+  if (!expense?.flowaccount_record_id) return { ok: true as const, cancelled: false, paid: false, inPaymentSlip: false }
+  if (expense.flowaccount_payment_status === 'cancelled') return { ok: true as const, cancelled: true, paid: false, inPaymentSlip: false }
 
   let cancelled = false
+  let paid = false
+  let inPaymentSlip = false
+  let paidAt: string | null = null
   try {
     const doc = (await getExpenseDocument(expense.flowaccount_record_id)) as FlowAccountExpenseDocument | null
     // An empty/non-object payload is ambiguous, not "deleted".
     if (!doc || typeof doc !== 'object' || Object.keys(doc).length === 0) return { ok: false as const, error: 'FlowAccount ตอบกลับข้อมูลเอกสารไม่ถูกต้อง' }
     cancelled = doc.isDelete === true || isCancelledStatus(doc)
+    // Paid directly in FlowAccount (any channel, incl. multi-channel) — mirror it so the
+    // "ยังไม่ชำระ" filter and the pay button don't keep treating it as awaiting.
+    paid = !cancelled && isPaidStatus(doc)
+    inPaymentSlip = isPendingPaymentSlipStatus(doc)
+    paidAt = paid && doc.payments?.paymentDate ? new Date(doc.payments.paymentDate).toISOString() : null
   } catch (err) {
     // Only a JSON-bodied 404 (fromApiJson; not HTML/proxy) from the document fetch counts as deleted; a 404 from the token
     // request (notSent) or any other error (network, 401, 5xx) must not cancel.
@@ -414,5 +435,12 @@ export async function refreshFlowAccountStatus(supabase: any, expenseId: string)
       .update({ flowaccount_payment_status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', expenseId)
     if (error) return { ok: false as const, error: error.message }
   }
-  return { ok: true as const, cancelled }
+  if (paid && !expense.flowaccount_paid_at) {
+    // .is(null) keeps concurrent opens / a racing pay from overwriting each other.
+    const { error } = await supabase.from('expenses')
+      .update({ flowaccount_paid_at: paidAt ?? new Date().toISOString() })
+      .eq('id', expenseId).is('flowaccount_paid_at', null)
+    if (error) return { ok: false as const, error: error.message }
+  }
+  return { ok: true as const, cancelled, paid, inPaymentSlip }
 }

@@ -167,8 +167,10 @@ export default function ExpensesPage() {
         return res.json()
       })
       .then(json => {
-        if (!json.cancelled) return
-        const mark = <T extends Expense>(e: T): T => (e.id === selectedId ? { ...e, flowaccount_payment_status: 'cancelled' } : e)
+        if (!json.cancelled && !json.paid) return
+        const mark = <T extends Expense>(e: T): T => (e.id === selectedId
+          ? (json.cancelled ? { ...e, flowaccount_payment_status: 'cancelled' } : { ...e, flowaccount_paid_at: e.flowaccount_paid_at ?? new Date().toISOString() })
+          : e)
         setSelectedExpense(prev => (prev ? mark(prev) : prev))
         setExpenses(prev => prev.map(mark))
         setReloadTick(t => t + 1) // re-query so the row/count respect the active paid filter
@@ -182,6 +184,8 @@ export default function ExpensesPage() {
   const [syncFaError, setSyncFaError] = useState('')
   const [payingFa, setPayingFa] = useState(false)
   const [payFaError, setPayFaError] = useState('')
+  // errors belong to the expense they came from — don't carry them into the next one opened
+  useEffect(() => { setSyncFaError(''); setPayFaError('') }, [selectedId])
 
   async function handleSyncFlowAccount(id: string) {
     setSyncingFa(true)
