@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { pickLocalMatch, withPaymentSlipReferences } from './flowaccountPaymentSlipSync'
+import { pickLocalMatch, withPaymentSlipReferences, MAX_DETAIL_LOOKUPS_PER_RUN } from './flowaccountPaymentSlipSync'
 import type { FlowAccountExpenseDocument } from './flowaccountExpenseImport'
 
 const { getExpenseDocument } = vi.hoisted(() => ({ getExpenseDocument: vi.fn() }))
@@ -89,5 +89,26 @@ describe('pickLocalMatch (PAY line vs local rows with same date + total)', () =>
     expect(pickLocalMatch([row('a', { flowaccount_record_id: 5, flowaccount_synced_at: 'x' })], 'ร้าน A')).toEqual({ skip: false, linkId: null })
     expect(pickLocalMatch([row('a'), row('b', { recipient_name: 'อื่น' })], 'บริษัท ร้าน A จำกัด')).toEqual({ skip: false, linkId: 'a' })
     expect(() => pickLocalMatch([row('a'), row('b')], 'ร้าน A')).toThrow()
+  })
+})
+
+describe('withPaymentSlipReferences backlog handling', () => {
+  const doc = (n: number): FlowAccountExpenseDocument => ({ ...pendingNoReference, recordId: 70000000 + n, documentSerial: `EXP${n}` })
+
+  it('caps detail fetches per run and leaves the rest un-enriched (never throws)', async () => {
+    getExpenseDocument.mockReset().mockResolvedValue({ referencedToMe: [{ documentType: '37', documentSerial: 'PAY1' }] })
+    const docs = Array.from({ length: MAX_DETAIL_LOOKUPS_PER_RUN + 5 }, (_, i) => doc(i))
+    const result = await withPaymentSlipReferences(makeSupabase([]) as never, docs)
+    expect(getExpenseDocument).toHaveBeenCalledTimes(MAX_DETAIL_LOOKUPS_PER_RUN)
+    expect(result.filter(d => d.referencedToMe?.length)).toHaveLength(MAX_DETAIL_LOOKUPS_PER_RUN)
+  })
+
+  it('one failing detail fetch is skipped, the rest still resolve', async () => {
+    getExpenseDocument.mockReset()
+      .mockRejectedValueOnce(new Error('429'))
+      .mockResolvedValue({ referencedToMe: [{ documentType: '37', documentSerial: 'PAY2' }] })
+    const result = await withPaymentSlipReferences(makeSupabase([]) as never, [doc(1), doc(2)])
+    expect(result[0].referencedToMe).toBeUndefined()
+    expect(result[1].referencedToMe).toHaveLength(1)
   })
 })

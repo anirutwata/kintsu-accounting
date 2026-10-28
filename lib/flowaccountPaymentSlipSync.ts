@@ -10,6 +10,10 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const FLOWACCOUNT_IMPORT_START_DATE = '2026-06-01'
 
+// Detail fetches are sequential (FlowAccount rate-limits, Vercel Hobby caps a run at 300 s), so a big
+// backlog is worked off a slice per run. Unresolved docs are just not candidates yet — never deactivated.
+export const MAX_DETAIL_LOOKUPS_PER_RUN = 60
+
 function todayBkk(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
 }
@@ -96,6 +100,7 @@ export async function withPaymentSlipReferences(
   )
 
   const enrichedByRecordId = new Map<number, FlowAccountExpenseDocument>()
+  let fetched = 0
   for (const document of needsLookup) {
     const knownSerial = knownSerialByRecordId.get(document.recordId)
     if (knownSerial) {
@@ -105,8 +110,14 @@ export async function withPaymentSlipReferences(
       })
       continue
     }
-    const detail = await getExpenseDocument(document.recordId) as FlowAccountExpenseDocument
-    enrichedByRecordId.set(document.recordId, { ...document, referencedToMe: detail.referencedToMe })
+    if (fetched >= MAX_DETAIL_LOOKUPS_PER_RUN) continue // picked up by a later run
+    fetched += 1
+    try {
+      const detail = await getExpenseDocument(document.recordId) as FlowAccountExpenseDocument
+      enrichedByRecordId.set(document.recordId, { ...document, referencedToMe: detail.referencedToMe })
+    } catch {
+      // one failing document (or a rate limit) must not abort the whole run; retried next run
+    }
   }
 
   return documents.map(document => enrichedByRecordId.get(document.recordId) ?? document)

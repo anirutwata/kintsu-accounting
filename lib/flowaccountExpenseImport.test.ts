@@ -108,6 +108,8 @@ describe('FlowAccount payment-slip expense import', () => {
     expect(isEligibleForPaymentSlipSync({ ...paidBySlip, status: 'pendingPayment', statusString: undefined })).toBe(true)
     expect(isEligibleForPaymentSlipSync({ ...paidBySlip, status: 'paidByPaymentSlip', statusString: undefined })).toBe(true)
     expect(isEligibleForPaymentSlipSync({ ...paidBySlip, status: 'awaiting', statusString: undefined })).toBe(false)
+    expect(isEligibleForPaymentSlipSync({ ...paidBySlip, status: 23, statusString: undefined })).toBe(true)
+    expect(isEligibleForPaymentSlipSync({ ...paidBySlip, status: 'receivedByPaymentSlip', statusString: undefined })).toBe(true)
     expect(isEligibleForPaymentSlipSync({ ...paidBySlip, status: 'paidByPaymentSlip', statusString: undefined, isDelete: true })).toBe(false)
   })
 

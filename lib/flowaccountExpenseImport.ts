@@ -105,7 +105,9 @@ function statusTokens(document: FlowAccountExpenseDocument): string[] {
 }
 
 const PENDING_PAYMENT_TOKENS = new Set(['4', 'pendingpayment'])
-const PAID_BY_PAYMENT_SLIP_TOKENS = new Set(['6', 'paidbypaymentslip'])
+// 23 (receivedByPaymentSlip) replaced 6 in Sep 2026; without it a PAY that gets paid drops out of the
+// candidates and the reconcile step soft-deletes its already-imported rows.
+const PAID_BY_PAYMENT_SLIP_TOKENS = new Set(['6', 'paidbypaymentslip', '23', 'receivedbypaymentslip'])
 // Paid in FlowAccount by any route (direct, multi-channel, or via PAY). 23 (receivedByPaymentSlip)
 // replaced 6 in Sep 2026 but is deliberately NOT in the PAY-import set above yet: importing
 // those ~357 docs needs bounded batches + a non-overwriting path for own expenses (see handoff).
