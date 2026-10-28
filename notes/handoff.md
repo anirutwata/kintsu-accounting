@@ -441,6 +441,16 @@ PR ที่ merge ผ่าน Claude Code บนมือถือ/cloud แ�
 - "ชำระเงิน" pre-checks FA: records already-paid, refuses cancelled / unpaid-PAY members / unverifiable docs. UI clears stale pay/sync errors when switching expense. Reviewed by Opus + Codex (round 1).
 - Live check pending: open EXP2026100032 (Qsola, transfer 53,665.30, FA total 55,213.34) → should show paid, no pay button.
 
+### Update — end of 2026-10-28 session (all READY on prod)
+- `59c27a9` PAY importer recognises status 23 (stops the nightly soft-delete of paid PAYs); per-doc try/catch + 60 detail fetches/run cap.
+- `4be83dd` manual Sync = last 60 days (cron = full), `maxDuration=300` on sync + cron routes.
+- `cb5eb56` skip unchanged settled PAY rows (a full rewrite of 139 rows took ~5 min); Sync alert lists first 5 failing docs; result has `unchanged`.
+- Prod state: `paidByPaymentSlip|f` 173, `receivedByPaymentSlip|t` **107** still hidden (docs older than 60 days; owner chose not to restore by SQL). **Next-day check:** rerun `select flowaccount_payment_status, is_deleted, count(*) from expenses where source='flowaccount_payment_slip' group by 1,2` after the 06:30 cron — expect the 107 gone. If still there the full run (~4–5 min vs 300 s cap) is too slow: add a persisted cursor (Plan B.3) or restore with `update … set is_deleted=false, deleted_at=null, flowaccount_payment_status='paidByPaymentSlip' where source='flowaccount_payment_slip' and is_deleted and flowaccount_payment_status='receivedByPaymentSlip'`.
+- Unverified: EXP2026100032 live check (should show paid, no pay button); PAY2026100001 showed "ยกเลิก ฿0 · 1 เอกสาร" earlier and "ชำระแล้ว · 5 เอกสาร" now — compare with FA; 2 sync errors seen once (cause unknown — the alert now prints them).
+- Known limitation of `isUnchangedSettledRow`: edits to an already-settled doc's amount/items aren't re-imported.
+- Pre-existing, not fixed: own expenses later paid via a PAY are flipped to `source='flowaccount_payment_slip'` and fully overwritten by the importer (also true for status 6); count them before deciding (Plan B.6).
+- Env notes: the FlowAccount MCP available to Claude is the Rungsirin company (N882345), not Qsola (N304014); Claude can't run `psql "$DATABASE_URL"` (classifier) — owner runs reads with `!`; Vercel Hobby retains only 1 h of runtime logs.
+
 ### NOT shipped (a first attempt was reviewed by Codex and reverted — don't repeat it)
 Attempt = import status 23 in the PAY importer + a pay lock using `flowaccount_paid_at` as the claim. Codex found 7 issues; the lock design is unsafe (a claim stuck before the POST = permanent false "paid"; ambiguous timeout + unknown verification could release and double-pay). Patch kept only in session scratch; rebuild from this plan instead.
 
