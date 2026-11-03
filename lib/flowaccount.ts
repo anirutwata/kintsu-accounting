@@ -374,7 +374,9 @@ function buildExpensePayload(input: CreateExpenseInput) {
         }
       : {}),
     publishedOn: input.publishedOn,
-    isVatInclusive: vatInclusive,
+    // FlowAccount rejects isVatInclusive=true with isVat=false ("isVat must be true when
+    // isVatInclusive is true") — a no-VAT receipt (vatAmount 0/unset) must send both false.
+    isVatInclusive: !!input.vatAmount && vatInclusive,
     isVat: !!input.vatAmount,
     subTotal,
     discountAmount,

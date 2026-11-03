@@ -106,3 +106,30 @@ describe('write retry policy', () => {
     expect(apiCalls(f)).toBe(2)
   })
 })
+
+describe('expense payload VAT flags', () => {
+  afterEach(() => vi.unstubAllGlobals())
+  const sentBody = async (input: object) => {
+    let body: any
+    vi.stubGlobal('fetch', vi.fn(async (_u: unknown, init?: RequestInit) => {
+      if (init?.body instanceof URLSearchParams) return { ok: true, status: 200, json: async () => ({ access_token: 't', expires_in: 3600 }) }
+      body = JSON.parse(String(init?.body))
+      return { ok: true, status: 200, text: async () => '{"status":true,"data":{"recordId":1}}' }
+    }))
+    await createExpense({ contactName: 'x', publishedOn: '2026-11-03', items: [], ...input } as never)
+    return body
+  }
+
+  it('no-VAT receipt sends isVat=false and isVatInclusive=false (FlowAccount 400s on inclusive without VAT)', async () => {
+    for (const input of [{}, { vatAmount: 0 }, { vatAmount: 0, vatInclusive: true }]) {
+      const b = await sentBody(input)
+      expect(b.isVat).toBe(false)
+      expect(b.isVatInclusive).toBe(false)
+    }
+  })
+
+  it('VAT receipt keeps the inclusive/exclusive choice', async () => {
+    expect(await sentBody({ vatAmount: 7 })).toMatchObject({ isVat: true, isVatInclusive: true })
+    expect(await sentBody({ vatAmount: 7, vatInclusive: false })).toMatchObject({ isVat: true, isVatInclusive: false })
+  })
+})
