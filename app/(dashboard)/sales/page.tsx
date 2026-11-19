@@ -1,9 +1,10 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { formatBaht, toSatang, calcGrabNet, fmtInput, parseInput } from '@/lib/money'
-import { getTodayBKK } from '@/lib/utils'
+import { getTodayBKK, SHOW_PAPAYA_POS } from '@/lib/utils'
 import { thaiShortDate } from '@/lib/dailySalesLock'
 import type { DailySales } from '@/types'
+import type { FoodstoryImport } from '@/lib/foodstoryReport'
 
 interface POSForm {
   revenue: string
@@ -48,6 +49,45 @@ export default function SalesPage() {
   const [syncingEdc, setSyncingEdc] = useState(false)
   const [edcMessage, setEdcMessage] = useState('')
   const [missingDates, setMissingDates] = useState<string[]>([])
+  const [importingFs, setImportingFs] = useState(false)
+  const [fsImportNote, setFsImportNote] = useState<{ date: string; warnings: string[] } | null>(null)
+  const dateRef = useRef(date)
+  useEffect(() => { dateRef.current = date }, [date])
+
+  async function handleFoodstoryFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    e.target.value = '' // allow re-selecting the same files after fixing an error
+    if (!files.length) return
+    const requestDate = date
+    setImportingFs(true); setSaveError(''); setSaved(false); setFsImportNote(null)
+    try {
+      const body = new FormData()
+      body.append('date', requestDate)
+      files.forEach(file => body.append('files', file))
+      const res = await fetch('/api/sales/foodstory-parse', { method: 'POST', body })
+      const json = await res.json()
+      if (dateRef.current !== requestDate) return
+      if (!res.ok) { setSaveError(json.error || 'อ่านไฟล์ Foodstory ไม่สำเร็จ'); return }
+      const r = json as FoodstoryImport
+      const money = (satang: number) => satang ? fmtInput(satang) : ''
+      setFoodstory(prev => ({
+        ...prev,
+        revenue: money(r.revenueSatang),
+        bills: r.bills ? String(r.bills) : '',
+        sales_before_vat: money(r.salesBeforeVatSatang),
+        vat_amount: money(r.vatSatang),
+        rounding: money(r.roundingSatang),
+        discount: money(r.discountSatang),
+        cash: money(r.cashSatang),
+        promptpay: money(r.promptpaySatang),
+        company_transfer: '',
+        credit_card: money(r.creditCardSatang),
+      }))
+      setFsImportNote({ date: requestDate, warnings: r.warnings })
+    } catch (error) {
+      if (dateRef.current === requestDate) setSaveError(error instanceof Error ? error.message : 'อ่านไฟล์ Foodstory ไม่สำเร็จ')
+    } finally { setImportingFs(false) }
+  }
 
   async function handleSyncTtb() {
     setSyncingTtb(true); setTtbMessage('')
@@ -164,6 +204,7 @@ export default function SalesPage() {
       setTakeawayOrders('')
     }
     setSaved(false)
+    setFsImportNote(null)
   }
 
   const foodstoryRev = toSatang(parseInput(foodstory.revenue))
@@ -408,6 +449,13 @@ export default function SalesPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {fsImportNote && (
+          <div className="p-3 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 text-sm space-y-1">
+            <p className="font-semibold">นำเข้าจาก Foodstory วันที่ {thaiShortDate(fsImportNote.date)} — ตรวจสอบแล้วกดบันทึก</p>
+            {fsImportNote.warnings.map(w => <p key={w} className="text-xs">⚠️ {w}</p>)}
+          </div>
+        )}
+
         {/* Foodstory POS */}
         <POSSection
           title="Foodstory POS"
@@ -416,17 +464,27 @@ export default function SalesPage() {
           form={foodstory}
           onChange={setFoodstory}
           date={date}
+          headerAction={
+            <label className={`ml-auto px-3 py-1.5 rounded-xl text-xs font-semibold border-2 ${importingFs || blockedByMissing ? 'opacity-50' : 'cursor-pointer'}`}
+              style={{ borderColor: '#D33F22', color: '#D33F22' }}>
+              {importingFs ? 'กำลังอ่านไฟล์...' : '📎 แนบไฟล์ Excel'}
+              <input type="file" accept=".xlsx" multiple className="hidden"
+                disabled={importingFs || blockedByMissing} onChange={handleFoodstoryFiles} />
+            </label>
+          }
         />
 
-        {/* Papaya POS */}
-        <POSSection
-          title="Papaya POS"
-          logo="/logos/papaya_logo.png"
-          accentColor="#16A34A"
-          form={papaya}
-          onChange={setPapaya}
-          date={date}
-        />
+        {/* Papaya POS — hidden, but its state stays in the payload so re-saving an old day keeps its Papaya data */}
+        {SHOW_PAPAYA_POS && (
+          <POSSection
+            title="Papaya POS"
+            logo="/logos/papaya_logo.png"
+            accentColor="#16A34A"
+            form={papaya}
+            onChange={setPapaya}
+            date={date}
+          />
+        )}
 
         {/* GrabFood */}
         <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
@@ -522,13 +580,14 @@ function fmtMoneyVal(val: string): string {
 
 const ROUND_DOWN_DATE = '2026-06-11'
 
-function POSSection({ title, logo, accentColor, form, onChange, date }: {
+function POSSection({ title, logo, accentColor, form, onChange, date, headerAction }: {
   title: string
   logo: string
   accentColor: string
   form: POSForm
   onChange: (f: POSForm) => void
   date: string
+  headerAction?: React.ReactNode
 }) {
   const set = (key: keyof POSForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
     onChange({ ...form, [key]: e.target.value })
@@ -568,6 +627,7 @@ function POSSection({ title, logo, accentColor, form, onChange, date }: {
           style={{ width: 28, height: 28 }}
           onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
         <h3 className="font-semibold text-sm" style={{ color: 'var(--charcoal)' }}>{title}</h3>
+        {headerAction}
       </div>
 
       <div className="p-4 space-y-3">
