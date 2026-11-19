@@ -42,3 +42,6 @@ export function getDaysInMonth(monthKey: string): string[] {
   }
   return days
 }
+
+// Papaya POS is no longer used; hidden from entry/settings but its stored data is kept.
+export const SHOW_PAPAYA_POS = false

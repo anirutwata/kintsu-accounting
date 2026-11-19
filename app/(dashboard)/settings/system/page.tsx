@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import type { Settings } from '@/types'
+import { SHOW_PAPAYA_POS } from '@/lib/utils'
 
 interface BankAccount { id: string; bank_name: string; account_number: string; account_name: string }
 interface EdcChannel { id: number; name: string; type: number }
@@ -202,7 +203,7 @@ export default function SystemSettingsPage() {
           </div>
 
           {/* Papaya */}
-          <div className="space-y-2">
+          {SHOW_PAPAYA_POS && <div className="space-y-2">
             <p className="text-xs font-medium px-1" style={{ color: '#16a34a' }}>Papaya POS</p>
             {([
               { label: 'พร้อมเพย์', value: ppPromptpayBankId, set: setPpPromptpayBankId },
@@ -218,7 +219,7 @@ export default function SystemSettingsPage() {
                 </select>
               </div>
             ))}
-          </div>
+          </div>}
 
           {/* Grab */}
           <div className="space-y-2">
