@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { FOODSTORY_BRANCH, parseFoodstoryReports } from './foodstoryReport'
+import { parseFoodstoryReports } from './foodstoryReport'
 import type { ReportCell } from './ttbPromptPayReport'
 
-const BRANCH = FOODSTORY_BRANCH
+const BRANCH = 'Kintsu Yakiniku - Central Khonkaen Campus'
 
 function paymentRows(): ReportCell[][] {
   const title = 'รายงานสรุปยอดขายแยกตามประเภทการชำระเงิน'
@@ -60,6 +60,12 @@ describe('Foodstory daily import', () => {
     expect(() => parseFoodstoryReports([rows, dailyRows()], '2026-11-18')).toThrow('ยอดรวมไฟล์แยกตามประเภทการชำระเงินไม่ตรง')
   })
 
+  it('accepts a renamed Kintsu branch', () => {
+    const rows = dailyRows()
+    rows[2][16] = 'Kintsu Yakiniku - New Name'
+    expect(parseFoodstoryReports([paymentRows(), rows], '2026-11-18').bills).toBe(21)
+  })
+
   it('rejects a branch other than Kintsu', () => {
     const rows = paymentRows()
     rows[3][16] = 'Al Dente'
@@ -90,9 +96,4 @@ describe('Foodstory daily import', () => {
     expect(() => parseFoodstoryReports([paymentRows(), rows], '2026-11-18')).toThrow('ยอดรวมไฟล์แยกตามวันไม่ตรง')
   })
 
-  it('rejects files from different branches', () => {
-    const rows = dailyRows()
-    rows[2][16] = 'Kintsu Yakiniku - Central Udon'
-    expect(() => parseFoodstoryReports([paymentRows(), rows], '2026-11-18')).toThrow('ไม่ใช่สาขา')
-  })
 })

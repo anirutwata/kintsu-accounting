@@ -5,7 +5,6 @@ import type { ReportCell } from './ttbPromptPayReport'
 const PAYMENT_TITLE = 'รายงานสรุปยอดขายแยกตามประเภทการชำระเงิน'
 const DAILY_TITLE = 'รายงานสรุปยอดขายแยกตามวัน'
 
-export const FOODSTORY_BRANCH = 'Kintsu Yakiniku - Central Khonkaen Campus'
 
 const CARD_TYPES = ['VISA', 'Master Card', 'JCB', 'รูดบัตรเครดิต (กรณี EDC ขัดข้อง)']
 
@@ -53,7 +52,8 @@ function satang(value: ReportCell, what: string): number {
 
 function assertBranch(t: Table, col: number, label: string) {
   for (const row of t.data) {
-    if (text(row[col]) !== FOODSTORY_BRANCH) throw new Error(`ไฟล์${label}ไม่ใช่สาขา ${FOODSTORY_BRANCH}: ${text(row[col]) || '(ว่าง)'}`)
+    // Owner: branch names may change, so only require it to be a Kintsu branch.
+    if (!/kintsu/i.test(text(row[col]))) throw new Error(`ไฟล์${label}ไม่ใช่สาขา Kintsu: ${text(row[col]) || '(ว่าง)'}`)
   }
 }
 

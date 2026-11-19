@@ -61,7 +61,6 @@ export default function SalesPage() {
     e.target.value = '' // allow re-selecting the same files after fixing an error
     if (!files.length) return
     const requestDate = date
-    importSeq.current++
     setImportingFs(true); setSaveError(''); setSaved(false); setFsImportNote(null)
     try {
       const body = new FormData()
@@ -71,7 +70,7 @@ export default function SalesPage() {
       const json = await res.json()
       if (dateRef.current !== requestDate) return
       if (!res.ok) { setSaveError(json.error || 'อ่านไฟล์ Foodstory ไม่สำเร็จ'); return }
-      importSeq.current++ // also drop loads that started while the files were parsing
+      importSeq.current++ // only on success: a failed import must not swallow a pending loadSales() for a new date
       const r = json as FoodstoryImport
       const money = (satang: number) => satang ? fmtInput(satang) : ''
       setFoodstory(prev => ({
