@@ -471,11 +471,17 @@ export default function SalesPage() {
           form={foodstory}
           onChange={setFoodstory}
           date={date}
-          headerAction={
-            <label className={`ml-auto px-3 py-1.5 rounded-xl text-xs font-semibold border-2 ${importingFs || blockedByMissing ? 'opacity-50' : 'cursor-pointer'}`}
-              style={{ borderColor: '#D33F22', color: '#D33F22' }}>
-              {importingFs ? 'กำลังอ่านไฟล์...' : '📎 แนบไฟล์ Excel'}
-              <input type="file" accept=".xlsx" multiple className="hidden"
+          topAction={
+            <label className={`relative block rounded-2xl border-2 border-dashed px-4 py-6 text-center ${importingFs || blockedByMissing ? 'opacity-50' : 'cursor-pointer'}`}
+              style={{ borderColor: '#D33F22', background: '#FDF1EE', color: '#D33F22' }}>
+              <div className="text-3xl">📎</div>
+              <div className="font-bold text-base mt-1">{importingFs ? 'กำลังอ่านไฟล์...' : 'แนบไฟล์ Excel จาก Foodstory'}</div>
+              <div className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                กดที่นี่ หรือลากไฟล์มาวาง · เลือก 2 ไฟล์พร้อมกัน<br />
+                ① รายงานสรุปยอดขายแยกตามประเภทการชำระเงิน ② รายงานสรุปยอดขายแยกตามวัน
+              </div>
+              {/* Stretched invisible input so the whole box is both the click target and a native drop target. */}
+              <input type="file" accept=".xlsx" multiple className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                 disabled={importingFs || blockedByMissing} onChange={handleFoodstoryFiles} />
             </label>
           }
@@ -587,14 +593,14 @@ function fmtMoneyVal(val: string): string {
 
 const ROUND_DOWN_DATE = '2026-06-11'
 
-function POSSection({ title, logo, accentColor, form, onChange, date, headerAction }: {
+function POSSection({ title, logo, accentColor, form, onChange, date, topAction }: {
   title: string
   logo: string
   accentColor: string
   form: POSForm
   onChange: (f: POSForm) => void
   date: string
-  headerAction?: React.ReactNode
+  topAction?: React.ReactNode
 }) {
   const set = (key: keyof POSForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
     onChange({ ...form, [key]: e.target.value })
@@ -634,10 +640,10 @@ function POSSection({ title, logo, accentColor, form, onChange, date, headerActi
           style={{ width: 28, height: 28 }}
           onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
         <h3 className="font-semibold text-sm" style={{ color: 'var(--charcoal)' }}>{title}</h3>
-        {headerAction}
       </div>
 
       <div className="p-4 space-y-3">
+        {topAction}
         {/* Revenue */}
         <div>
           <label className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>ยอดขาย (บาท)</label>
