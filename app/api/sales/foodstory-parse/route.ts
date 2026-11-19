@@ -8,6 +8,8 @@ import type { ReportCell } from '@/lib/ttbPromptPayReport'
 const MAX_BYTES = 2 * 1024 * 1024
 const MAX_ENTRIES = 50
 const MAX_INFLATED_BYTES = 20 * 1024 * 1024
+const MAX_ROWS = 500
+const MAX_COLUMNS = 50
 
 // The 2 MB cap is on the compressed upload; a zip bomb would still make ExcelJS inflate
 // everything. Inflate once here counting real bytes (declared sizes can lie) and stop at the cap.
@@ -28,6 +30,19 @@ async function assertZipWithinLimits(buffer: Buffer, name: string) {
       stream.on('end', () => resolve())
     })
   }
+  // A tiny sheet can reference row 100,000,000 and ExcelJS would build every index; check the XML refs before loading.
+  for (const entry of entries.filter(e => /^xl\/worksheets\/[^/]+\.xml$/.test(e.name))) {
+    const xml = await entry.async('string')
+    for (const m of xml.matchAll(/\br="([A-Z]*)(\d+)"/g)) {
+      if (Number(m[2]) > MAX_ROWS || m[1].length > 2 || columnNumber(m[1]) > MAX_COLUMNS) {
+        throw new Error(`ไฟล์ ${name} มีขนาดตารางผิดปกติ ไม่ใช่รายงาน Foodstory`)
+      }
+    }
+  }
+}
+
+function columnNumber(letters: string) {
+  return [...letters].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0)
 }
 
 function cell(value: ExcelJS.CellValue): ReportCell {
@@ -43,9 +58,8 @@ async function readRows(file: File): Promise<ReportCell[][]> {
   await workbook.xlsx.load(buffer as never)
   const sheet = workbook.worksheets[0]
   if (!sheet) throw new Error(`ไฟล์ ${file.name} ไม่มี worksheet`)
-  // A tiny xlsx can declare a cell at row 100,000,000; cap before eachRow materializes every index.
-  // ponytail: ExcelJS still parses such a file (~5 s CPU, memory flat) before this check; pre-scan sheet XML if abused.
-  if (sheet.rowCount > 500 || sheet.columnCount > 50) throw new Error(`ไฟล์ ${file.name} มีขนาดตารางผิดปกติ ไม่ใช่รายงาน Foodstory`)
+  // Backstop for refs the XML pre-scan can't see (e.g. rows without an r attribute).
+  if (sheet.rowCount > MAX_ROWS || sheet.columnCount > MAX_COLUMNS) throw new Error(`ไฟล์ ${file.name} มีขนาดตารางผิดปกติ ไม่ใช่รายงาน Foodstory`)
   const rows: ReportCell[][] = []
   sheet.eachRow({ includeEmpty: true }, row => {
     rows.push(Array.isArray(row.values) ? row.values.slice(1).map(cell) : [])
