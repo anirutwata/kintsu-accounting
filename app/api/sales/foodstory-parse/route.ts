@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import { parseFoodstoryReports } from '@/lib/foodstoryReport'
 import type { ReportCell } from '@/lib/ttbPromptPayReport'
@@ -11,59 +10,71 @@ const MAX_INFLATED_BYTES = 20 * 1024 * 1024
 const MAX_ROWS = 500
 const MAX_COLUMNS = 50
 
-// The 2 MB cap is on the compressed upload; a zip bomb would still make ExcelJS inflate
-// everything. Inflate once here counting real bytes (declared sizes can lie) and stop at the cap.
-// ponytail: the file is inflated twice (here + ExcelJS); bounded by the cap, fine at 2 files/request.
-async function assertZipWithinLimits(buffer: Buffer, name: string) {
-  const zip = await JSZip.loadAsync(buffer)
-  const entries = Object.values(zip.files).filter(entry => !entry.dir)
-  if (entries.length > MAX_ENTRIES) throw new Error(`ไฟล์ ${name} มีส่วนประกอบมากผิดปกติ`)
-  let total = 0
-  for (const entry of entries) {
-    await new Promise<void>((resolve, reject) => {
-      const stream = entry.nodeStream('nodebuffer')
-      stream.on('data', (chunk: Buffer) => {
-        total += chunk.length
-        if (total > MAX_INFLATED_BYTES) { stream.pause(); reject(new Error(`ไฟล์ ${name} ใหญ่ผิดปกติเมื่อแตกไฟล์`)) }
-      })
-      stream.on('error', reject)
-      stream.on('end', () => resolve())
+// No ExcelJS here on purpose: its load() expands merges, validations, defined names and column
+// ranges from tiny metadata (memory bombs). Foodstory exports are one plain sheet, so read only the
+// sheet XML (+ shared strings if present) and ignore all other metadata.
+async function inflate(entry: JSZip.JSZipObject, budget: { left: number }, name: string): Promise<string> {
+  const chunks: Buffer[] = []
+  await new Promise<void>((resolve, reject) => {
+    const stream = entry.nodeStream('nodebuffer')
+    stream.on('data', (chunk: Buffer) => {
+      budget.left -= chunk.length
+      if (budget.left < 0) { stream.pause(); reject(new Error(`ไฟล์ ${name} ใหญ่ผิดปกติเมื่อแตกไฟล์`)) }
+      else chunks.push(chunk)
     })
-  }
-  // A tiny sheet can reference row 100,000,000 and ExcelJS would build every index; check the XML refs before loading.
-  for (const entry of entries.filter(e => /^xl\/worksheets\/[^/]+\.xml$/.test(e.name))) {
-    const xml = await entry.async('string')
-    for (const m of xml.matchAll(/\br="([A-Z]*)(\d+)"/g)) {
-      if (Number(m[2]) > MAX_ROWS || m[1].length > 2 || columnNumber(m[1]) > MAX_COLUMNS) {
-        throw new Error(`ไฟล์ ${name} มีขนาดตารางผิดปกติ ไม่ใช่รายงาน Foodstory`)
-      }
-    }
-  }
+    stream.on('error', reject)
+    stream.on('end', () => resolve())
+  })
+  return Buffer.concat(chunks).toString('utf8')
+}
+
+function decodeXml(s: string) {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (_, e: string) =>
+    e[0] === '#' ? String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : Number(e.slice(1)))
+      : ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" } as Record<string, string>)[e.toLowerCase()])
+}
+
+function textRuns(xml: string) {
+  return [...xml.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map(m => decodeXml(m[1])).join('')
 }
 
 function columnNumber(letters: string) {
   return [...letters].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0)
 }
 
-function cell(value: ExcelJS.CellValue): ReportCell {
-  if (value == null || typeof value === 'string' || typeof value === 'number' || value instanceof Date) return value
-  if (typeof value === 'object' && 'richText' in value) return value.richText.map(part => part.text).join('')
-  return String(value)
-}
-
 async function readRows(file: File): Promise<ReportCell[][]> {
-  const buffer = Buffer.from(await file.arrayBuffer())
-  await assertZipWithinLimits(buffer, file.name)
-  const workbook = new ExcelJS.Workbook()
-  await workbook.xlsx.load(buffer as never)
-  const sheet = workbook.worksheets[0]
-  if (!sheet) throw new Error(`ไฟล์ ${file.name} ไม่มี worksheet`)
-  // Backstop for refs the XML pre-scan can't see (e.g. rows without an r attribute).
-  if (sheet.rowCount > MAX_ROWS || sheet.columnCount > MAX_COLUMNS) throw new Error(`ไฟล์ ${file.name} มีขนาดตารางผิดปกติ ไม่ใช่รายงาน Foodstory`)
+  const bad = new Error(`ไฟล์ ${file.name} ไม่ใช่รายงาน Foodstory ที่อ่านได้`)
+  let zip: JSZip
+  try { zip = await JSZip.loadAsync(Buffer.from(await file.arrayBuffer())) } catch { throw bad }
+  if (Object.keys(zip.files).length > MAX_ENTRIES) throw new Error(`ไฟล์ ${file.name} มีส่วนประกอบมากผิดปกติ`)
+  const sheetEntry = zip.file('xl/worksheets/sheet1.xml')
+  if (!sheetEntry) throw bad
+  const budget = { left: MAX_INFLATED_BYTES }
+  const sheetXml = await inflate(sheetEntry, budget, file.name)
+  const sstEntry = zip.file('xl/sharedStrings.xml')
+  const shared = sstEntry
+    ? [...(await inflate(sstEntry, budget, file.name)).matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g)].map(m => textRuns(m[1]))
+    : []
+
   const rows: ReportCell[][] = []
-  sheet.eachRow({ includeEmpty: true }, row => {
-    rows.push(Array.isArray(row.values) ? row.values.slice(1).map(cell) : [])
-  })
+  for (const m of sheetXml.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+    const attrs = m[1]
+    const ref = attrs.match(/\br="([A-Z]{1,3})(\d+)"/)
+    if (!ref) throw bad
+    const col = columnNumber(ref[1]), row = Number(ref[2])
+    if (row > MAX_ROWS || col > MAX_COLUMNS) throw new Error(`ไฟล์ ${file.name} มีขนาดตารางผิดปกติ ไม่ใช่รายงาน Foodstory`)
+    const type = attrs.match(/\bt="([^"]*)"/)?.[1] ?? 'n'
+    const body = m[2] ?? ''
+    const v = body.match(/<v>([\s\S]*?)<\/v>/)?.[1]
+    let value: ReportCell = null
+    if (type === 'inlineStr') value = textRuns(body)
+    else if (type === 's') value = v == null ? null : shared[Number(v)] ?? null
+    else if (type === 'str' || type === 'e') value = v == null ? null : decodeXml(v)
+    else if (type === 'b') value = v === '1' ? 'TRUE' : 'FALSE'
+    else if (v != null) value = Number(v)
+    while (rows.length < row) rows.push([])
+    rows[row - 1][col - 1] = value
+  }
   return rows
 }
 
