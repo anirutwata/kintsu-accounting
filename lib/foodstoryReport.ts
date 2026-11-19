@@ -108,11 +108,11 @@ export function parseFoodstoryReports(files: ReportCell[][][], expectedDate: str
   const bRow = B.data[0]
   const dateCell = bRow[bCol.date]
   const match = text(dateCell).match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
-  // Foodstory writes the date as text "dd/mm/yyyy". A number means the file was opened and re-saved in
-  // Excel/Numbers, which converted it — a real 19/11 report came back as serial 46346 (= 20/11), so the
-  // serial can't be trusted for picking the day. Refuse and ask for the original download.
+  // Foodstory writes the date as text "dd/mm/yyyy". A number/Date means someone edited and saved the file
+  // in Excel (seen 2026-11-20: a 19/11 report with the date typed over as 20/11). Owner wants only
+  // untouched Foodstory files, so refuse rather than trust an edited date.
   if (typeof dateCell === 'number' || dateCell instanceof Date) {
-    throw new Error('ไฟล์แยกตามวันถูกเปิดแล้วบันทึกใหม่ใน Excel ทำให้วันที่เพี้ยน — กรุณาใช้ไฟล์ที่ดาวน์โหลดจาก Foodstory โดยตรง (ไม่ต้องเปิดไฟล์ก่อนแนบ)')
+    throw new Error('ไฟล์แยกตามวันถูกแก้ไขใน Excel แล้ว — ระบบรับเฉพาะไฟล์ต้นฉบับที่ดาวน์โหลดจาก Foodstory (ไม่ต้องเปิดหรือแก้ไฟล์ก่อนแนบ)')
   }
   const fileDate = match ? `${match[3]}-${match[2]}-${match[1]}` : ''
   if (!fileDate) throw new Error(`วันที่ในไฟล์แยกตามวันไม่ถูกต้อง: ${text(dateCell) || '(ว่าง)'}`)

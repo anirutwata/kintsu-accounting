@@ -72,10 +72,10 @@ describe('Foodstory daily import', () => {
     expect(() => parseFoodstoryReports([rows, dailyRows()], '2026-11-18')).toThrow('ไม่ใช่สาขา')
   })
 
-  it('rejects a daily file whose date was converted by re-saving in Excel', () => {
+  it('rejects a daily file whose date was edited in Excel', () => {
     const rows = dailyRows()
     rows[2][0] = 46344
-    expect(() => parseFoodstoryReports([paymentRows(), rows], '2026-11-18')).toThrow('ไฟล์ที่ดาวน์โหลดจาก Foodstory โดยตรง')
+    expect(() => parseFoodstoryReports([paymentRows(), rows], '2026-11-18')).toThrow('ถูกแก้ไขใน Excel')
   })
 
   it('rejects a daily file for a different date than the page', () => {
