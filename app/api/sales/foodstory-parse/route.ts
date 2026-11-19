@@ -41,7 +41,7 @@ function* elements(xml: string, tag: string): Generator<[string, string]> {
   let i = 0
   while ((i = xml.indexOf('<' + tag, i)) !== -1) {
     const after = xml[i + tag.length + 1]
-    if (after !== ' ' && after !== '>' && after !== '/') { i += tag.length + 1; continue } // e.g. <cols when looking for <c
+    if (after === undefined || !/[\s>/]/.test(after)) { i += tag.length + 1; continue } // e.g. <cols when looking for <c
     const openEnd = xml.indexOf('>', i)
     if (openEnd === -1) throw new Error('XML ไม่สมบูรณ์')
     const attrs = xml.slice(i + tag.length + 1, openEnd)
@@ -90,7 +90,7 @@ async function readRows(file: File): Promise<ReportCell[][]> {
       if (row > MAX_ROWS || col > MAX_COLUMNS) throw new Error(`ไฟล์ ${file.name} มีขนาดตารางผิดปกติ ไม่ใช่รายงาน Foodstory`)
       const type = attrs.match(/\bt="([^"]*)"/)?.[1] ?? 'n'
       let v: string | undefined
-      for (const [, inner] of elements(body, 'v')) { v = inner; break }
+      for (const [, inner] of elements(body, 'v')) { v = inner.trim() || undefined; break } // <v/> = no value, never 0
       let value: ReportCell = null
       if (type === 'inlineStr') value = textRuns(body)
       else if (type === 's') value = v == null ? null : shared[Number(v)] ?? null
