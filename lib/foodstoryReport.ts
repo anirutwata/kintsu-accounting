@@ -108,11 +108,13 @@ export function parseFoodstoryReports(files: ReportCell[][][], expectedDate: str
   const bRow = B.data[0]
   const dateCell = bRow[bCol.date]
   const match = text(dateCell).match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
-  // Excel stores real date cells as a day serial (days since 1899-12-30), e.g. 46346 = 2026-11-20.
-  const isSerial = typeof dateCell === 'number' && Number.isInteger(dateCell) && dateCell > 40000 && dateCell < 80000
-  const fileDate = dateCell instanceof Date ? dateCell.toISOString().slice(0, 10)
-    : isSerial ? new Date(Date.UTC(1899, 11, 30) + dateCell * 86_400_000).toISOString().slice(0, 10)
-    : match ? `${match[3]}-${match[2]}-${match[1]}` : ''
+  // Foodstory writes the date as text "dd/mm/yyyy". A number means the file was opened and re-saved in
+  // Excel/Numbers, which converted it — a real 19/11 report came back as serial 46346 (= 20/11), so the
+  // serial can't be trusted for picking the day. Refuse and ask for the original download.
+  if (typeof dateCell === 'number' || dateCell instanceof Date) {
+    throw new Error('ไฟล์แยกตามวันถูกเปิดแล้วบันทึกใหม่ใน Excel ทำให้วันที่เพี้ยน — กรุณาใช้ไฟล์ที่ดาวน์โหลดจาก Foodstory โดยตรง (ไม่ต้องเปิดไฟล์ก่อนแนบ)')
+  }
+  const fileDate = match ? `${match[3]}-${match[2]}-${match[1]}` : ''
   if (!fileDate) throw new Error(`วันที่ในไฟล์แยกตามวันไม่ถูกต้อง: ${text(dateCell) || '(ว่าง)'}`)
   if (fileDate !== expectedDate) {
     throw new Error(`ไฟล์ Foodstory เป็นของวันที่ ${thaiShortDate(fileDate)} แต่หน้านี้เลือกวันที่ ${thaiShortDate(expectedDate)}`)
