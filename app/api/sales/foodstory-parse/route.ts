@@ -43,6 +43,9 @@ async function readRows(file: File): Promise<ReportCell[][]> {
   await workbook.xlsx.load(buffer as never)
   const sheet = workbook.worksheets[0]
   if (!sheet) throw new Error(`ไฟล์ ${file.name} ไม่มี worksheet`)
+  // A tiny xlsx can declare a cell at row 100,000,000; cap before eachRow materializes every index.
+  // ponytail: ExcelJS still parses such a file (~5 s CPU, memory flat) before this check; pre-scan sheet XML if abused.
+  if (sheet.rowCount > 500 || sheet.columnCount > 50) throw new Error(`ไฟล์ ${file.name} มีขนาดตารางผิดปกติ ไม่ใช่รายงาน Foodstory`)
   const rows: ReportCell[][] = []
   sheet.eachRow({ includeEmpty: true }, row => {
     rows.push(Array.isArray(row.values) ? row.values.slice(1).map(cell) : [])
