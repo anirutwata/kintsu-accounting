@@ -1,10 +1,34 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import ExcelJS from 'exceljs'
+import JSZip from 'jszip'
 import { parseFoodstoryReports } from '@/lib/foodstoryReport'
 import type { ReportCell } from '@/lib/ttbPromptPayReport'
 
 const MAX_BYTES = 2 * 1024 * 1024
+const MAX_ENTRIES = 50
+const MAX_INFLATED_BYTES = 20 * 1024 * 1024
+
+// The 2 MB cap is on the compressed upload; a zip bomb would still make ExcelJS inflate
+// everything. Inflate once here counting real bytes (declared sizes can lie) and stop at the cap.
+// ponytail: the file is inflated twice (here + ExcelJS); bounded by the cap, fine at 2 files/request.
+async function assertZipWithinLimits(buffer: Buffer, name: string) {
+  const zip = await JSZip.loadAsync(buffer)
+  const entries = Object.values(zip.files).filter(entry => !entry.dir)
+  if (entries.length > MAX_ENTRIES) throw new Error(`ไฟล์ ${name} มีส่วนประกอบมากผิดปกติ`)
+  let total = 0
+  for (const entry of entries) {
+    await new Promise<void>((resolve, reject) => {
+      const stream = entry.nodeStream('nodebuffer')
+      stream.on('data', (chunk: Buffer) => {
+        total += chunk.length
+        if (total > MAX_INFLATED_BYTES) { stream.pause(); reject(new Error(`ไฟล์ ${name} ใหญ่ผิดปกติเมื่อแตกไฟล์`)) }
+      })
+      stream.on('error', reject)
+      stream.on('end', () => resolve())
+    })
+  }
+}
 
 function cell(value: ExcelJS.CellValue): ReportCell {
   if (value == null || typeof value === 'string' || typeof value === 'number' || value instanceof Date) return value
@@ -13,8 +37,10 @@ function cell(value: ExcelJS.CellValue): ReportCell {
 }
 
 async function readRows(file: File): Promise<ReportCell[][]> {
+  const buffer = Buffer.from(await file.arrayBuffer())
+  await assertZipWithinLimits(buffer, file.name)
   const workbook = new ExcelJS.Workbook()
-  await workbook.xlsx.load(Buffer.from(await file.arrayBuffer()) as never)
+  await workbook.xlsx.load(buffer as never)
   const sheet = workbook.worksheets[0]
   if (!sheet) throw new Error(`ไฟล์ ${file.name} ไม่มี worksheet`)
   const rows: ReportCell[][] = []

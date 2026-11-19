@@ -52,6 +52,8 @@ export default function SalesPage() {
   const [importingFs, setImportingFs] = useState(false)
   const [fsImportNote, setFsImportNote] = useState<{ date: string; warnings: string[] } | null>(null)
   const dateRef = useRef(date)
+  // Bumped on each import so a loadSales() GET that started earlier can't overwrite imported fields.
+  const importSeq = useRef(0)
   useEffect(() => { dateRef.current = date }, [date])
 
   async function handleFoodstoryFiles(e: React.ChangeEvent<HTMLInputElement>) {
@@ -59,6 +61,7 @@ export default function SalesPage() {
     e.target.value = '' // allow re-selecting the same files after fixing an error
     if (!files.length) return
     const requestDate = date
+    importSeq.current++
     setImportingFs(true); setSaveError(''); setSaved(false); setFsImportNote(null)
     try {
       const body = new FormData()
@@ -68,6 +71,7 @@ export default function SalesPage() {
       const json = await res.json()
       if (dateRef.current !== requestDate) return
       if (!res.ok) { setSaveError(json.error || 'อ่านไฟล์ Foodstory ไม่สำเร็จ'); return }
+      importSeq.current++ // also drop loads that started while the files were parsing
       const r = json as FoodstoryImport
       const money = (satang: number) => satang ? fmtInput(satang) : ''
       setFoodstory(prev => ({
@@ -161,12 +165,14 @@ export default function SalesPage() {
   }, [date])
 
   async function loadSales() {
+    const seq = importSeq.current
     const res = await fetch(`/api/sales?date=${date}`)
     const data = await res.json()
+    const keepImported = seq !== importSeq.current
     if (Array.isArray(data) && data.length > 0) {
       const s = data[0] as DailySales
       setExisting(s)
-      setFoodstory({
+      if (!keepImported) setFoodstory({
         revenue: s.dine_in_revenue_satang ? fmtInput(s.dine_in_revenue_satang) : '',
         covers: s.dine_in_covers ? String(s.dine_in_covers) : '',
         bills: s.dine_in_bills ? String(s.dine_in_bills) : '',
@@ -197,14 +203,14 @@ export default function SalesPage() {
       setTakeawayOrders(s.takeaway_orders ? String(s.takeaway_orders) : '')
     } else {
       setExisting(null)
-      setFoodstory(emptyPOS())
+      if (!keepImported) setFoodstory(emptyPOS())
       setPapaya(emptyPOS())
       setGrabGrossStr('')
       setTakeawayStr('')
       setTakeawayOrders('')
     }
     setSaved(false)
-    setFsImportNote(null)
+    if (!keepImported) setFsImportNote(null)
   }
 
   const foodstoryRev = toSatang(parseInput(foodstory.revenue))
@@ -555,7 +561,7 @@ export default function SalesPage() {
           </div>
         )}
 
-        <button type="submit" disabled={loading || blockedByMissing}
+        <button type="submit" disabled={loading || importingFs || blockedByMissing}
           className="w-full py-3 rounded-2xl font-semibold text-white disabled:opacity-60"
           style={{ background: 'var(--flame-red)' }}>
           {loading ? 'กำลังบันทึก...' : blockedByMissing ? `🔒 บันทึกวันที่ ${thaiShortDate(missingDates[0])} ก่อน` : existing?.manual_entered_at ? 'อัปเดตรายรับ' : 'บันทึกรายรับ'}

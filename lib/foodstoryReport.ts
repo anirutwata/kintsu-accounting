@@ -5,6 +5,8 @@ import type { ReportCell } from './ttbPromptPayReport'
 const PAYMENT_TITLE = 'รายงานสรุปยอดขายแยกตามประเภทการชำระเงิน'
 const DAILY_TITLE = 'รายงานสรุปยอดขายแยกตามวัน'
 
+export const FOODSTORY_BRANCH = 'Kintsu Yakiniku - Central Khonkaen Campus'
+
 const CARD_TYPES = ['VISA', 'Master Card', 'JCB', 'รูดบัตรเครดิต (กรณี EDC ขัดข้อง)']
 
 export interface FoodstoryImport {
@@ -51,11 +53,9 @@ function satang(value: ReportCell, what: string): number {
 
 function assertBranch(t: Table, col: number, label: string) {
   for (const row of t.data) {
-    if (!/kintsu/i.test(text(row[col]))) throw new Error(`ไฟล์${label}ไม่ใช่สาขา Kintsu: ${text(row[col]) || '(ว่าง)'}`)
+    if (text(row[col]) !== FOODSTORY_BRANCH) throw new Error(`ไฟล์${label}ไม่ใช่สาขา ${FOODSTORY_BRANCH}: ${text(row[col]) || '(ว่าง)'}`)
   }
 }
-
-function sameAmount(a: number, b: number) { return Math.abs(a - b) <= 1 }
 
 export function parseFoodstoryReports(files: ReportCell[][][], expectedDate: string): FoodstoryImport {
   if (files.length !== 2) throw new Error('ต้องเลือกไฟล์ Foodstory 2 ไฟล์: ยอดขายแยกตามประเภทการชำระเงิน และ ยอดขายแยกตามวัน')
@@ -125,15 +125,22 @@ export function parseFoodstoryReports(files: ReportCell[][][], expectedDate: str
     const header = A.headers[aCol[key]]
     const sum = A.data.reduce((s, row) => s + satang(row[aCol[key]], `${header} (${text(row[aCol.type])})`), 0)
     total[key] = satang(A.total[aCol[key]], `${header} (Total)`)
-    if (!sameAmount(sum, total[key])) {
+    if (sum !== total[key]) {
       throw new Error(`ยอดรวมไฟล์แยกตามประเภทการชำระเงินไม่ตรง: ${header} รวมรายการ ${sum / 100} แต่ Total ${total[key] / 100}`)
     }
   }
-  if (!sameAmount(total.beforeVat + total.vat + total.rounding - total.nonVat, total.net)) {
+  if (total.beforeVat + total.vat + total.rounding - total.nonVat !== total.net) {
     throw new Error('ยอดก่อนภาษี + ภาษี + ยอดปัดเศษ ไม่เท่ากับรวมสุทธิ ในไฟล์แยกตามประเภทการชำระเงิน')
   }
 
   const b = (key: keyof typeof bCol) => satang(bRow[bCol[key]], `${B.headers[bCol[key]]} (ไฟล์แยกตามวัน)`)
+  const bAmountCols = ['itemDiscount', 'billDiscount', 'beforeVat', 'vat', 'voucher', 'voucherDiscount', 'rounding', 'delivery', 'net', 'tip', 'refund', 'bills'] as const
+  for (const key of bAmountCols) {
+    const bTotal = satang(B.total[bCol[key]], `${B.headers[bCol[key]]} (Total ไฟล์แยกตามวัน)`)
+    if (b(key) !== bTotal) {
+      throw new Error(`ยอดรวมไฟล์แยกตามวันไม่ตรง: ${B.headers[bCol[key]]} รายการ ${b(key) / 100} แต่ Total ${bTotal / 100}`)
+    }
+  }
   const crossChecks: [string, number, number][] = [
     ['รวมสุทธิ', total.net, b('net')],
     ['ยอดก่อนภาษี', total.beforeVat, b('beforeVat')],
@@ -142,7 +149,7 @@ export function parseFoodstoryReports(files: ReportCell[][][], expectedDate: str
     ['ส่วนลด', total.discount, b('itemDiscount') + b('billDiscount')],
   ]
   for (const [label, a, bValue] of crossChecks) {
-    if (!sameAmount(a, bValue)) throw new Error(`${label} สองไฟล์ไม่ตรงกัน: แยกตามประเภทการชำระเงิน ${a / 100} แต่แยกตามวัน ${bValue / 100}`)
+    if (a !== bValue) throw new Error(`${label} สองไฟล์ไม่ตรงกัน: แยกตามประเภทการชำระเงิน ${a / 100} แต่แยกตามวัน ${bValue / 100}`)
   }
 
   const billsValue = b('bills') / 100

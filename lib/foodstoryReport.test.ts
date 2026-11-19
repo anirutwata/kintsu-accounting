@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { parseFoodstoryReports } from './foodstoryReport'
+import { FOODSTORY_BRANCH, parseFoodstoryReports } from './foodstoryReport'
 import type { ReportCell } from './ttbPromptPayReport'
 
-const BRANCH = 'Kintsu Yakiniku - Central Khonkaen Campus'
+const BRANCH = FOODSTORY_BRANCH
 
 function paymentRows(): ReportCell[][] {
   const title = 'รายงานสรุปยอดขายแยกตามประเภทการชำระเงิน'
@@ -63,7 +63,7 @@ describe('Foodstory daily import', () => {
   it('rejects a branch other than Kintsu', () => {
     const rows = paymentRows()
     rows[3][16] = 'Al Dente'
-    expect(() => parseFoodstoryReports([rows, dailyRows()], '2026-11-18')).toThrow('ไม่ใช่สาขา Kintsu')
+    expect(() => parseFoodstoryReports([rows, dailyRows()], '2026-11-18')).toThrow('ไม่ใช่สาขา')
   })
 
   it('rejects a daily file for a different date than the page', () => {
@@ -76,5 +76,23 @@ describe('Foodstory daily import', () => {
 
   it('rejects two files of the same type', () => {
     expect(() => parseFoodstoryReports([paymentRows(), paymentRows()], '2026-11-18')).toThrow('ต้องเลือกไฟล์ Foodstory 2 ไฟล์คู่กัน')
+  })
+
+  it('rejects a 1-satang difference between payment rows and Total', () => {
+    const rows = paymentRows()
+    rows[7][8] = 1253.57
+    expect(() => parseFoodstoryReports([rows, dailyRows()], '2026-11-18')).toThrow('ยอดรวมไฟล์แยกตามประเภทการชำระเงินไม่ตรง')
+  })
+
+  it('rejects a daily file whose Total row disagrees with its date row', () => {
+    const rows = dailyRows()
+    rows[3][15] = 22
+    expect(() => parseFoodstoryReports([paymentRows(), rows], '2026-11-18')).toThrow('ยอดรวมไฟล์แยกตามวันไม่ตรง')
+  })
+
+  it('rejects files from different branches', () => {
+    const rows = dailyRows()
+    rows[2][16] = 'Kintsu Yakiniku - Central Udon'
+    expect(() => parseFoodstoryReports([paymentRows(), rows], '2026-11-18')).toThrow('ไม่ใช่สาขา')
   })
 })
