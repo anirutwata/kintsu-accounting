@@ -72,6 +72,12 @@ describe('Foodstory daily import', () => {
     expect(() => parseFoodstoryReports([rows, dailyRows()], '2026-11-18')).toThrow('ไม่ใช่สาขา')
   })
 
+  it('accepts an Excel date serial in the daily file', () => {
+    const rows = dailyRows()
+    rows[2][0] = 46344 // 2026-11-18
+    expect(parseFoodstoryReports([paymentRows(), rows], '2026-11-18').bills).toBe(21)
+  })
+
   it('rejects a daily file for a different date than the page', () => {
     expect(() => parseFoodstoryReports([paymentRows(), dailyRows()], '2026-11-19')).toThrow('แต่หน้านี้เลือกวันที่')
   })

@@ -108,7 +108,10 @@ export function parseFoodstoryReports(files: ReportCell[][][], expectedDate: str
   const bRow = B.data[0]
   const dateCell = bRow[bCol.date]
   const match = text(dateCell).match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  // Excel stores real date cells as a day serial (days since 1899-12-30), e.g. 46346 = 2026-11-20.
+  const isSerial = typeof dateCell === 'number' && Number.isInteger(dateCell) && dateCell > 40000 && dateCell < 80000
   const fileDate = dateCell instanceof Date ? dateCell.toISOString().slice(0, 10)
+    : isSerial ? new Date(Date.UTC(1899, 11, 30) + dateCell * 86_400_000).toISOString().slice(0, 10)
     : match ? `${match[3]}-${match[2]}-${match[1]}` : ''
   if (!fileDate) throw new Error(`วันที่ในไฟล์แยกตามวันไม่ถูกต้อง: ${text(dateCell) || '(ว่าง)'}`)
   if (fileDate !== expectedDate) {
