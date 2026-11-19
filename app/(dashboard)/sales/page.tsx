@@ -165,8 +165,10 @@ export default function SalesPage() {
 
   async function loadSales() {
     const seq = importSeq.current
-    const res = await fetch(`/api/sales?date=${date}`)
+    const requestDate = date
+    const res = await fetch(`/api/sales?date=${requestDate}`)
     const data = await res.json()
+    if (dateRef.current !== requestDate) return // a late response for a date staff already left must not fill the new date's form
     const keepImported = seq !== importSeq.current
     if (Array.isArray(data) && data.length > 0) {
       const s = data[0] as DailySales
