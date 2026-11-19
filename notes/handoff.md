@@ -2,6 +2,14 @@
 
 > ฉบับนี้อัปเดตล่าสุดวันที่ 2026-10-02 หลัง PR #46 (OCR สลิปหน้า PAY + บังคับยอดตรง) และ PR #47 (ล็อกการบันทึกรายรับรายวัน + migration 057)
 
+## SESSION UPDATE — 2026-11-20 (นำเข้า Excel Foodstory ในหน้ารายรับ + ซ่อน Papaya; main = `f1fe1bb`, deployed READY `dpl_cKyhJpw3`) — อ่านก่อน
+- **ฟีเจอร์**: การ์ด Foodstory ในหน้ารายรับมีปุ่ม "📎 แนบไฟล์ Excel" — เลือก 2 ไฟล์พร้อมกัน: "รายงานสรุปยอดขายแยกตามประเภทการชำระเงิน" (ช่องทาง) + "รายงานสรุปยอดขายแยกตามวัน" (วันที่ + จำนวนบิล). กรอกฟอร์มเดิม → พนักงานตรวจแล้วกดบันทึกเอง (save/lock/TTB-EDC เทียบยอด ไม่เปลี่ยน).
+- Mapping: ยอดขาย=รวมสุทธิ, ก่อน VAT=ยอดก่อนภาษี, VAT=ภาษี, ปัดเศษ=ยอดปัดเศษ (ติดลบอยู่แล้ว), ส่วนลด=−ส่วนลด, เงินสด=Cash, **พร้อมเพย์=Bank Transfer** (ยืนยันกับ TTB 16 พ.ย.), บัตร=VISA+Master Card+JCB+"รูดบัตรเครดิต (กรณี EDC ขัดข้อง)" (EDC เครื่องเดียว), โอน(บริษัท)=ว่าง.
+- Hard errors: วันที่ในไฟล์ ≠ วันที่เลือก, สาขาไม่มีคำว่า kintsu (owner: ไม่ต้องตรงชื่อเป๊ะ), ประเภทชำระไม่รู้จัก, แถวรวม ≠ Total (ตรงทุกสตางค์), 2 ไฟล์ไม่ตรงกัน, ไฟล์มี >1 sheet.
+- ไฟล์: `lib/foodstoryReport.ts` (+test), `app/api/sales/foodstory-parse/route.ts` (**ไม่ใช้ ExcelJS** — อ่าน sheet1.xml/sharedStrings ด้วย JSZip + indexOf scanner; ExcelJS ขยาย merge/validation/definedName/col จาก metadata เล็กๆ = memory bomb), `lib/utils.ts` `SHOW_PAPAYA_POS=false` (ซ่อนการ์ด Papaya + ส่วนตั้งค่า; state/payload ยังส่งเพื่อไม่ล้างข้อมูลเก่า). `jszip` เป็น dependency ตรง.
+- รีวิว: Fable วางแผน, Opus ทำ, Codex 8 รอบ (รอบ 8 clean). tsc + 196 tests ผ่าน. Production: route ตอบ 401 เมื่อไม่ล็อกอิน.
+- **ยังไม่ได้ทำ**: ยังไม่ได้กดทดสอบบนเบราว์เซอร์จริง — ใช้วันที่ 20 พ.ย. เป็นวันแรก. ห้ามนำเข้าไฟล์ 15–18 พ.ย. ซ้ำ (ไฟล์เป็นยอดหลัง void; ยอดที่บันทึกมือถูกแล้ว). 15 พ.ย. ช่องทางรวม 56,621 ≠ ยอดขาย 56,221 (ต่าง 400) — ยังไม่ได้ตรวจ. `.env.local` service key อัปเดตแล้ว 2026-11-19 (สำรองเดิม `.env.local.bak`). Supabase MCP ของ claude.ai เห็นแค่ org Sirin.
+
 ## SESSION UPDATE — 2026-10-19 (กันสร้างเอกสาร FlowAccount ซ้ำ + สถานะ "ถูกลบใน FA" + filter ชำระแล้ว/ยังไม่ชำระ; main = `5742dce`, deployed READY) — อ่านก่อน
 - **บั๊กที่เจอ**: ปุ่ม "ส่งเข้า FlowAccount อีกครั้ง" เรียก `syncExpenseToFlowAccount()` ซึ่งไม่เช็กว่าผูก FA แล้วหรือยัง → `createExpense()` สร้างเอกสารใหม่ทุกครั้ง แล้วเขียนทับ `flowaccount_record_id/serial` (เคส ร้านข้าวลุงแว่น 385฿: EXP…080 → 122 → 123, แอปจำแค่ 123). เจ้าของ void ตัวซ้ำใน FA เองแล้ว (ไม่ได้แตะ DB).
 - **แก้แล้ว (commit `5742dce`)**:
