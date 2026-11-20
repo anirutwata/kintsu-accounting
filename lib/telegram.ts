@@ -185,24 +185,38 @@ ${lines}
 }
 
 // Sales saved / updated
+export const SALES_MESSAGE_FIELDS = [
+  ['dine_in_revenue_satang', 'Foodstory', true],
+  ['dine_in_bills', 'บิล', false],
+  ['cash_satang', '  เงินสด', true],
+  ['promptpay_satang', '  พร้อมเพย์', true],
+  ['company_transfer_satang', '  โอนบริษัท', true],
+  ['credit_card_satang', '  บัตรเครดิต', true],
+  ['total_net_satang', 'รวมสุทธิ', true],
+] as const
+
+type SalesRow = Partial<Record<(typeof SALES_MESSAGE_FIELDS)[number][0], number | null>>
+
+// Full figures (and old → new on overwrite) so a wrong save can be undone from this message alone.
 export function buildSalesMessage(data: {
   date: string
-  isUpdate: boolean
-  totalNetSatang: number
-  foodstoryRev: number
-  papayaRev: number
-  grabNetSatang: number
-  takeawayRev: number
+  byName: string
+  current: SalesRow
+  previous?: SalesRow | null
 }) {
-  const parts: string[] = []
-  if (data.foodstoryRev > 0) parts.push(`• Foodstory: ${fmtBaht(data.foodstoryRev)}`)
-  if (data.papayaRev > 0) parts.push(`• Papaya: ${fmtBaht(data.papayaRev)}`)
-  if (data.grabNetSatang > 0) parts.push(`• GrabFood (net): ${fmtBaht(data.grabNetSatang)}`)
-  if (data.takeawayRev > 0) parts.push(`• Takeaway: ${fmtBaht(data.takeawayRev)}`)
-  const action = data.isUpdate ? '🔄 อัปเดตรายรับ' : '💰 บันทึกรายรับ'
+  const fmt = (v: number, money: boolean) => (money ? fmtBaht(v) : String(v))
+  const lines = SALES_MESSAGE_FIELDS.flatMap(([key, label, money]) => {
+    const now = Number(data.current[key] || 0)
+    const before = data.previous ? Number(data.previous[key] || 0) : null
+    if (!now && !before) return []
+    if (before !== null && before !== now) return [`• ${label}: ${fmt(before, money)} → <b>${fmt(now, money)}</b>`]
+    return [`• ${label}: ${fmt(now, money)}`]
+  })
+  const action = data.previous ? '🔄 <b>บันทึกทับ</b>รายรับ (ยอดเดิม → ใหม่)' : '💰 บันทึกรายรับ'
   return `${action}
 📅 ${data.date}
-${parts.length ? parts.join('\n') + '\n' : ''}💵 รวมสุทธิ: <b>${fmtBaht(data.totalNetSatang)}</b>
+${lines.join('\n')}
+👤 ${data.byName}
 🕐 ${thaiNow()}`
 }
 

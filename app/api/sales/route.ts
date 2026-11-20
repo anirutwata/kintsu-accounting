@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { calcGrabNet } from '@/lib/money'
-import { sendTelegram, buildSalesMessage } from '@/lib/telegram'
+import { sendTelegram, buildSalesMessage, SALES_MESSAGE_FIELDS } from '@/lib/telegram'
 import { syncCashRevenueToFlowAccount } from '@/lib/cashRevenueSync'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { missingSalesDates, SALES_LOCK_START_DATE, thaiShortDate } from '@/lib/dailySalesLock'
@@ -63,8 +63,9 @@ export async function POST(req: Request) {
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return NextResponse.json({ error: 'กรุณาระบุวันที่' }, { status: 400 })
 
   // Check if record exists (for update vs new notification)
-  const { data: existing } = await supabase.from('daily_sales').select('id, manual_entered_at').eq('id', date).maybeSingle()
-  const isUpdate = !!existing
+  const { data: existing } = await supabase.from('daily_sales')
+    .select(['id', 'manual_entered_at', ...SALES_MESSAGE_FIELDS.map(([key]) => key)].join(', '))
+    .eq('id', date).maybeSingle<Record<string, unknown> & { manual_entered_at: string | null }>()
 
   // Days must be entered in order: refuse while an earlier day has never been entered.
   // Applies to every role, owner included.
@@ -176,13 +177,10 @@ export async function POST(req: Request) {
 
   sendTelegram(buildSalesMessage({
     date,
-    isUpdate,
-    totalNetSatang: totalNet,
-    foodstoryRev,
-    papayaRev,
-    grabNetSatang: grabNet,
-    takeawayRev,
-  }), 'sales')
+    byName: record.manual_entered_by_name,
+    current: record,
+    previous: existing?.manual_entered_at ? existing as Parameters<typeof buildSalesMessage>[0]['previous'] : null,
+}), 'sales')
 
   // Cash revenue is accounting-authoritative once the daily sales record is saved.
   // Sync it in the same user action so a separate button cannot leave days behind.
