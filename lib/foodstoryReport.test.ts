@@ -48,6 +48,27 @@ describe('Foodstory daily import', () => {
     expect(parseFoodstoryReports([paymentRows(), dailyRows()], '2026-11-18')).toEqual(result)
   })
 
+  it('counts UnionPay as credit card (28 Nov 2026 real files)', () => {
+    const payment = paymentRows()
+    payment.splice(2, 6,
+      ['รูดบัตรเครดิต (กรณี EDC ขัดข้อง)', 'บันทึกเอง', null, 1191, 0, 1191, 0, 1191, 83.37, 0, 0, 0, -0.37, 1274, 0, 0, BRANCH],
+      ['Bank Transfer', 'บันทึกเอง', null, 42215, 10, 42205, 0, 42205, 2954.35, 0, 0, 0, -22.35, 45137, 0, 0, BRANCH],
+      ['Cash', 'บันทึกเอง', null, 5024, 20, 5004, 0, 5004, 350.28, 0, 0, 0, -2.28, 5352, 0, 0, BRANCH],
+      ['Master Card', 'EDC', null, 5026, 0, 5026, 0, 5026, 351.82, 0, 0, 0, -1.82, 5376, 0, 0, BRANCH],
+      ['UnionPay', 'EDC', null, 1394, 0, 1394, 0, 1394, 97.58, 0, 0, 0, -0.58, 1491, 0, 0, BRANCH],
+      ['VISA', 'EDC', null, 9822, 0, 9822, 0, 9822, 687.54, 0, 0, 0, -5.54, 10504, 0, 0, BRANCH],
+      ['Total', null, null, 64672, 30, 64642, 0, 64642, 4524.94, 0, 0, 0, -32.94, 69134, 0, 0],
+    )
+    const daily = dailyRows('28/11/2026')
+    daily[2] = ['28/11/2026', 64672, 20, 10, 64642, 0, 64642, 4524.94, 0, 0, -32.94, 0, 69134, 0, 0, 71, BRANCH]
+    daily[3] = ['Total', 64672, 20, 10, 64642, 0, 64642, 4524.94, 0, 0, -32.94, 0, 69134, 0, 0, 71]
+    const result = parseFoodstoryReports([payment, daily], '2026-11-28')
+    expect(result.cashSatang).toBe(535_200)
+    expect(result.promptpaySatang).toBe(4_513_700)
+    expect(result.creditCardSatang).toBe(1_864_500)
+    expect(result.cashSatang + result.promptpaySatang + result.creditCardSatang).toBe(result.revenueSatang)
+  })
+
   it('rejects an unknown payment type instead of guessing its channel', () => {
     const rows = paymentRows()
     rows[2][0] = 'Rabbit LINE Pay'

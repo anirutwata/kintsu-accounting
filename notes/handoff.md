@@ -11,7 +11,7 @@
 
 ## SESSION UPDATE — 2026-11-20 (นำเข้า Excel Foodstory ในหน้ารายรับ + ซ่อน Papaya; โค้ดล่าสุด `34065fd` deployed) — อ่านก่อน
 - **ฟีเจอร์**: การ์ด Foodstory ในหน้ารายรับมีปุ่ม "📎 แนบไฟล์ Excel" — เลือก 2 ไฟล์พร้อมกัน: "รายงานสรุปยอดขายแยกตามประเภทการชำระเงิน" (ช่องทาง) + "รายงานสรุปยอดขายแยกตามวัน" (วันที่ + จำนวนบิล). กรอกฟอร์มเดิม → พนักงานตรวจแล้วกดบันทึกเอง (save/lock/TTB-EDC เทียบยอด ไม่เปลี่ยน).
-- Mapping: ยอดขาย=รวมสุทธิ, ก่อน VAT=ยอดก่อนภาษี, VAT=ภาษี, ปัดเศษ=ยอดปัดเศษ (ติดลบอยู่แล้ว), ส่วนลด=−ส่วนลด, เงินสด=Cash, **พร้อมเพย์=Bank Transfer** (ยืนยันกับ TTB 16 พ.ย.), บัตร=VISA+Master Card+JCB+"รูดบัตรเครดิต (กรณี EDC ขัดข้อง)" (EDC เครื่องเดียว), โอน(บริษัท)=ว่าง.
+- Mapping: ยอดขาย=รวมสุทธิ, ก่อน VAT=ยอดก่อนภาษี, VAT=ภาษี, ปัดเศษ=ยอดปัดเศษ (ติดลบอยู่แล้ว), ส่วนลด=−ส่วนลด, เงินสด=Cash, **พร้อมเพย์=Bank Transfer** (ยืนยันกับ TTB 16 พ.ย.), บัตร=VISA+Master Card+JCB+UnionPay (เพิ่ม 28 พ.ย.)+"รูดบัตรเครดิต (กรณี EDC ขัดข้อง)" (EDC เครื่องเดียว), โอน(บริษัท)=ว่าง.
 - Hard errors: วันที่ในไฟล์ ≠ วันที่เลือก, สาขาไม่มีคำว่า kintsu (owner: ไม่ต้องตรงชื่อเป๊ะ), ประเภทชำระไม่รู้จัก, แถวรวม ≠ Total (ตรงทุกสตางค์), 2 ไฟล์ไม่ตรงกัน, ไฟล์มี >1 sheet.
 - ไฟล์: `lib/foodstoryReport.ts` (+test), `app/api/sales/foodstory-parse/route.ts` (**ไม่ใช้ ExcelJS** — อ่าน sheet1.xml/sharedStrings ด้วย JSZip + indexOf scanner; ExcelJS ขยาย merge/validation/definedName/col จาก metadata เล็กๆ = memory bomb), `lib/utils.ts` `SHOW_PAPAYA_POS=false` (ซ่อนการ์ด Papaya + ส่วนตั้งค่า; state/payload ยังส่งเพื่อไม่ล้างข้อมูลเก่า). `jszip` เป็น dependency ตรง.
 - รีวิว: Fable วางแผน, Opus ทำ, Codex 8 รอบ (รอบ 8 clean). tsc + 196 tests ผ่าน. Production: route ตอบ 401 เมื่อไม่ล็อกอิน.

@@ -6,7 +6,8 @@ const PAYMENT_TITLE = 'รายงานสรุปยอดขายแยก
 const DAILY_TITLE = 'รายงานสรุปยอดขายแยกตามวัน'
 
 
-const CARD_TYPES = ['VISA', 'Master Card', 'JCB', 'รูดบัตรเครดิต (กรณี EDC ขัดข้อง)']
+// All card schemes go through the one LINE Pay EDC. UnionPay first seen 28 Nov 2026 (LINE Pay CSV: UPI_CARD).
+const CARD_TYPES = ['VISA', 'Master Card', 'JCB', 'UnionPay', 'รูดบัตรเครดิต (กรณี EDC ขัดข้อง)']
 
 export interface FoodstoryImport {
   date: string
